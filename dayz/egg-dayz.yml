@@ -1,0 +1,505 @@
+name: DayZ
+author: thexylo@pm.me
+description: >-
+  How long can you survive a post-apocalyptic world? A land overrun with an infected "zombie"
+  population, where you compete with other survivors for limited resources. DayZ standalone
+  dedicated server with automatic server and Steam Workshop mod updates.
+features:
+  - steam_disk_space
+docker_images:
+  DayZ: ghcr.io/ptero-eggs/games:dayz
+file_denylist: []
+startup_commands:
+  # CLIENT_MODS is not an egg variable: the image entrypoint builds it from the modlist file and
+  # Additional Mods before starting the server.
+  Default: >-
+    ./{{SERVER_BINARY}} -port={{SERVER_PORT}} -profiles=profiles -bepath=./ -config=serverDZ.cfg
+    -mod={{CLIENT_MODS}} -serverMod={{SERVERMODS}} {{STARTUP_PARAMS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    serverDZ.cfg:
+      parser: file
+      replace:
+        - match: hostname =
+          replace_with: hostname = "{{env.SERVER_HOSTNAME}}";
+        - match: password =
+          replace_with: password = "{{env.SERVER_PASSWORD}}";
+        - match: passwordAdmin =
+          replace_with: passwordAdmin = "{{env.ADMIN_PASSWORD}}";
+        - match: maxPlayers
+          replace_with: maxPlayers = {{env.MAX_PLAYERS}};
+        - match: verifySignatures
+          replace_with: verifySignatures = {{env.VERIFY_SIGNATURES}};
+        - match: forceSameBuild
+          replace_with: forceSameBuild = {{env.ENFORCE_BUILD}};
+        - match: disableVoN
+          replace_with: disableVoN = {{env.DISABLE_VON}};
+        - match: vonCodecQuality
+          replace_with: vonCodecQuality = {{env.VON_QUALITY}};
+        - match: disable3rdPerson
+          replace_with: disable3rdPerson = {{env.DISABLE_THIRD}};
+        - match: disableCrosshair
+          replace_with: disableCrosshair = {{env.DISABLE_CROSSHAIR}};
+        - match: disablePersonalLight
+          replace_with: disablePersonalLight = {{env.DISABLE_PERSONAL_LIGHT}};
+        - match: lightingConfig
+          replace_with: lightingConfig = {{env.LIGHTING_CONFIG}};
+        - match: serverTimeAcceleration
+          replace_with: serverTimeAcceleration = {{env.TIME_MULT}};
+        - match: serverNightTimeAcceleration
+          replace_with: serverNightTimeAcceleration = {{env.NIGHT_MULT}};
+        - match: serverTimePersistent
+          replace_with: serverTimePersistent = {{env.PERSISTENT_TIME}};
+        - match: steamQueryPort
+          replace_with: steamQueryPort = {{env.QUERY_PORT}};
+          insert_new: true
+    # BattlEye can consume this file on start; insert_new recreates the entries when it is gone.
+    battleye/beserver_x64.cfg:
+      parser: file
+      replace:
+        - match: RConPort
+          replace_with: RConPort {{env.RCON_PORT}}
+          insert_new: true
+        - match: RConPassword
+          replace_with: RConPassword {{env.RCON_PASSWORD}}
+          insert_new: true
+  startup:
+    done:
+      - Mission read.
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/ptero-eggs/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # DayZ dedicated server installation script
+      # Based on the Pterodactyl DayZ egg by David Wolfe (Red-Thirten), MIT License.
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/ptero-eggs/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      export HOME=/mnt/server
+      MISSIONS_REPO="BohemiaInteractive/DayZ-Central-Economy"
+      STEAMCMD_LOG=/tmp/steamcmd.log
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p "${HOME}/steamcmd" "${HOME}/steamapps" # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C "${HOME}/steamcmd" || fail "could not extract SteamCMD"
+      cd "${HOME}/steamcmd" || fail "cannot enter ${HOME}/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+
+      if [[ "${SKIP_INSTALL}" == "1" ]]; then
+          # For Steam accounts with Steam Guard enabled, see the README.
+          echo '"Skip Game Server Install" is enabled: only SteamCMD is installed.'
+          ./steamcmd.sh +quit
+      else
+          for attempt in $(seq 1 "${STEAMCMD_ATTEMPTS:-3}"); do
+              ./steamcmd.sh +force_install_dir "${HOME}" "+login \"${STEAM_USER}\" \"${STEAM_PASS}\"" \
+                  +app_update "${STEAMCMD_APPID}" validate +quit | tee "${STEAMCMD_LOG}"
+              [[ -f "${HOME}/DayZServer" ]] && break
+              if grep -qiE "Invalid Password|Two-factor|No subscription|Login Failure|Rate Limit" "${STEAMCMD_LOG}"; then
+                  fail "Steam login failed: set a valid Steam Username/Password (anonymous cannot install DayZ) and turn Steam Guard off"
+              fi
+              echo "SteamCMD attempt ${attempt} failed, retrying..."
+              sleep 5
+          done
+          if [[ ! -f "${HOME}/DayZServer" ]]; then
+              fail "SteamCMD could not install app ${STEAMCMD_APPID}; check the install log and free disk space"
+          fi
+      fi
+
+      ## steamclient libraries
+      mkdir -p "${HOME}/.steam/sdk32" "${HOME}/.steam/sdk64"
+      cp -v linux32/steamclient.so "${HOME}/.steam/sdk32/steamclient.so"
+      cp -v linux64/steamclient.so "${HOME}/.steam/sdk64/steamclient.so"
+
+      cd "${HOME}" || fail "cannot enter ${HOME}"
+      mkdir -p keys profiles
+
+      ## server configuration
+      # Missing or empty when the Steam account owns the DayZ game.
+      if [[ ! -s serverDZ.cfg ]]; then
+          echo "serverDZ.cfg is missing or empty, writing the default configuration..."
+          cat > serverDZ.cfg << 'EOF'
+      hostname = "EXAMPLE NAME";  // Server name
+      password = "";              // Password to connect to the server
+      passwordAdmin = "";         // Password to become a server admin
+
+      enableWhitelist = 0;        // Enable/disable whitelist (value 0-1)
+
+      maxPlayers = 60;            // Maximum amount of players
+
+      verifySignatures = 2;       // Verifies .pbos against .bisign files. (only 2 is supported)
+      forceSameBuild = 1;         // When enabled, the server will allow the connection only to clients with same the .exe revision as the server (value 0-1)
+
+      disableVoN = 0;             // Enable/disable voice over network (value 0-1)
+      vonCodecQuality = 20;       // Voice over network codec quality, the higher the better (values 0-30)
+
+      disable3rdPerson=0;         // Toggles the 3rd person view for players (value 0-1)
+      disableCrosshair=0;         // Toggles the cross-hair (value 0-1)
+
+      disablePersonalLight = 1;   // Disables personal light for all clients connected to server
+      lightingConfig = 0;         // 0 for brighter night setup, 1 for darker night setup
+
+      serverTime="SystemTime";    // Initial in-game time of the server. "SystemTime" means the local time of the machine, or "YYYY/MM/DD/HH/MM".
+      serverTimeAcceleration=12;  // Accelerated Time (value 0-24). Multiplier for in-game time.
+      serverNightTimeAcceleration=1;  // Accelerated Night Time (0.1-64), multiplied by serverTimeAcceleration.
+      serverTimePersistent=0;     // Persistent Time (value 0-1). The server time is saved and restored on the next start.
+
+      guaranteedUpdates=1;        // Communication protocol used with game server (use only number 1)
+
+      loginQueueConcurrentPlayers=5;  // The number of players concurrently processed during the login process.
+      loginQueueMaxPlayers=500;       // The maximum number of players that can wait in login queue
+
+      instanceId = 1;             // DayZ server instance id, to identify the number of instances per box and their storage folders with persistence files
+
+      storageAutoFix = 1;         // Checks if the persistence files are corrupted and replaces corrupted ones with empty ones (value 0-1)
+
+      class Missions
+      {
+          class DayZ
+          {
+              template="dayzOffline.chernarusplus"; // Mission to load on server startup. <MissionName>.<TerrainName>
+                                                    // Vanilla missions: dayzOffline.chernarusplus, dayzOffline.enoch, dayzOffline.sakhal
+          };
+      };
+      EOF
+          chmod 644 serverDZ.cfg
+      fi
+
+      # steamQueryPort is required for the server list; the panel keeps its value in sync.
+      if ! grep -q "steamQueryPort" serverDZ.cfg; then
+          echo "Adding steamQueryPort to serverDZ.cfg..."
+          printf '\nsteamQueryPort = %s;\n' "${QUERY_PORT}" >> serverDZ.cfg
+      fi
+
+      ## vanilla missions
+      # Only shipped with the server when the Steam account owns the DayZ game.
+      if [[ "${SKIP_INSTALL}" != "1" ]] && [[ -z "$(ls -A mpmissions 2>/dev/null)" ]]; then
+          echo "[WARNING] The Steam account used to install this server does not own the DayZ game."
+          echo "          Vanilla mission files will not update with the server (see the README)."
+          echo "Downloading the latest vanilla mission files from ${MISSIONS_REPO}..."
+          TARBALL_URL=$(curl -fsSL "https://api.github.com/repos/${MISSIONS_REPO}/releases/latest" | jq -r .tarball_url)
+          if [[ -z "${TARBALL_URL}" ]] || [[ "${TARBALL_URL}" == "null" ]]; then
+              fail "could not find the latest vanilla mission release of ${MISSIONS_REPO}"
+          fi
+          mkdir -p mpmissions
+          curl -fsSL "${TARBALL_URL}" | tar -xz -C mpmissions --strip-components=1 --wildcards \
+              '*/dayzOffline.chernarusplus/*' '*/dayzOffline.enoch/*' '*/dayzOffline.sakhal/*' \
+              || fail "could not download the vanilla mission files"
+      fi
+
+      ## BattlEye RCon
+      mkdir -p battleye
+      if [[ ! -f battleye/beserver_x64.cfg ]]; then
+          echo "Creating BattlEye RCon configuration..."
+          printf 'RConPort %s\nRConPassword %s\nRestrictRCon 0\n' "${RCON_PORT}" "${RCON_PASSWORD}" > battleye/beserver_x64.cfg
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: "[Host] Steam Username"
+    description: >-
+      Steam account used for installation and updates. It does not need to own DayZ, but anonymous
+      login cannot install DayZ. Use a dedicated account. Not visible to the server owner.
+    order: 1
+    env_variable: STEAM_USER
+    default_value: ""
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|not_in:anonymous"
+  - name: "[Host] Steam Password"
+    description: >-
+      Password of the Steam account. Steam Guard must be off for installs and updates to work.
+      Not visible to the server owner.
+    order: 2
+    env_variable: STEAM_PASS
+    default_value: ""
+    user_viewable: false
+    user_editable: false
+    secret: true
+    rules: "required|string"
+  - name: "[Host] Disable Mod Downloads/Updates"
+    description: >-
+      Workshop mod downloads need a Steam account that owns the DayZ game. Set to 1 to turn them off
+      and avoid errors when it does not. (1 = on, 0 = off)
+    order: 3
+    env_variable: DISABLE_MOD_UPDATES
+    default_value: "0"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:0,1"
+  - name: "[Host] SteamCMD Attempts"
+    description: How often SteamCMD retries a server or mod download after a recoverable error.
+    order: 4
+    env_variable: STEAMCMD_ATTEMPTS
+    default_value: "3"
+    user_viewable: false
+    user_editable: false
+    rules: "required|integer|between:1,10"
+  - name: "[Host] Skip Game Server Install"
+    description: >-
+      Install only SteamCMD, not the game server. Only for Steam accounts with Steam Guard enabled;
+      see the README. (1 = on, 0 = off)
+    order: 5
+    env_variable: SKIP_INSTALL
+    default_value: "0"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:0,1"
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain double quotes.
+    order: 6
+    env_variable: SERVER_HOSTNAME
+    default_value: DayZ Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100|regex:/^[^\"]+$/"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 7
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64|regex:/^[^\"]*$/"
+  - name: Admin Password
+    description: Password to log in as admin in game (#login). Cannot contain double quotes.
+    order: 8
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64|regex:/^[^\"]*$/"
+  - name: Max Players
+    description: Maximum number of players allowed on the server.
+    order: 9
+    env_variable: MAX_PLAYERS
+    default_value: "60"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,127"
+  - name: Steam Query Port
+    description: >-
+      UDP port for the Steam server list. Needs its own allocation for the server to be listed in the
+      in-game browser.
+    order: 10
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCon Port
+    description: BattlEye RCon port for remote admin tools. Needs its own allocation only when used remotely.
+    order: 11
+    env_variable: RCON_PORT
+    default_value: "2305"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCon Password
+    description: BattlEye RCon password for remote admin tools. No spaces.
+    order: 12
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "required|string|max:20|regex:/^\\S+$/"
+  - name: Automatic Updates
+    description: Check for server and Workshop mod updates on every start. (1 = on, 0 = off)
+    order: 13
+    env_variable: UPDATE_SERVER
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Modlist File
+    description: >-
+      Mod list exported from the DayZ Launcher (HTML), uploaded to the server root. Its mods are
+      downloaded and loaded. Leave empty to not use a modlist.
+    order: 14
+    env_variable: MOD_FILE
+    default_value: modlist.html
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:128"
+  - name: Additional Mods
+    description: >-
+      Semicolon-separated mod folders in the server root to load, e.g. @1559212036;@mymod; Mods in
+      @workshopID form are downloaded and updated automatically. No capital letters or spaces.
+    order: 15
+    env_variable: MODIFICATIONS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:1024"
+  - name: Server-Side Mods
+    description: >-
+      Semicolon-separated mod folders loaded with -serverMod: server only, not required by clients.
+      Mods in @workshopID form are downloaded and updated automatically.
+    order: 16
+    env_variable: SERVERMODS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:1024"
+  - name: Verify Signatures
+    description: Kick clients whose mods or addons do not match the server's. (2 = on, 0 = off)
+    order: 17
+    env_variable: VERIFY_SIGNATURES
+    default_value: "2"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,2"
+  - name: Enforce Game Version
+    description: Only allow clients with the same game version as the server. (1 = on, 0 = off)
+    order: 18
+    env_variable: ENFORCE_BUILD
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Disable Voice Chat
+    description: Disable voice over network. (1 = on, 0 = off)
+    order: 19
+    env_variable: DISABLE_VON
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Voice Chat Quality
+    description: Voice over network codec quality, higher is better (0-30).
+    order: 20
+    env_variable: VON_QUALITY
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,30"
+  - name: Disable Third Person
+    description: Force first-person view. (1 = on, 0 = off)
+    order: 21
+    env_variable: DISABLE_THIRD
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Disable Crosshair
+    description: Hide the crosshair. (1 = on, 0 = off)
+    order: 22
+    env_variable: DISABLE_CROSSHAIR
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Disable Personal Light
+    description: Disable the light above players at night. (1 = on, 0 = off)
+    order: 23
+    env_variable: DISABLE_PERSONAL_LIGHT
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Darker Nights
+    description: Use the darker night lighting setup. (1 = on, 0 = off)
+    order: 24
+    env_variable: LIGHTING_CONFIG
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Persistent Time
+    description: Save the in-game time and continue from it on the next start. (1 = on, 0 = off)
+    order: 25
+    env_variable: PERSISTENT_TIME
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Time Multiplier
+    description: How much faster in-game time runs, e.g. 12 makes a full day last 2 real hours (0-24).
+    order: 26
+    env_variable: TIME_MULT
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,24"
+  - name: Night Multiplier
+    description: Extra multiplier for night time speed, multiplied with the Time Multiplier (0.1-64).
+    order: 27
+    env_variable: NIGHT_MULT
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.1,64"
+  - name: "[Repair] Make Mod Files Lowercase"
+    description: >-
+      Rename every loaded mod's files and folders to lowercase on start. Enable for one start after
+      uploading mods from Windows, or when mods fail to load. (1 = on, 0 = off)
+    order: 28
+    env_variable: MODS_LOWERCASE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: "[Repair] Validate Server Files"
+    description: >-
+      Validate all server files during Automatic Updates. Makes starts much slower; enable only when
+      needed. (1 = on, 0 = off)
+    order: 29
+    env_variable: VALIDATE_SERVER
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: "[Advanced] Extra Startup Parameters"
+    description: Additional DayZ launch parameters, see https://community.bistudio.com/wiki/DayZ:Server_Configuration
+    order: 30
+    env_variable: STARTUP_PARAMS
+    default_value: -dologs -adminlog -netlog -freezecheck
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: "[Advanced] Server Binary"
+    description: DayZ server executable.
+    order: 31
+    env_variable: SERVER_BINARY
+    default_value: DayZServer
+    user_viewable: true
+    user_editable: false
+    rules: "required|string|in:DayZServer"
+  - name: "[Advanced] Steam App ID"
+    description: >-
+      223350 = stable branch, 1042420 = experimental branch. Switching branches may require deleting
+      all server files and reinstalling.
+    order: 32
+    env_variable: STEAMCMD_APPID
+    default_value: "223350"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|in:223350,1042420"
