@@ -1,0 +1,266 @@
+name: 7 Days To Die
+author: thexylo@pm.me
+description: >-
+  Set in a brutally unforgiving post-apocalyptic world overrun by the undead, 7 Days to Die is an
+  open-world game that combines first-person shooter, survival horror, tower defense and
+  role-playing. Dedicated server installed through SteamCMD (app 294420).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/ptero-eggs/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Folded into a single line. The server logs to logs/latest.log, which is streamed to the console
+  # until telnet has started; from then on a local telnet session, reconnected if it drops, carries
+  # console input to the server. The shell waits on the server process itself, so a shutdown can
+  # finish saving before the container exits, and a console client that outlives the server
+  # cannot keep the container running.
+  Default: >-
+    test -f serverconfig_custom.xml || cp serverconfig.xml serverconfig_custom.xml;
+    mkdir -p logs; : > logs/latest.log;
+    ./7DaysToDieServer.x86_64 -configfile=serverconfig_custom.xml -logfile logs/latest.log
+    -quit -batchmode -nographics -dedicated
+    -ServerPort={{SERVER_PORT}}
+    "-ServerName={{SERVER_NAME}}"
+    "-ServerPassword={{SERVER_PASSWORD}}"
+    -ServerMaxPlayerCount={{MAX_PLAYERS}}
+    -ServerVisibility={{SERVER_VISIBILITY}}
+    "-ServerDisabledNetworkProtocols={{SERVER_DISABLED_NETWORK_PROTOCOLS}}"
+    "-GameWorld={{GAME_WORLD}}"
+    "-WorldGenSeed={{WORLD_GEN_SEED}}"
+    -WorldGenSize={{WORLD_GEN_SIZE}}
+    "-GameName={{GAME_NAME}}"
+    "-SandboxCode={{SANDBOX_CODE}}"
+    -EACEnabled={{EAC_ENABLED}}
+    -TelnetEnabled=true -TelnetPort={{TELNET_PORT}}
+    "-TelnetPassword={{TELNET_PASSWORD}}"
+    & SRV=$!;
+    tail -n +1 -F logs/latest.log 2>/dev/null & TAIL=$!;
+    until grep -qs "Started Telnet on" logs/latest.log || ! kill -0 ${SRV} 2>/dev/null; do sleep 1; done;
+    sleep 1; kill ${TAIL}; wait ${TAIL} 2>/dev/null;
+    ( while kill -0 ${SRV} 2>/dev/null; do
+    if test -z "{{TELNET_PASSWORD}}"; then telnet -E 127.0.0.1 {{TELNET_PORT}} 2>/dev/null;
+    else rcon -t telnet -a 127.0.0.1:{{TELNET_PORT}} -p "{{TELNET_PASSWORD}}" 2>/dev/null; fi;
+    sleep 2; done ) <&0 &
+    wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - StartGame done
+    strip_ansi: false
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/ptero-eggs/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # 7 Days to Die dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/ptero-eggs/installers:debian
+
+      SERVER_BINARY=/mnt/server/7DaysToDieServer.x86_64
+
+      ## download and install steamcmd
+      cd /tmp || exit 1
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd
+      cd /mnt/server/steamcmd || exit 1
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+
+      if [[ ! -f "${SERVER_BINARY}" ]]; then
+          echo "Installation failed: ${SERVER_BINARY} is missing."
+          exit 1
+      fi
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server configuration
+      # serverconfig.xml belongs to the Steam depot and is overwritten by updates and validation,
+      # so the server runs from a copy that survives both.
+      cd /mnt/server || exit 1
+      mkdir -p logs
+      if [[ ! -f serverconfig_custom.xml ]]; then
+          cp -v serverconfig.xml serverconfig_custom.xml
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: 7 Days to Die Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of concurrent players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1,64"
+  - name: Server Visibility
+    description: 2 = public, 1 = friends only, 0 = not listed.
+    order: 4
+    env_variable: SERVER_VISIBILITY
+    default_value: "2"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2"
+  - name: Game World
+    description: >-
+      RWG to generate a random world from the seed and size below, or the name of an existing world
+      (Navezgane, Pregen06k01, Pregen06k02, Pregen08k01, Pregen08k02, ...).
+    order: 5
+    env_variable: GAME_WORLD
+    default_value: Navezgane
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: World Generation Seed
+    description: Seed used when Game World is RWG. An existing world with the resulting name is loaded instead of generated.
+    order: 6
+    env_variable: WORLD_GEN_SEED
+    default_value: MyGame
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: World Generation Size
+    description: >-
+      Width and height of the generated world when Game World is RWG. Officially supported: 6144,
+      8192, 10240. Larger worlds take much longer to generate and load.
+    order: 7
+    env_variable: WORLD_GEN_SIZE
+    default_value: "6144"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:6144,8192,10240"
+  - name: Game Name
+    description: >-
+      Name of the save game; changing it starts a new save. Also seeds decoration placement.
+      Allowed characters: letters, digits, space, underscore, dash and dot.
+    order: 8
+    env_variable: GAME_NAME
+    default_value: MyGame
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64|regex:/^[A-Za-z0-9_. -]+$/"
+  - name: Sandbox Code
+    description: >-
+      Difficulty and sandbox settings. Default is the Adventurer preset. To customize, open New Game
+      > Sandbox Options in the game, adjust, copy the code and paste it here.
+    order: 9
+    env_variable: SANDBOX_CODE
+    default_value: AAAJABJACJADJARFBNC
+    user_viewable: true
+    user_editable: true
+    rules: "required|alpha_num|max:128"
+  - name: EasyAntiCheat
+    description: Enable EasyAntiCheat. Must be false for most client-side mods.
+    order: 10
+    env_variable: EAC_ENABLED
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Disabled Network Protocols
+    description: >-
+      Comma-separated protocols the server must NOT use (LiteNetLib, SteamNetworking). Disable
+      SteamNetworking when the server ports are reachable directly; leave empty behind NAT.
+    order: 11
+    env_variable: SERVER_DISABLED_NETWORK_PROTOCOLS
+    default_value: SteamNetworking
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Telnet Port
+    description: >-
+      Telnet port. The panel console connects to it locally. Only needs its own allocation when a
+      Telnet Password is set and remote tools should reach it.
+    order: 12
+    env_variable: TELNET_PORT
+    default_value: "8081"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1024,65535"
+  - name: Telnet Password
+    description: >-
+      Without a password telnet only listens on the loopback interface. Set one to expose telnet to
+      remote admin tools.
+    order: 13
+    env_variable: TELNET_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. 1 = enabled, 0 = disabled.
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. latest_experimental. Leave empty for the stable release.
+      Reinstall after changing it to switch branches cleanly.
+    order: 15
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Steam App ID
+    description: Steam app id of the 7 Days to Die dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "294420"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:294420"
+  - name: Library Path
+    description: The server loads its bundled native libraries from the working directory.
+    order: 17
+    env_variable: LD_LIBRARY_PATH
+    default_value: "."
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|max:64"
