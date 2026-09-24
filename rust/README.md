@@ -2,7 +2,7 @@
 
 The only aim in Rust is to survive. Everything wants you to die - the island's wildlife and other inhabitants, the environment, other survivors. Do whatever it takes to last another night.
 
-Native Calagopus egg, based on Pterodactyl's bundled Rust egg (MIT License). It uses the `ghcr.io/pterodactyl/games:rust` image. The dedicated server (Steam app `258550`) is installed anonymously through SteamCMD.
+Native Calagopus egg, based on Pterodactyl's bundled Rust egg (MIT License). It runs in the [`ghcr.io/caloptreyx/games:rust`](https://github.com/Caloptreyx/yolks) image. The dedicated server (Steam app `258550`) is installed anonymously through SteamCMD.
 
 ## Capabilities
 

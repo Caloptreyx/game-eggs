@@ -7,7 +7,7 @@ description: >-
 features:
   - steam_disk_space
 docker_images:
-  DayZ: ghcr.io/ptero-eggs/games:dayz
+  DayZ: ghcr.io/caloptreyx/games:dayz
 file_denylist: []
 startup_commands:
   # CLIENT_MODS is not an egg variable: the image entrypoint builds it from the modlist file and
@@ -74,7 +74,7 @@ config:
     value: SIGINT
 scripts:
   installation:
-    container: ghcr.io/ptero-eggs/installers:debian
+    container: ghcr.io/caloptreyx/installers:debian
     entrypoint: bash
     content: |
       #!/bin/bash
@@ -82,7 +82,7 @@ scripts:
       # Based on the Pterodactyl DayZ egg by David Wolfe (Red-Thirten), MIT License.
       #
       # Server files: /mnt/server
-      # Installer image: ghcr.io/ptero-eggs/installers:debian
+      # Installer image: ghcr.io/caloptreyx/installers:debian
 
       # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
       # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.

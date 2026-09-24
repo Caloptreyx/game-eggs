@@ -7,7 +7,7 @@ description: >-
 features:
   - steam_disk_space
 docker_images:
-  SteamCMD Debian: ghcr.io/ptero-eggs/steamcmd:debian
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
 file_denylist: []
 startup_commands:
   # Palworld keeps every setting on the single OptionSettings line of PalWorldSettings.ini, which the
@@ -42,14 +42,14 @@ config:
     value: Shutdown 1
 scripts:
   installation:
-    container: ghcr.io/ptero-eggs/installers:debian
+    container: ghcr.io/caloptreyx/installers:debian
     entrypoint: bash
     content: |
       #!/bin/bash
       # Palworld dedicated server installation script
       #
       # Server files: /mnt/server
-      # Installer image: ghcr.io/ptero-eggs/installers:debian
+      # Installer image: ghcr.io/caloptreyx/installers:debian
 
       SERVER_BINARY=/mnt/server/Pal/Binaries/Linux/PalServer-Linux-Shipping
       CONFIG_DIR=/mnt/server/Pal/Saved/Config/LinuxServer

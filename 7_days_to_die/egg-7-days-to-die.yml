@@ -7,7 +7,7 @@ description: >-
 features:
   - steam_disk_space
 docker_images:
-  SteamCMD Debian: ghcr.io/ptero-eggs/steamcmd:debian
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
 file_denylist: []
 startup_commands:
   # Folded into a single line. The server logs to logs/latest.log, which is streamed to the console
@@ -56,14 +56,14 @@ config:
     value: shutdown
 scripts:
   installation:
-    container: ghcr.io/ptero-eggs/installers:debian
+    container: ghcr.io/caloptreyx/installers:debian
     entrypoint: bash
     content: |
       #!/bin/bash
       # 7 Days to Die dedicated server installation script
       #
       # Server files: /mnt/server
-      # Installer image: ghcr.io/ptero-eggs/installers:debian
+      # Installer image: ghcr.io/caloptreyx/installers:debian
 
       SERVER_BINARY=/mnt/server/7DaysToDieServer.x86_64
 

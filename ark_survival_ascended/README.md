@@ -2,7 +2,7 @@
 
 ARK is reimagined from the ground up in Unreal Engine 5. Form a tribe, tame and breed hundreds of unique dinosaurs and primeval creatures, explore, craft, build and fight your way to the top of the food chain.
 
-Native Calagopus egg. The dedicated server (Steam app `2430930`) only exists for Windows. It is installed anonymously through SteamCMD and runs through Proton in the `ghcr.io/ptero-eggs/steamcmd:proton` image.
+Native Calagopus egg. The dedicated server (Steam app `2430930`) only exists for Windows. It is installed anonymously through SteamCMD and runs through Proton in the `ghcr.io/caloptreyx/steamcmd:proton` image.
 
 ## Capabilities
 

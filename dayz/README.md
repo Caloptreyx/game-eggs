@@ -5,7 +5,7 @@
 
 How long can you survive a post-apocalyptic world? A land overrun with an infected "zombie" population, where you compete with other survivors for limited resources. Will you team up with strangers and stay strong together? Or play as a lone wolf to avoid betrayal? This is DayZ – this is your story.
 
-Native Calagopus egg, ported from the Pterodactyl DayZ egg by [Red-Thirten](https://github.com/lilkingjr1) and contributors (MIT License). It uses their `ghcr.io/ptero-eggs/games:dayz` image, which handles server and Workshop mod updates on startup.
+Native Calagopus egg, ported from the Pterodactyl DayZ egg by [Red-Thirten](https://github.com/lilkingjr1) and contributors (MIT License). It runs in the [`ghcr.io/caloptreyx/games:dayz`](https://github.com/Caloptreyx/yolks) image, based on their DayZ image, which updates the server and Workshop mods on startup.
 
 ## Capabilities
 

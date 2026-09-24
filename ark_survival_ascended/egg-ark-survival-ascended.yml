@@ -7,7 +7,7 @@ description: >-
 features:
   - steam_disk_space
 docker_images:
-  Proton: ghcr.io/ptero-eggs/steamcmd:proton
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
 file_denylist: []
 startup_commands:
   # The server's own output is unusable under Proton, so ShooterGame.log is streamed to the console
@@ -55,14 +55,14 @@ config:
     value: DoExit
 scripts:
   installation:
-    container: ghcr.io/ptero-eggs/installers:debian
+    container: ghcr.io/caloptreyx/installers:debian
     entrypoint: bash
     content: |
       #!/bin/bash
       # ARK: Survival Ascended dedicated server installation script
       #
       # Server files: /mnt/server
-      # Installer image: ghcr.io/ptero-eggs/installers:debian
+      # Installer image: ghcr.io/caloptreyx/installers:debian
 
       SERVER_BINARY=/mnt/server/ShooterGame/Binaries/Win64/ArkAscendedServer.exe
 

@@ -7,7 +7,7 @@ description: >-
 features:
   - steam_disk_space
 docker_images:
-  Rust: ghcr.io/pterodactyl/games:rust
+  Rust: ghcr.io/caloptreyx/games:rust
 file_denylist: []
 startup_commands:
   # The image expands this with an unquoted `eval echo`, then runs the result through a shell.
@@ -44,14 +44,14 @@ config:
     value: quit
 scripts:
   installation:
-    container: ghcr.io/pterodactyl/installers:debian
+    container: ghcr.io/caloptreyx/installers:debian
     entrypoint: bash
     content: |
       #!/bin/bash
       # Rust dedicated server installation script
       #
       # Server files: /mnt/server
-      # Installer image: ghcr.io/pterodactyl/installers:debian
+      # Installer image: ghcr.io/caloptreyx/installers:debian
 
       SRCDS_APPID=258550
       SERVER_BINARY=/mnt/server/RustDedicated

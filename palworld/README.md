@@ -2,7 +2,7 @@
 
 Fight, farm, build and work alongside mysterious creatures called "Pals" in this completely new multiplayer, open world survival and crafting game!
 
-Native Calagopus egg. The dedicated server (Steam app `2394010`) is installed anonymously through SteamCMD and runs in the `ghcr.io/ptero-eggs/steamcmd:debian` image.
+Native Calagopus egg. The dedicated server (Steam app `2394010`) is installed anonymously through SteamCMD and runs in the `ghcr.io/caloptreyx/steamcmd:debian` image.
 
 ## Capabilities
 
