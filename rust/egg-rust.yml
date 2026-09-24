@@ -1,0 +1,248 @@
+name: Rust
+author: thexylo@pm.me
+description: >-
+  The only aim in Rust is to survive. Everything wants you to die - the island's wildlife and other
+  inhabitants, the environment, other survivors. Do whatever it takes to last another night.
+  Dedicated server with optional Oxide (uMod) or Carbon modding.
+features:
+  - steam_disk_space
+docker_images:
+  Rust: ghcr.io/pterodactyl/games:rust
+file_denylist: []
+startup_commands:
+  # The image expands this with an unquoted `eval echo`, then runs the result through a shell.
+  # "\"{{VAR}}\"" keeps text values intact through both passes (no word splitting or * expansion);
+  # their variables reject " $ and ` because the shell pass would still interpret them.
+  Default: >-
+    ./RustDedicated -batchmode
+    +server.port {{SERVER_PORT}}
+    +server.queryport {{QUERY_PORT}}
+    +server.identity "rust"
+    +rcon.port {{RCON_PORT}} +rcon.web true
+    +rcon.password "\"{{RCON_PASS}}\""
+    +app.port {{APP_PORT}}
+    +server.hostname "\"{{HOSTNAME}}\""
+    +server.description "\"{{DESCRIPTION}}\""
+    +server.url "\"{{SERVER_URL}}\""
+    +server.headerimage "\"{{SERVER_IMG}}\""
+    +server.logoimage "\"{{SERVER_LOGO}}\""
+    +server.maxplayers {{MAX_PLAYERS}}
+    +server.saveinterval {{SAVEINTERVAL}}
+    +server.level "\"{{LEVEL}}\""
+    $( [ -z ${MAP_URL} ] && printf %s "+server.worldsize \"{{WORLD_SIZE}}\" +server.seed \"{{WORLD_SEED}}\"" || printf %s "+server.levelurl {{MAP_URL}}" )
+    {{ADDITIONAL_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Server startup complete
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/pterodactyl/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Rust dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/pterodactyl/installers:debian
+
+      SRCDS_APPID=258550
+      SERVER_BINARY=/mnt/server/RustDedicated
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update "${SRCDS_APPID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      if [[ ! -f "${SERVER_BINARY}" ]]; then
+          fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+      fi
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain " $ or `.
+    order: 1
+    env_variable: HOSTNAME
+    default_value: A Rust Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:60|regex:/^[^"$`]+$/'
+  - name: Description
+    description: Text under the server name, commonly rules and info. Use \n for new lines. Cannot contain " $ or `.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: A Rust server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:1024|regex:/^[^"$`]+$/'
+  - name: Website URL
+    description: Opened by the "Visit Website" button in the server list.
+    order: 3
+    env_variable: SERVER_URL
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+  - name: Header Image
+    description: URL of the header image at the top of the server listing.
+    order: 4
+    env_variable: SERVER_IMG
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+  - name: Logo Image
+    description: URL of the round server logo in the Rust+ app.
+    order: 5
+    env_variable: SERVER_LOGO
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+  - name: Max Players
+    description: Maximum number of players on the server at once.
+    order: 6
+    env_variable: MAX_PLAYERS
+    default_value: "40"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,500"
+  - name: Modding Framework
+    description: >-
+      vanilla, oxide (uMod) or carbon. The chosen framework is downloaded and updated on every start.
+    order: 7
+    env_variable: FRAMEWORK
+    default_value: vanilla
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:vanilla,oxide,carbon"
+  - name: Level
+    description: World to load, e.g. Procedural Map, Barren, HapisIsland, CraggyIsland. Ignored when a Custom Map URL is set.
+    order: 8
+    env_variable: LEVEL
+    default_value: Procedural Map
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:40|regex:/^[^"$`]+$/'
+  - name: World Size
+    description: Width and height of a procedural map in meters (1000-6000). Larger maps need more memory.
+    order: 9
+    env_variable: WORLD_SIZE
+    default_value: "3000"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1000,6000"
+  - name: World Seed
+    description: Seed of a procedural map. Leave empty for the default.
+    order: 10
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|integer|between:0,2147483647"
+  - name: Custom Map URL
+    description: Direct download URL of a custom map; replaces Level, World Size and World Seed. An invalid URL crashes the server.
+    order: 11
+    env_variable: MAP_URL
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|url|max:512|regex:/^[^"$`\s]*$/'
+  - name: Query Port
+    description: UDP port for the server list. Must differ from the game port and needs its own allocation.
+    order: 12
+    env_variable: QUERY_PORT
+    default_value: "27017"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      TCP port for WebRCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 13
+    env_variable: RCON_PORT
+    default_value: "28016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: WebRCON password, also used by the panel console. Letters, digits, underscore, dot and dash only.
+    order: 14
+    env_variable: RCON_PASS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:1|max:64|regex:/^[\w.-]+$/'
+  - name: Rust+ App Port
+    description: TCP port for the Rust+ companion app. Needs its own allocation; -1 disables it.
+    order: 15
+    env_variable: APP_PORT
+    default_value: "28082"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:-1,65535"
+  - name: Save Interval
+    description: Seconds between automatic saves.
+    order: 16
+    env_variable: SAVEINTERVAL
+    default_value: "60"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:30,3600"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 17
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Additional Arguments
+    description: Extra startup parameters, e.g. +server.pve true
+    order: 18
+    env_variable: ADDITIONAL_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:1024"
