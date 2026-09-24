@@ -1,0 +1,234 @@
+name: "ARK: Survival Ascended"
+author: thexylo@pm.me
+description: >-
+  ARK is reimagined from the ground up in Unreal Engine 5. Form a tribe, tame and breed hundreds of
+  unique dinosaurs and primeval creatures, explore, craft, build and fight your way to the top of
+  the food chain. The Windows dedicated server (Steam app 2430930) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/ptero-eggs/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server's own output is unusable under Proton, so ShooterGame.log is streamed to the console
+  # and console lines are sent to the server over RCON. The shell waits on the server itself so the
+  # container only stops once the server has exited. Names and passwords are written to
+  # GameUserSettings.ini by the panel, not passed here, so they may contain any character.
+  Default: >-
+    mkdir -p ShooterGame/Saved/Logs; : > ShooterGame/Saved/Logs/ShooterGame.log;
+    proton run ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe
+    "{{SERVER_MAP}}?listen?Port={{SERVER_PORT}}?RCONEnabled=True?RCONPort={{RCON_PORT}}{{ARGS_PARAMS}}"
+    -WinLiveMaxPlayers={{MAX_PLAYERS}} -servergamelog
+    $( [ "${BATTLE_EYE}" = "1" ] || printf %s -NoBattlEye )
+    $( [ -z "${MOD_IDS}" ] || printf %s "-mods=${MOD_IDS}" )
+    {{ARGS_FLAGS}} & SRV=$!;
+    tail -n +1 -F ShooterGame/Saved/Logs/ShooterGame.log --pid=${SRV} 2>/dev/null &
+    (while read -r line; do rcon -a "127.0.0.1:${RCON_PORT}" -p "${ARK_ADMIN_PASSWORD}" "${line}"; done) <&0 &
+    wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini:
+      parser: ini
+      replace:
+        - match: SessionSettings.SessionName
+          replace_with: "{{env.SESSION_NAME}}"
+        - match: ServerSettings.ServerPassword
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: ServerSettings.ServerAdminPassword
+          replace_with: "{{env.ARK_ADMIN_PASSWORD}}"
+        - match: ServerSettings.RCONEnabled
+          replace_with: "True"
+        - match: ServerSettings.RCONPort
+          replace_with: "{{env.RCON_PORT}}"
+        - match: ServerSettings.ServerPVE
+          replace_with: "{{env.SERVER_PVE}}"
+        - match: "[/Script/Engine.GameSession].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - Server has completed startup and is now advertising for join
+    strip_ansi: false
+  stop:
+    type: command
+    value: DoExit
+scripts:
+  installation:
+    container: ghcr.io/ptero-eggs/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # ARK: Survival Ascended dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/ptero-eggs/installers:debian
+
+      SERVER_BINARY=/mnt/server/ShooterGame/Binaries/Win64/ArkAscendedServer.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      if [[ ! -f "${SERVER_BINARY}" ]]; then
+          fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and that about 20 GB of disk space is free"
+      fi
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      mkdir -p /mnt/server/ShooterGame/Saved/Logs /mnt/server/ShooterGame/Saved/Config/WindowsServer
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain |, which ARK treats as the end of the name.
+    order: 1
+    env_variable: SESSION_NAME
+    default_value: An ARK Server
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:128", 'regex:/^[^|]+$/']
+  - name: Server Password
+    description: Password players need to join. Leave empty for a public server.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Admin Password
+    description: Password for admin commands in game (enablecheats) and for RCON, which the panel console uses.
+    order: 3
+    env_variable: ARK_ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^\S+$/'
+  - name: Map
+    description: >-
+      Map to load, e.g. TheIsland_WP, ScorchedEarth_WP, TheCenter_WP, Aberration_WP, Extinction_WP,
+      Ragnarok_WP, Valguero_WP, LostColony_WP. DLC maps must be owned by players to join.
+    order: 4
+    env_variable: SERVER_MAP
+    default_value: TheIsland_WP
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^\w+$/'
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "70"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: PvE
+    description: Player versus environment only; players cannot damage each other or their structures. (True or False)
+    order: 6
+    env_variable: SERVER_PVE
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: BattlEye
+    description: Enable the BattlEye anti-cheat. (1 = on, 0 = off)
+    order: 7
+    env_variable: BATTLE_EYE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Mods
+    description: >-
+      Comma-separated CurseForge project IDs of the mods to load, e.g. 927090,929420. The server
+      downloads and updates them itself. Leave empty for no mods.
+    order: 8
+    env_variable: MOD_IDS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^\d+(,\d+)*$/'
+  - name: RCON Port
+    description: >-
+      TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 9
+    env_variable: RCON_PORT
+    default_value: "27020"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Additional Options
+    description: >-
+      Extra ?Option=Value settings appended to the map, without spaces, e.g.
+      ?AllowFlyerCarryPvE=True?DifficultyOffset=1
+    order: 11
+    env_variable: ARGS_PARAMS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^(\?[^\s"''`$\\?]+)*$/'
+  - name: Additional Flags
+    description: Extra -Flag launch parameters, e.g. -ForceAllowCaveFlyers -ServerPlatform=ALL
+    order: 12
+    env_variable: ARGS_FLAGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:1024"
+  - name: Steam App ID
+    description: Steam app id of the ARK Survival Ascended dedicated server.
+    order: 13
+    env_variable: SRCDS_APPID
+    default_value: "2430930"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:2430930"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 14
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"

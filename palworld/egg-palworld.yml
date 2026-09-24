@@ -1,0 +1,289 @@
+name: Palworld
+author: thexylo@pm.me
+description: >-
+  Fight, farm, build and work alongside mysterious creatures called "Pals" in this completely new
+  multiplayer, open world survival and crafting game. Dedicated server installed through SteamCMD
+  (app 2394010).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/ptero-eggs/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Palworld keeps every setting on the single OptionSettings line of PalWorldSettings.ini, which the
+  # panel's line-based config parsers cannot edit key by key, so perl sets the panel-managed keys on
+  # each start (values come from the environment, never through the shell). The server has no
+  # console input: console lines are sent to it over RCON. Shutdown does not save the world, so a
+  # Save is sent first; signals make the server exit without saving. Keep "} }" spaced: "}}" is a
+  # placeholder delimiter for the image.
+  Default: >-
+    mkdir -p Pal/Saved/Config/LinuxServer;
+    grep -qs "^OptionSettings=" Pal/Saved/Config/LinuxServer/PalWorldSettings.ini || grep -v "^;" DefaultPalWorldSettings.ini > Pal/Saved/Config/LinuxServer/PalWorldSettings.ini;
+    perl -i -pe 'next unless /^OptionSettings=/; my %b = (0, "False", 1, "True");
+    for my $spec (split / /, "ServerName=s:SERVER_NAME ServerDescription=s:SERVER_DESCRIPTION ServerPassword=s:SERVER_PASSWORD AdminPassword=s:ADMIN_PASSWORD ServerPlayerMaxNum=n:MAX_PLAYERS PublicPort=n:SERVER_PORT PublicIP=s:PUBLIC_IP RCONEnabled=v:True RCONPort=n:RCON_PORT ExpRate=n:EXP_RATE PalCaptureRate=n:PAL_CAPTURE_RATE PalSpawnNumRate=n:PAL_SPAWN_RATE WorkSpeedRate=n:WORK_SPEED_RATE DayTimeSpeedRate=n:DAY_SPEED_RATE NightTimeSpeedRate=n:NIGHT_SPEED_RATE DeathPenalty=n:DEATH_PENALTY bIsPvP=b:PVP bEnablePlayerToPlayerDamage=b:PVP AutoSaveSpan=n:AUTO_SAVE_SPAN") {
+    my ($k, $t, $e) = $spec =~ /^(\w+)=(\w):(\w+)$/; my $v = $t eq "v" ? $e : $ENV{$e};
+    $v = $b{$v} if $t eq "b"; $v = qq("$v") if $t eq "s";
+    s/([(,]$k=)("[^"]*"|[^,)]*)/$1$v/; }' Pal/Saved/Config/LinuxServer/PalWorldSettings.ini;
+    (while read -r line; do
+    [[ "${line,,}" =~ ^shutdown ]] && rcon -a "127.0.0.1:${RCON_PORT}" -p "${ADMIN_PASSWORD}" Save;
+    rcon -a "127.0.0.1:${RCON_PORT}" -p "${ADMIN_PASSWORD}" "${line}"; done) <&0 &
+    ./Pal/Binaries/Linux/PalServer-Linux-Shipping Pal -port={{SERVER_PORT}}
+    $( [ "${COMMUNITY_SERVER}" = "1" ] && printf %s -publiclobby ) {{STARTUP_FLAGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Running Palworld dedicated server on
+    strip_ansi: false
+  stop:
+    type: command
+    value: Shutdown 1
+scripts:
+  installation:
+    container: ghcr.io/ptero-eggs/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Palworld dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/ptero-eggs/installers:debian
+
+      SERVER_BINARY=/mnt/server/Pal/Binaries/Linux/PalServer-Linux-Shipping
+      CONFIG_DIR=/mnt/server/Pal/Saved/Config/LinuxServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      if [[ ! -f "${SERVER_BINARY}" ]]; then
+          fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+      fi
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+      # PalServer.sh normally copies this next to the binary on first start.
+      cp -v linux64/steamclient.so /mnt/server/Pal/Binaries/Linux/steamclient.so
+      chmod +x "${SERVER_BINARY}"
+
+      ## server configuration
+      # An existing configuration is kept on reinstall.
+      mkdir -p "${CONFIG_DIR}"
+      if [[ ! -s "${CONFIG_DIR}/PalWorldSettings.ini" ]]; then
+          echo "Creating PalWorldSettings.ini from the default settings..."
+          grep -v "^;" /mnt/server/DefaultPalWorldSettings.ini > "${CONFIG_DIR}/PalWorldSettings.ini" \
+              || fail "could not create PalWorldSettings.ini"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain " or \.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Palworld Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\]+$/'
+  - name: Server Description
+    description: Description shown in the server list. Cannot contain " or \.
+    order: 2
+    env_variable: SERVER_DESCRIPTION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:128|regex:/^[^"\\]*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain " or \.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\]*$/'
+  - name: Admin Password
+    description: >-
+      Password for admin commands in game (/AdminPassword) and for RCON, which the panel console
+      uses. No spaces, " or \.
+    order: 4
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^[^"\\\s]+$/'
+  - name: Max Players
+    description: Maximum number of players on the server (1-32).
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
+  - name: Community Server
+    description: List the server in the in-game community server browser. (1 = on, 0 = off)
+    order: 6
+    env_variable: COMMUNITY_SERVER
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Public IP
+    description: >-
+      IP address advertised in the community server list. Leave empty to let the server detect it;
+      set it when the allocation uses a local IP.
+    order: 7
+    env_variable: PUBLIC_IP
+    default_value: ""
+    user_viewable: true
+    user_editable: false
+    rules: "nullable|ip"
+  - name: RCON Port
+    description: >-
+      TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 8
+    env_variable: RCON_PORT
+    default_value: "25575"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: EXP Rate
+    description: Experience multiplier (0.1-20).
+    order: 9
+    env_variable: EXP_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.1,20"
+  - name: Pal Capture Rate
+    description: Capture chance multiplier (0.5-2).
+    order: 10
+    env_variable: PAL_CAPTURE_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.5,2"
+  - name: Pal Spawn Rate
+    description: Pal spawn amount multiplier (0.5-3). Higher values cost performance.
+    order: 11
+    env_variable: PAL_SPAWN_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.5,3"
+  - name: Work Speed Rate
+    description: Work speed multiplier of Pals at bases (0.1-5).
+    order: 12
+    env_variable: WORK_SPEED_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.1,5"
+  - name: Day Speed
+    description: Day time speed multiplier (0.1-5).
+    order: 13
+    env_variable: DAY_SPEED_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.1,5"
+  - name: Night Speed
+    description: Night time speed multiplier (0.1-5).
+    order: 14
+    env_variable: NIGHT_SPEED_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.1,5"
+  - name: Death Penalty
+    description: >-
+      What players drop on death: None, Item (items only), ItemAndEquipment, or All (items,
+      equipment and Pals in the party).
+    order: 15
+    env_variable: DEATH_PENALTY
+    default_value: Item
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:None,Item,ItemAndEquipment,All"
+  - name: PvP
+    description: Allow players to damage each other. (1 = on, 0 = off)
+    order: 16
+    env_variable: PVP
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Auto Save Interval
+    description: Seconds between automatic world saves.
+    order: 17
+    env_variable: AUTO_SAVE_SPAN
+    default_value: "30"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:10,3600"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 18
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Startup Flags
+    description: Extra server launch flags. The defaults improve performance on multi-core CPUs.
+    order: 19
+    env_variable: STARTUP_FLAGS
+    default_value: -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
+    order: 20
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Steam App ID
+    description: Steam app id of the Palworld dedicated server.
+    order: 21
+    env_variable: SRCDS_APPID
+    default_value: "2394010"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:2394010"
