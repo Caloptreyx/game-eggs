@@ -1,0 +1,309 @@
+name: Arma Reforger
+author: thexylo@pm.me
+description: >-
+  Arma Reforger, the military sandbox on the Enfusion engine. Linux dedicated server (Steam app
+  1874900) with Steam query, RCON console and Workshop mods.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server prints its log to the console. Console lines are sent over RCON (Reforger's BattlEye
+  # RCON protocol), so commands work once the server is up.
+  Default: >-
+    (while read -r line; do rcon -t rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    exec ./ArmaReforgerServer -config ./config.json -profile ./profile -addonDownloadDir ./addons-workshop
+    -addonTempDir ./tmp -backendlog -nothrow -maxFPS {{MAX_FPS}} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: bindPort
+          replace_with: "{{server.build.default.port}}"
+        - match: publicPort
+          replace_with: "{{server.build.default.port}}"
+        - match: a2s.port
+          replace_with: "{{env.QUERY_PORT}}"
+        - match: rcon.port
+          replace_with: "{{env.RCON_PORT}}"
+        - match: rcon.password
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: game.name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: game.password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: game.passwordAdmin
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: game.scenarioId
+          replace_with: "{{env.SCENARIO_ID}}"
+        - match: game.maxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: game.visible
+          replace_with: "{{env.VISIBLE}}"
+        - match: game.crossPlatform
+          replace_with: "{{env.CROSSPLAY}}"
+        - match: game.gameProperties.battlEye
+          replace_with: "{{env.BATTLEYE}}"
+        - match: game.gameProperties.disableThirdPerson
+          replace_with: "{{env.DISABLE_THIRD}}"
+  startup:
+    done:
+      - Starting RPL server
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Arma Reforger dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/ArmaReforgerServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and that about 15 GB of disk space is free"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      mkdir -p profile tmp addons-workshop
+
+      ## config.json: created once, then kept. The panel rewrites the managed keys on every start.
+      if [[ ! -f config.json ]]; then
+          echo "Creating config.json..."
+          cat > config.json << 'EOF'
+      {
+          "bindAddress": "",
+          "bindPort": 2001,
+          "publicAddress": "",
+          "publicPort": 2001,
+          "a2s": {
+              "address": "0.0.0.0",
+              "port": 17777
+          },
+          "rcon": {
+              "address": "0.0.0.0",
+              "port": 19999,
+              "password": "changeme",
+              "permission": "admin",
+              "blacklist": [],
+              "whitelist": []
+          },
+          "game": {
+              "name": "Arma Reforger Server",
+              "password": "",
+              "passwordAdmin": "",
+              "admins": [],
+              "scenarioId": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf",
+              "maxPlayers": 32,
+              "visible": true,
+              "crossPlatform": false,
+              "gameProperties": {
+                  "serverMaxViewDistance": 1600,
+                  "serverMinGrassDistance": 50,
+                  "networkViewDistance": 1500,
+                  "disableThirdPerson": false,
+                  "fastValidation": true,
+                  "battlEye": true,
+                  "VONDisableUI": false,
+                  "VONDisableDirectSpeechUI": false
+              },
+              "mods": []
+          },
+          "operating": {
+              "lobbyPlayerSynchronise": true
+          }
+      }
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Arma Reforger Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Admin Password
+    description: Password to log in as admin in game (#login). No spaces.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Scenario
+    description: >-
+      Scenario to load, e.g. {ECC61978EDCC2B5A}Missions/23_Campaign.conf (Conflict - Everon). Start
+      the server with -listScenarios in Extra Arguments to list all installed scenarios.
+    order: 4
+    env_variable: SCENARIO_ID
+    default_value: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:256|regex:/^\{[0-9A-F]{16}\}[\w\/.-]+\.conf$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Visible
+    description: List the server in the server browser.
+    order: 6
+    env_variable: VISIBLE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Cross-Platform
+    description: Allow Xbox and PlayStation players. Only works without mods that are not console-compatible.
+    order: 7
+    env_variable: CROSSPLAY
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: BattlEye
+    description: Enable the BattlEye anti-cheat.
+    order: 8
+    env_variable: BATTLEYE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Disable Third Person
+    description: Force first-person view.
+    order: 9
+    env_variable: DISABLE_THIRD
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Steam Query Port
+    description: UDP port for the Steam server browser (A2S). Needs its own allocation.
+    order: 10
+    env_variable: QUERY_PORT
+    default_value: "17777"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      UDP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 11
+    env_variable: RCON_PORT
+    default_value: "19999"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: RCON password, also used by the panel console. At least 3 characters, no spaces.
+    order: 12
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:3|max:64|regex:/^\S+$/'
+  - name: Max FPS
+    description: Server frame limit. Lower values use less CPU.
+    order: 13
+    env_variable: MAX_FPS
+    default_value: "60"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:10,240"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -listScenarios or -loadSessionSave.
+    order: 14
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 15
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install, e.g. experimental. Leave empty for the stable release.
+    order: 16
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Arma Reforger dedicated server.
+    order: 17
+    env_variable: SRCDS_APPID
+    default_value: "1874900"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1874900"

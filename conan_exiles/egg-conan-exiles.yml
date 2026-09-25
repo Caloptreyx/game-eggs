@@ -1,0 +1,238 @@
+name: Conan Exiles
+author: thexylo@pm.me
+description: >-
+  Survive in the brutal lands of Conan the Barbarian. Native Linux dedicated server (Steam app
+  443030) with RCON console; no Wine needed.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Server output goes to ConanSandbox.log, which is streamed to the console; console lines are sent
+  # to the server over RCON once it is up.
+  Default: >-
+    mkdir -p ConanSandbox/Saved/Logs; : > ConanSandbox/Saved/Logs/ConanSandbox.log;
+    ./ConanSandbox/Binaries/Linux/ConanSandboxServer-Linux-Shipping ConanSandbox
+    -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -log {{EXTRA_ARGS}} & SRV=$!;
+    tail -n +1 -F ConanSandbox/Saved/Logs/ConanSandbox.log --pid=${SRV} 2>/dev/null &
+    (while read -r line; do rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # The server reads the name from [OnlineSubsystemSteam] and saves it under [OnlineSubsystem],
+    # so it is kept in both.
+    ConanSandbox/Saved/Config/LinuxServer/Engine.ini:
+      parser: ini
+      replace:
+        - match: OnlineSubsystemSteam.ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: OnlineSubsystem.ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+    ConanSandbox/Saved/Config/LinuxServer/Game.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/Engine.GameSession].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: RconPlugin.RconEnabled
+          replace_with: "1"
+        - match: RconPlugin.RconPassword
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: RconPlugin.RconPort
+          replace_with: "{{env.RCON_PORT}}"
+    ConanSandbox/Saved/Config/LinuxServer/ServerSettings.ini:
+      parser: ini
+      replace:
+        - match: ServerSettings.ServerPassword
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: ServerSettings.AdminPassword
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: ServerSettings.PVPEnabled
+          replace_with: "{{env.PVP}}"
+        - match: ServerSettings.IsBattlEyeEnabled
+          replace_with: "{{env.BATTLEYE}}"
+        - match: ServerSettings.serverRegion
+          replace_with: "{{env.REGION}}"
+  startup:
+    done:
+      - Started SourceServerQueries
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Conan Exiles dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/ConanSandbox/Binaries/Linux/ConanSandboxServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/ConanSandbox/Saved/Config/LinuxServer /mnt/server/ConanSandbox/Saved/Logs
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Conan Exiles Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Admin Password
+    description: Password to become admin in game (Settings > Server Settings > Make Me Admin).
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of players, admins included.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "40"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,70"
+  - name: PvP
+    description: Allow players to fight each other.
+    order: 5
+    env_variable: PVP
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: BattlEye
+    description: Enable the BattlEye anti-cheat.
+    order: 6
+    env_variable: BATTLEYE
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Region
+    description: Server browser region number (serverRegion in ServerSettings.ini). 0 is the default.
+    order: 7
+    env_variable: REGION
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,20"
+  - name: Query Port
+    description: UDP port for the Steam server browser. Needs its own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 9
+    env_variable: RCON_PORT
+    default_value: "25575"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: RCON password, also used by the panel console. No spaces.
+    order: 10
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:3|max:64|regex:/^\S+$/'
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -MULTIHOME=1.2.3.4.
+    order: 11
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 12
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the current release (the legacy branch has no Linux build).
+    order: 13
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Conan Exiles dedicated server.
+    order: 14
+    env_variable: SRCDS_APPID
+    default_value: "443030"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:443030"

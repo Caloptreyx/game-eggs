@@ -1,0 +1,248 @@
+name: American Truck Simulator
+author: thexylo@pm.me
+description: >-
+  Drive across America in convoy with other players. Official SCS Software dedicated server (Steam
+  app 2239530); needs server_packages files exported from the game.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # XDG_DATA_HOME puts the server home (config, packages, logs) in ./data/American Truck Simulator
+  # instead of a hidden folder. The server reads no console input.
+  Default: >-
+    export XDG_DATA_HOME=/home/container/data;
+    if [ ! -f "data/American Truck Simulator/server_packages.sii" ]; then
+    echo "server_packages.sii and server_packages.dat are missing from data/American Truck Simulator/. Export them in the game (console: export_server_packages) and upload them; see the README.";
+    exit 1; fi;
+    cd bin/linux_x64 && LD_LIBRARY_PATH=".:../../linux64" exec ./amtrucks_server -nosingle
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    data/American Truck Simulator/server_config.sii:
+      parser: file
+      create_new: false
+      replace:
+        - match: " lobby_name:"
+          replace_with: ' lobby_name: "{{env.LOBBY_NAME}}"'
+        - match: " description:"
+          replace_with: ' description: "{{env.DESCRIPTION}}"'
+        - match: " welcome_message:"
+          replace_with: ' welcome_message: "{{env.WELCOME_MESSAGE}}"'
+        - match: " password:"
+          replace_with: ' password: "{{env.SERVER_PASSWORD}}"'
+        - match: " max_players:"
+          replace_with: " max_players: {{env.MAX_PLAYERS}}"
+        - match: " connection_dedicated_port:"
+          replace_with: " connection_dedicated_port: {{server.build.default.port}}"
+        - match: " query_dedicated_port:"
+          replace_with: " query_dedicated_port: {{env.QUERY_PORT}}"
+        - match: " server_logon_token:"
+          replace_with: ' server_logon_token: "{{env.LOGON_TOKEN}}"'
+        - match: " player_damage:"
+          replace_with: " player_damage: {{env.PLAYER_DAMAGE}}"
+        - match: " traffic:"
+          replace_with: " traffic: {{env.TRAFFIC}}"
+  startup:
+    done:
+      - "[MP] Session running."
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # American Truck Simulator dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/bin/linux_x64/amtrucks_server
+      HOME_DIR="/mnt/server/data/American Truck Simulator"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update "${SRCDS_APPID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server home: the default server_config.sii, kept on reinstall
+      # Same content as the file the server writes on first launch (SCS documentation).
+      mkdir -p "${HOME_DIR}"
+      if [[ ! -f "${HOME_DIR}/server_config.sii" ]]; then
+          echo "Creating server_config.sii..."
+          cat > "${HOME_DIR}/server_config.sii" << 'EOF'
+      SiiNunit
+      {
+      server_config : _nameless.server.config {
+       lobby_name: "American Truck Simulator server"
+       description: ""
+       welcome_message: ""
+       password: ""
+       max_players: 8
+       max_vehicles_total: 100
+       max_ai_vehicles_player: 50
+       max_ai_vehicles_player_spawn: 50
+       connection_virtual_port: 100
+       query_virtual_port: 101
+       connection_dedicated_port: 27015
+       query_dedicated_port: 27016
+       server_logon_token: ""
+       player_damage: true
+       traffic: true
+       hide_in_company: false
+       hide_colliding: true
+       force_speed_limiter: false
+       mods_optioning: false
+       timezones: 0
+       service_no_collision: false
+       in_menu_ghosting: false
+       name_tags: true
+       friends_only: false
+       show_server: true
+       moderator_list: 0
+      }
+
+      }
+      EOF
+      fi
+
+      if [[ ! -f "${HOME_DIR}/server_packages.sii" ]]; then
+          echo "[NOTE] Upload server_packages.sii and server_packages.dat to data/American Truck Simulator/"
+          echo "       before starting the server. See the README for how to export them from the game."
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Lobby Name
+    description: Session name in the server browser, up to 63 characters.
+    order: 1
+    env_variable: LOBBY_NAME
+    default_value: American Truck Simulator server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:63|regex:/^[^"\\\r\n]+$/'
+  - name: Description
+    description: Session description, up to 63 characters.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:63|regex:/^[^"\\\r\n]*$/'
+  - name: Welcome Message
+    description: Message shown to players when they join, up to 127 characters.
+    order: 3
+    env_variable: WELCOME_MESSAGE
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:127|regex:/^[^"\\\r\n]*$/'
+  - name: Password
+    description: Password players need to join, up to 63 characters. Leave empty for no password.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:63|regex:/^[^"\\\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players (up to 8).
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,8"
+  - name: Query Port
+    description: >-
+      Steam query port for the server browser; needs its own allocation (TCP and UDP). For LAN
+      games it has to be between 27015 and 27020.
+    order: 6
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Logon Token
+    description: >-
+      Steam game server token (steamcommunity.com/dev/managegameservers, app ID 270880) for a
+      persistent server ID. Leave empty for an anonymous server with a new ID on every start.
+    order: 7
+    env_variable: LOGON_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+  - name: Player Damage
+    description: Players can damage each other.
+    order: 8
+    env_variable: PLAYER_DAMAGE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Traffic
+    description: AI traffic on the roads.
+    order: 9
+    env_variable: TRAFFIC
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the American Truck Simulator dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "2239530"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:2239530"

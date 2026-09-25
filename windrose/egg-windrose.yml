@@ -1,0 +1,190 @@
+name: Windrose
+author: thexylo@pm.me
+description: >-
+  PvE survival adventure in the Age of Piracy: fight on land and sea, build, craft and explore.
+  The Windows-only dedicated server (Steam app 4129620) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server's own output is unusable under Proton, so R5.log is streamed to the console. The
+  # server reads no console input. The shell waits on the server so it can finish before exiting.
+  # An empty Invite Code keeps the one the server generated; Wings cannot skip empty values itself.
+  Default: >-
+    mkdir -p R5/Saved/Logs; : > R5/Saved/Logs/R5.log;
+    [ -n "${INVITE_CODE}" ] && [ -f R5/ServerDescription.json ] && python3 -c 'import json,os;p="R5/ServerDescription.json";d=json.load(open(p));d["ServerDescription_Persistent"]["InviteCode"]=os.environ["INVITE_CODE"];json.dump(d,open(p,"w"),indent=2)';
+    proton run ./R5/Binaries/Win64/WindroseServer-Win64-Shipping.exe -log {{EXTRA_ARGS}} & SRV=$!;
+    tail -n +1 -F R5/Saved/Logs/R5.log --pid=${SRV} 2>/dev/null &
+    wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    R5/ServerDescription.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: ServerDescription_Persistent.ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: ServerDescription_Persistent.IsPasswordProtected
+          replace_with: "{{env.PASSWORD_PROTECTED}}"
+        - match: ServerDescription_Persistent.Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: ServerDescription_Persistent.MaxPlayerCount
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: ServerDescription_Persistent.UseDirectConnection
+          replace_with: "{{env.DIRECT_CONNECTION}}"
+        - match: ServerDescription_Persistent.DirectConnectionServerAddress
+          replace_with: "{{server.build.default.ip}}"
+        - match: ServerDescription_Persistent.DirectConnectionServerPort
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - Bringing up level for play took
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Windrose dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/R5/Binaries/Win64/WindroseServer-Win64-Shipping.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      mkdir -p /mnt/server/R5/Saved/Logs
+
+      echo "-----------------------------------------"
+      echo "Installation completed. The server writes R5/ServerDescription.json on first start,"
+      echo "including its invite code; the panel settings are applied from the next start on."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown to players.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Windrose Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:40"
+  - name: Invite Code
+    description: >-
+      Code players use to find the server (6-32 letters and digits). Leave empty to keep the one the
+      server generated, shown in R5/ServerDescription.json. Not used with Direct Connection.
+    order: 2
+    env_variable: INVITE_CODE
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|regex:/^[A-Za-z0-9]{6,32}$/'
+  - name: Password Protected
+    description: Require the Server Password to join.
+    order: 3
+    env_variable: PASSWORD_PROTECTED
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Server Password
+    description: Password players need when Password Protected is on.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:30"
+  - name: Max Players
+    description: Maximum number of players. More players need much more memory (see the README).
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,10"
+  - name: Direct Connection
+    description: >-
+      Players join by IP and port instead of invite code. Needs the game port reachable from
+      outside (UDP and TCP).
+    order: 6
+    env_variable: DIRECT_CONNECTION
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Extra Arguments
+    description: Additional server launch parameters.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Windrose dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "4129620"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:4129620"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 10
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"

@@ -1,0 +1,258 @@
+name: Garry's Mod
+author: thexylo@pm.me
+description: >-
+  Garry's Mod, the physics sandbox. Source dedicated server (Steam app 4020) with Workshop
+  collections, any gamemode and an optional 64-bit build.
+features:
+  - gsl_token
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # srcds_run_x64 exists only on the x86-64 beta branch; srcds_run is the 32-bit public build.
+  Default: >-
+    $( [ -x ./srcds_run_x64 ] && echo ./srcds_run_x64 || echo ./srcds_run ) -game garrysmod -console
+    -port {{SERVER_PORT}} +ip 0.0.0.0 -strictportbind -norestart
+    +maxplayers {{MAX_PLAYERS}} +gamemode "{{GAMEMODE}}" +map "{{SRCDS_MAP}}"
+    ${WORKSHOP_ID:+ +host_workshop_collection "${WORKSHOP_ID}"}
+    ${STEAM_TOKEN:+ +sv_setsteamaccount "${STEAM_TOKEN}"}
+    -tickrate {{TICKRATE}}
+    $( [ "${LUA_REFRESH}" = "1" ] || echo -disableluarefresh ) {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    garrysmod/cfg/server.cfg:
+      parser: file
+      replace:
+        - match: "hostname "
+          replace_with: hostname "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "sv_password "
+          replace_with: sv_password "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "rcon_password "
+          replace_with: rcon_password "{{env.RCON_PASSWORD}}"
+          insert_new: true
+        - match: "sv_loadingurl "
+          replace_with: sv_loadingurl "{{env.LOADING_URL}}"
+          insert_new: true
+  startup:
+    done:
+      - gameserver Steam ID
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Garry's Mod dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/srcds_run
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server.cfg: the panel keeps hostname, passwords and loading URL in sync on every start.
+      # Only created when missing or blank (Steam ships an empty one), so custom settings survive reinstalls.
+      CFG=/mnt/server/garrysmod/cfg/server.cfg
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // Garry's Mod server configuration.
+      // hostname, sv_password, rcon_password and sv_loadingurl are set from the panel.
+      hostname "Garry's Mod Server"
+      sv_password ""
+      rcon_password ""
+      sv_loadingurl ""
+
+      sv_region 255
+      sv_lan 0
+      sv_allowupload 0
+      sv_allowdownload 0
+      net_maxfilesize 64
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned_user.cfg
+      exec banned_ip.cfg
+      EOF
+      fi
+      touch /mnt/server/garrysmod/cfg/banned_user.cfg /mnt/server/garrysmod/cfg/banned_ip.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Garry's Mod Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: Map to load on start, e.g. gm_construct or gm_flatgrass.
+    order: 2
+    env_variable: SRCDS_MAP
+    default_value: gm_construct
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Gamemode
+    description: Gamemode folder name, e.g. sandbox, terrortown, darkrp.
+    order: 3
+    env_variable: GAMEMODE
+    default_value: sandbox
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Workshop Collection
+    description: Steam Workshop collection ID whose addons are downloaded and mounted. Leave empty for none.
+    order: 5
+    env_variable: WORKSHOP_ID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|integer|min:1"
+  - name: Game Server Login Token
+    description: >-
+      Steam game server token (steamcommunity.com/dev/managegameservers, app ID 4000). Required for
+      the server to appear in the public server list.
+    order: 6
+    env_variable: STEAM_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 7
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 8
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Loading Screen URL
+    description: URL of a custom loading screen. Leave empty for the default.
+    order: 9
+    env_variable: LOADING_URL
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|url|max:512|regex:/^[^"\r\n]*$/'
+  - name: Tickrate
+    description: Server ticks per second. Higher values need more CPU.
+    order: 10
+    env_variable: TICKRATE
+    default_value: "22"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:10,128"
+  - name: Lua Refresh
+    description: Reload Lua files automatically when they change. Useful for development, costs performance. (1 = on, 0 = off)
+    order: 11
+    env_variable: LUA_REFRESH
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +sv_allowcslua 1.
+    order: 12
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 13
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Branch
+    description: >-
+      Steam branch: leave empty for the 32-bit public build, or x86-64 for the 64-bit build (more
+      memory for large servers). Reinstall after changing it.
+    order: 14
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:x86-64,prerelease,dev"
+  - name: Steam App ID
+    description: Steam app id of the Garry's Mod dedicated server.
+    order: 15
+    env_variable: SRCDS_APPID
+    default_value: "4020"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:4020"

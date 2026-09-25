@@ -1,0 +1,229 @@
+name: Factorio
+author: thexylo@pm.me
+description: >-
+  Build and maintain factories: mine resources, research technologies, build infrastructure and
+  automate production. Official Factorio headless server, optionally with the Space Age expansion.
+features: []
+docker_images:
+  Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The save is created on first start from the settings files, so map settings take effect.
+  Default: >-
+    test -f "saves/{{SAVE_NAME}}.zip" || ./bin/x64/factorio --create "saves/{{SAVE_NAME}}.zip"
+    --map-gen-settings config/map-gen-settings.json --map-settings config/map-settings.json;
+    exec ./bin/x64/factorio --port {{SERVER_PORT}} --server-settings config/server-settings.json
+    --server-adminlist config/server-adminlist.json --start-server "saves/{{SAVE_NAME}}.zip"
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config/server-settings.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: description
+          replace_with: "{{env.SERVER_DESC}}"
+        - match: max_players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: game_password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: visibility.public
+          replace_with: "{{env.PUBLIC}}"
+        - match: username
+          replace_with: "{{env.FACTORIO_USERNAME}}"
+        - match: token
+          replace_with: "{{env.FACTORIO_TOKEN}}"
+        - match: require_user_verification
+          replace_with: "{{env.VERIFY_USERS}}"
+        - match: autosave_interval
+          replace_with: "{{env.SAVE_INTERVAL}}"
+        - match: autosave_slots
+          replace_with: "{{env.SAVE_SLOTS}}"
+        - match: afk_autokick_interval
+          replace_with: "{{env.AFK_KICK}}"
+  startup:
+    done:
+      - Hosting game at
+    strip_ansi: false
+  stop:
+    type: command
+    value: /quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Factorio headless server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Game files are replaced; saves, mods and config/ are kept on reinstall.
+
+      RELEASES_API="https://factorio.com/api/latest-releases"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      case "${FACTORIO_VERSION,,}" in
+          ""|latest|stable|experimental)
+              channel=stable
+              [[ "${FACTORIO_VERSION,,}" == "experimental" ]] && channel=experimental
+              version=$(curl -fsSL --retry 3 "${RELEASES_API}" | jq -r --arg c "${channel}" '.[$c].headless // empty')
+              [[ -n "${version}" ]] || fail "could not look up the ${channel} Factorio version"
+              ;;
+          *)
+              version="${FACTORIO_VERSION}"
+              ;;
+      esac
+
+      echo "Downloading the Factorio ${version} headless server..."
+      if ! curl -fsSL --retry 3 -o .factorio.tar.xz "https://www.factorio.com/get-download/${version}/headless/linux64"; then
+          rm -f .factorio.tar.xz
+          fail "could not download Factorio ${version}; check that the version exists"
+      fi
+      # The archive's data/ folder is the game itself, so the old one is removed first.
+      rm -rf bin data
+      if ! tar -xJf .factorio.tar.xz --strip-components=1; then
+          rm -f .factorio.tar.xz
+          fail "could not extract Factorio ${version}"
+      fi
+      rm -f .factorio.tar.xz
+      echo "${version}" > .factorio-version
+
+      ## settings: created once from the game's examples, then kept
+      mkdir -p config saves mods
+      for name in server-settings map-gen-settings map-settings; do
+          if [[ ! -f "config/${name}.json" ]]; then
+              cp -v "data/${name}.example.json" "config/${name}.json" || fail "could not create config/${name}.json"
+          fi
+      done
+      [[ -f config/server-adminlist.json ]] || echo "[]" > config/server-adminlist.json
+
+      echo "-----------------------------------------"
+      echo "Factorio ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Factorio Version
+    description: >-
+      latest for the current stable release, experimental for the newest experimental release, or
+      a version such as 2.0.77. Reinstall to change versions; saves and settings are kept.
+    order: 1
+    env_variable: FACTORIO_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|stable|experimental|\d+\.\d+\.\d+)$/']
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Factorio Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100"
+  - name: Server Description
+    description: Description shown in the server browser.
+    order: 3
+    env_variable: SERVER_DESC
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:500"
+  - name: Save Name
+    description: Save file in saves/ to load; a new save is created on first start. Letters, digits, _ and - only.
+    order: 4
+    env_variable: SAVE_NAME
+    default_value: gamesave
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players; 0 for unlimited.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,65535"
+  - name: Game Password
+    description: Password players need to join. Leave empty for no password.
+    order: 6
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:128"
+  - name: Public
+    description: >-
+      List the server in the public server browser. Requires Factorio Username and Token.
+    order: 7
+    env_variable: PUBLIC
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Factorio Username
+    description: factorio.com username, needed for a public server.
+    order: 8
+    env_variable: FACTORIO_USERNAME
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Factorio Token
+    description: Authentication token from factorio.com/profile, needed for a public server.
+    order: 9
+    env_variable: FACTORIO_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+  - name: Verify Users
+    description: Only allow players with a factorio.com account to join.
+    order: 10
+    env_variable: VERIFY_USERS
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Autosave Interval
+    description: Minutes between autosaves.
+    order: 11
+    env_variable: SAVE_INTERVAL
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,999"
+  - name: Autosave Slots
+    description: Number of autosave files kept in rotation.
+    order: 12
+    env_variable: SAVE_SLOTS
+    default_value: "5"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,999"
+  - name: AFK Kick
+    description: Minutes a player may be idle before being kicked; 0 disables it.
+    order: 13
+    env_variable: AFK_KICK
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,999"

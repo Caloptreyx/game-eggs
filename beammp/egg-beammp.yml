@@ -1,0 +1,210 @@
+name: BeamMP
+author: thexylo@pm.me
+description: >-
+  BeamMP brings multiplayer to BeamNG.drive. Official BeamMP server; players need BeamNG.drive and
+  the BeamMP launcher to join.
+features: []
+docker_images:
+  Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  Default: exec ./BeamMP-Server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    ServerConfig.toml:
+      parser: toml
+      replace:
+        - match: General.Port
+          replace_with: "{{server.build.default.port}}"
+        - match: General.Name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: General.Description
+          replace_with: "{{env.DESCRIPTION}}"
+        - match: General.AuthKey
+          replace_with: "{{env.AUTH_KEY}}"
+        - match: General.Private
+          replace_with: "{{env.PRIVATE}}"
+        - match: General.MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: General.MaxCars
+          replace_with: "{{env.MAX_CARS}}"
+        - match: General.Map
+          replace_with: "{{env.MAP}}"
+        - match: General.Tags
+          replace_with: "{{env.TAGS}}"
+        - match: General.LogChat
+          replace_with: "{{env.LOG_CHAT}}"
+  startup:
+    done:
+      - Vehicle data network online
+    strip_ansi: false
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # BeamMP server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Downloads the build for Debian 13, the base of the runtime image. ServerConfig.toml and
+      # Resources/ are kept on reinstall.
+
+      REPO="BeamMP/BeamMP-Server"
+      ASSET="BeamMP-Server.debian.13.x86_64"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      if [[ -z "${BEAMMP_VERSION}" || "${BEAMMP_VERSION,,}" == "latest" ]]; then
+          release_url="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          release_url="https://api.github.com/repos/${REPO}/releases/tags/${BEAMMP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${release_url}") || fail "could not find BeamMP release '${BEAMMP_VERSION:-latest}'"
+      version=$(jq -r '.tag_name' <<< "${release}")
+      url=$(jq -r --arg a "${ASSET}" '.assets[] | select(.name == $a) | .browser_download_url' <<< "${release}")
+      [[ -n "${url}" ]] || fail "BeamMP ${version} has no ${ASSET} build"
+
+      echo "Downloading BeamMP server ${version}..."
+      curl -fsSL --retry 3 -o BeamMP-Server.download "${url}" || fail "could not download BeamMP server ${version}"
+      mv -f BeamMP-Server.download BeamMP-Server
+      chmod +x BeamMP-Server
+      echo "${version}" > .beammp-version
+
+      mkdir -p Resources/Client Resources/Server
+      if [[ ! -f ServerConfig.toml ]]; then
+          echo "Creating ServerConfig.toml..."
+          cat > ServerConfig.toml << 'EOF'
+      # BeamMP server configuration: https://docs.beammp.com/server/server-maintenance/
+      # Name, Port, AuthKey and the other panel settings are rewritten on every start.
+
+      [General]
+      Name = "BeamMP Server"
+      Port = 30814
+      AuthKey = ""
+      AllowGuests = true
+      LogChat = true
+      Tags = "Freeroam"
+      Debug = false
+      IP = "::"
+      Private = true
+      InformationPacket = true
+      MaxCars = 1
+      MaxPlayers = 8
+      Map = "/levels/gridmap_v2/info.json"
+      Description = "BeamMP Default Description"
+      ResourceFolder = "Resources"
+
+      [Misc]
+      ImScaredOfUpdates = false
+      UpdateReminderTime = "30s"
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "BeamMP server ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: BeamMP Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:128"
+  - name: Description
+    description: Description shown in the server list.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: BeamMP Default Description
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Auth Key
+    description: >-
+      Server key from keymaster.beammp.com (Keys). Required for the server to start and to be
+      listed.
+    order: 3
+    env_variable: AUTH_KEY
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9-]+$/'
+  - name: Private
+    description: Hide the server from the public server list; players join by IP.
+    order: 4
+    env_variable: PRIVATE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Max Players
+    description: Maximum number of players.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Max Cars
+    description: Maximum number of cars per player.
+    order: 6
+    env_variable: MAX_CARS
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,20"
+  - name: Map
+    description: >-
+      Map to load, e.g. /levels/gridmap_v2/info.json, /levels/west_coast_usa/info.json,
+      /levels/italy/info.json, /levels/utah/info.json.
+    order: 7
+    env_variable: MAP
+    default_value: /levels/gridmap_v2/info.json
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:128|regex:/^\/levels\/[\w.\/-]+$/'
+  - name: Tags
+    description: Comma-separated tags for the server list, e.g. Freeroam,Racing.
+    order: 8
+    env_variable: TAGS
+    default_value: Freeroam
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:128"
+  - name: Log Chat
+    description: Log chat messages in the console.
+    order: 9
+    env_variable: LOG_CHAT
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: BeamMP Version
+    description: latest, or a release tag such as v3.9.3. Reinstall to change versions.
+    order: 10
+    env_variable: BEAMMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|v\d+(\.\d+)*)$/']

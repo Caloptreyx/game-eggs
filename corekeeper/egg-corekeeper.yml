@@ -1,0 +1,173 @@
+name: Core Keeper
+author: thexylo@pm.me
+description: >-
+  Explore an endless cavern of creatures, relics and resources in a mining sandbox adventure. Mine,
+  build, fight, craft and farm to unravel the mystery of the ancient Core. Linux dedicated server
+  (Steam app 1963720) with direct connections for cross-play.
+features:
+  - steam_disk_space
+docker_images:
+  Core Keeper: ghcr.io/caloptreyx/games:corekeeper
+file_denylist: []
+startup_commands:
+  # Follows the game's _launch.sh: Xvfb display, log file streamed to the console, and the Game ID
+  # printed from GameInfo.txt once the server is up. Saves go to ./data instead of ~/.config.
+  Default: >-
+    rm -f GameInfo.txt /tmp/.X99-lock; : > CoreKeeperServerLog.txt;
+    Xvfb :99 -screen 0 1x1x24 -nolisten tcp & XVFB=$!;
+    DISPLAY=:99 LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:./linux64" ./CoreKeeperServer -batchmode
+    -logfile CoreKeeperServerLog.txt -datapath ./data -port {{SERVER_PORT}}
+    -world {{WORLD_INDEX}} -worldname "{{WORLD_NAME}}"
+    ${WORLD_SEED:+-worldseed "${WORLD_SEED}"}
+    -worldmode {{WORLD_MODE}} -maxplayers {{MAX_PLAYERS}}
+    ${GAME_ID:+-gameid "${GAME_ID}"}
+    ${SERVER_PASSWORD:+-password "${SERVER_PASSWORD}"}
+    & SRV=$!;
+    tail -n +1 -F CoreKeeperServerLog.txt --pid=${SRV} 2>/dev/null &
+    until [ -f GameInfo.txt ] || ! kill -0 ${SRV} 2>/dev/null; do sleep 1; done;
+    [ -f GameInfo.txt ] && cat GameInfo.txt;
+    wait ${SRV}; kill ${XVFB} 2>/dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Game ID
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGTERM
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Core Keeper dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/CoreKeeperServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update "${SRCDS_APPID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/data
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: World Name
+    description: Name players see in their network settings.
+    order: 1
+    env_variable: WORLD_NAME
+    default_value: Core Keeper Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Game ID
+    description: >-
+      ID Steam players use to join. 15-28 letters and digits, without Y, y, x, 0 or O. Leave empty
+      for a random ID, shown in the console on every start.
+    order: 2
+    env_variable: GAME_ID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|regex:/^[1-9A-NP-XZa-wz]{15,28}$/'
+  - name: Password
+    description: >-
+      Password for direct connections by IP (other platforms, cross-play). Up to 28 characters.
+      Leave empty for a random password, shown in the console on every start.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:28"
+  - name: Max Players
+    description: Maximum number of players. More players need more CPU and memory.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: World Index
+    description: Save slot to load (0-29). Each index is a separate world.
+    order: 5
+    env_variable: WORLD_INDEX
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,29"
+  - name: World Mode
+    description: Mode for a new world. Changing between Creative and the other modes later is not supported.
+    order: 6
+    env_variable: WORLD_MODE
+    default_value: Normal
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Normal,Hard,Creative,Casual"
+  - name: World Seed
+    description: Seed for a new world, any text. Leave empty for a random seed. Has no effect on existing worlds.
+    order: 7
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Core Keeper dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "1963720"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1963720"

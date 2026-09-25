@@ -1,0 +1,136 @@
+name: Hytale
+author: thexylo@pm.me
+description: >-
+  Hytale blends the freedom of a sandbox with the momentum of an RPG. Official Hytale server; the
+  game files need a Hytale account, so the first start asks you to log in through the console.
+features:
+  - java_version
+docker_images:
+  Hytale: ghcr.io/caloptreyx/games:hytale
+file_denylist: []
+startup_commands:
+  # The image downloads and updates the server before this runs (see the README for the one-time
+  # account login). Java may use up to 95% of the server's memory limit.
+  Default: >-
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container
+    $( [ "${USE_AOT_CACHE}" = "1" ] && [ -f Server/HytaleServer.aot ] && printf %s -XX:AOTCache=Server/HytaleServer.aot )
+    -jar Server/HytaleServer.jar --assets Assets.zip --bind 0.0.0.0:{{SERVER_PORT}}
+    --auth-mode {{AUTH_MODE}}
+    $( [ "${ALLOW_OP}" = "1" ] && printf %s --allow-op )
+    $( [ "${ACCEPT_EARLY_PLUGINS}" = "1" ] && printf %s --accept-early-plugins )
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Hytale Server Booted
+    strip_ansi: false
+  stop:
+    type: command
+    value: /stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Hytale server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs the official Hytale downloader only. The game files need a Hytale account login,
+      # which happens in the console on the first start (ghcr.io/caloptreyx/games:hytale).
+
+      DOWNLOADER_URL="https://downloader.hytale.com/hytale-downloader.zip"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      echo "Downloading the Hytale downloader..."
+      curl -fsSL --retry 3 -o /tmp/hytale-downloader.zip "${DOWNLOADER_URL}" || fail "could not download the Hytale downloader"
+      rm -rf hytale-downloader
+      unzip -q -o /tmp/hytale-downloader.zip -d hytale-downloader || fail "could not extract the Hytale downloader"
+      mv -f hytale-downloader/hytale-downloader-linux-amd64 hytale-downloader/hytale-downloader-linux \
+          || fail "the Hytale downloader archive has no Linux build"
+      rm -f hytale-downloader/*.exe /tmp/hytale-downloader.zip
+      chmod +x hytale-downloader/hytale-downloader-linux
+      echo "Hytale downloader $(./hytale-downloader/hytale-downloader-linux -version) installed."
+
+      mkdir -p mods
+
+      echo "-----------------------------------------"
+      echo "Installed. Start the server and log in with the code shown in the console"
+      echo "to download the game files (only needed once)."
+      echo "-----------------------------------------"
+variables:
+  - name: Auth Mode
+    description: >-
+      authenticated: players need a Hytale account (normal). offline: for testing only; players are
+      not verified.
+    order: 1
+    env_variable: AUTH_MODE
+    default_value: authenticated
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:authenticated,offline"
+  - name: Patchline
+    description: release for the stable server, pre-release for the pre-release version.
+    order: 2
+    env_variable: HYTALE_PATCHLINE
+    default_value: release
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:release,pre-release"
+  - name: Auto Update
+    description: Check for a new server version on every start. (1 = on, 0 = off)
+    order: 3
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Allow OP
+    description: Allow the /op command for server operators. (1 = on, 0 = off)
+    order: 4
+    env_variable: ALLOW_OP
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Accept Early Plugins
+    description: Load plugins built for early server APIs. (1 = on, 0 = off)
+    order: 5
+    env_variable: ACCEPT_EARLY_PLUGINS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Use AOT Cache
+    description: Use the server's ahead-of-time cache for faster starts. (1 = on, 0 = off)
+    order: 6
+    env_variable: USE_AOT_CACHE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional HytaleServer.jar arguments.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
