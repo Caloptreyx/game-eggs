@@ -1,0 +1,117 @@
+name: "Minecraft: Java Edition (Vanilla)"
+author: thexylo@pm.me
+description: >-
+  The official Minecraft: Java Edition server from Mojang, without plugins or mods. Any release or
+  snapshot can be installed; the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry (Calagopus runs
+  # servers as UID 988), and Minecraft 1.20.x then creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Vanilla) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      manifest=$(curl -fsSL --retry 3 "${MANIFEST_URL}") || fail "could not download the Minecraft version list"
+
+      case "${MINECRAFT_VERSION,,}" in
+          ""|latest) version=$(jq -r '.latest.release' <<< "${manifest}") ;;
+          snapshot) version=$(jq -r '.latest.snapshot' <<< "${manifest}") ;;
+          *) version="${MINECRAFT_VERSION}" ;;
+      esac
+
+      version_url=$(jq -r --arg v "${version}" '.versions[] | select(.id == $v) | .url' <<< "${manifest}")
+      [[ -n "${version_url}" ]] || fail "Minecraft version '${version}' does not exist"
+
+      metadata=$(curl -fsSL --retry 3 "${version_url}") || fail "could not download the metadata of Minecraft ${version}"
+      jar_url=$(jq -r '.downloads.server.url // empty' <<< "${metadata}")
+      jar_sha1=$(jq -r '.downloads.server.sha1 // empty' <<< "${metadata}")
+      java_version=$(jq -r '.javaVersion.majorVersion // 8' <<< "${metadata}")
+      [[ -n "${jar_url}" ]] || fail "Minecraft ${version} has no dedicated server download"
+
+      echo "Downloading the Minecraft ${version} server..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${jar_url}" || fail "could not download the Minecraft ${version} server"
+      if ! echo "${jar_sha1}  ${SERVER_JARFILE}.download" | sha1sum -c --quiet -; then
+          rm -f "${SERVER_JARFILE}.download"
+          fail "the downloaded Minecraft ${version} server is corrupt (checksum mismatch)"
+      fi
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${version}" > .minecraft-version
+
+      echo "-----------------------------------------"
+      echo "Minecraft ${version} installed. It needs Java ${java_version} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest release, snapshot for the newest snapshot, or a version such as 1.21.4.
+      Reinstall the server to switch versions; worlds are kept. Worlds cannot be opened by an older
+      version than the one that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._ -]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 2
+    env_variable: SERVER_JARFILE
+    default_value: server.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

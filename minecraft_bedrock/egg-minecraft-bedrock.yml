@@ -1,0 +1,211 @@
+name: "Minecraft: Bedrock Edition"
+author: thexylo@pm.me
+description: >-
+  The official Minecraft Bedrock Dedicated Server from Mojang, for players on Windows, consoles and
+  mobile. The server updates itself on start, so it keeps up with Bedrock clients.
+features: []
+docker_images:
+  Bedrock: ghcr.io/caloptreyx/games:bedrock
+file_denylist: []
+startup_commands:
+  Default: ./bedrock_server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # The plain parser writes values as-is: Bedrock does not read Java-style escapes.
+    server.properties:
+      parser: file
+      create_new: false
+      replace:
+        - match: server-port=
+          replace_with: server-port={{server.build.default.port}}
+          insert_new: true
+        - match: server-name=
+          replace_with: server-name={{env.SERVER_NAME}}
+          insert_new: true
+        - match: gamemode=
+          replace_with: gamemode={{env.GAMEMODE}}
+          insert_new: true
+        - match: difficulty=
+          replace_with: difficulty={{env.DIFFICULTY}}
+          insert_new: true
+        - match: max-players=
+          replace_with: max-players={{env.MAX_PLAYERS}}
+          insert_new: true
+        - match: level-name=
+          replace_with: level-name={{env.LEVEL_NAME}}
+          insert_new: true
+        - match: level-seed=
+          replace_with: level-seed={{env.LEVEL_SEED}}
+          insert_new: true
+        - match: allow-cheats=
+          replace_with: allow-cheats={{env.ALLOW_CHEATS}}
+          insert_new: true
+        - match: allow-list=
+          replace_with: allow-list={{env.ALLOW_LIST}}
+          insert_new: true
+  startup:
+    done:
+      - Server started.
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft Bedrock Dedicated Server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Same download logic as bedrock-update in ghcr.io/caloptreyx/games:bedrock, which updates the
+      # server on start. Worlds and the server's configuration files are kept on reinstall.
+
+      LINKS_API="https://net-secondary.web.minecraft-services.net/api/v1.0/download/links"
+      # minecraft.net drops requests without a browser user agent.
+      USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+      KEEP_FILES=(server.properties permissions.json allowlist.json)
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      requested="${BEDROCK_VERSION,,}"
+      case "${requested:-latest}" in
+          latest|preview)
+              type="serverBedrockLinux"
+              [[ "${requested}" == "preview" ]] && type="serverBedrockPreviewLinux"
+              url=$(curl -fsSL -A "${USER_AGENT}" --retry 3 "${LINKS_API}" \
+                  | jq -r --arg t "${type}" '.result.links[] | select(.downloadType == $t) | .downloadUrl')
+              [[ -n "${url}" && "${url}" != "null" ]] || fail "could not look up the ${requested:-latest} Bedrock server version"
+              ;;
+          *)
+              url="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${requested}.zip"
+              ;;
+      esac
+      version="${url##*/bedrock-server-}"
+      version="${version%.zip}"
+
+      echo "Downloading Bedrock server ${version}..."
+      archive=".bedrock-server-${version}.zip"
+      if ! curl -fsSL -A "${USER_AGENT}" --retry 3 -o "${archive}" "${url}"; then
+          rm -f "${archive}"
+          fail "could not download Bedrock server ${version}; check that the version exists"
+      fi
+
+      exclude=()
+      for file in "${KEEP_FILES[@]}"; do
+          [[ -e "${file}" ]] && exclude+=("${file}")
+      done
+      unzip_args=(-q -o "${archive}")
+      (( ${#exclude[@]} > 0 )) && unzip_args+=(-x "${exclude[@]}")
+      if ! unzip "${unzip_args[@]}"; then
+          rm -f "${archive}"
+          fail "could not extract Bedrock server ${version}"
+      fi
+      rm -f "${archive}"
+      chmod +x bedrock_server
+      echo "${version}" > .bedrock-version
+
+      echo "-----------------------------------------"
+      echo "Bedrock server ${version} installed.${exclude[*]:+ Kept: ${exclude[*]}.}"
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain semicolons.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Bedrock Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^;\r\n]+$/'
+  - name: Game Mode
+    description: Game mode for new players.
+    order: 2
+    env_variable: GAMEMODE
+    default_value: survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:survival,creative,adventure"
+  - name: Difficulty
+    description: World difficulty.
+    order: 3
+    env_variable: DIFFICULTY
+    default_value: easy
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:peaceful,easy,normal,hard"
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: World Name
+    description: Name of the world folder in worlds/. A new name creates a new world.
+    order: 5
+    env_variable: LEVEL_NAME
+    default_value: Bedrock level
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:64", 'regex:/^[^\/\\:*?"<>|;\r\n]+$/']
+  - name: World Seed
+    description: Seed for a new world. Leave empty for a random seed. Has no effect on existing worlds.
+    order: 6
+    env_variable: LEVEL_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[^;\r\n]*$/'
+  - name: Allow Cheats
+    description: Allow commands such as /give for operators.
+    order: 7
+    env_variable: ALLOW_CHEATS
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Allow List
+    description: >-
+      Only players in allowlist.json can join. Add players with the console command
+      "allowlist add <gamertag>" before turning this on.
+    order: 8
+    env_variable: ALLOW_LIST
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Bedrock Version
+    description: >-
+      latest for the current release, preview for the preview build, or a version such as
+      1.21.50.10. Players can only join with the same version as the server.
+    order: 9
+    env_variable: BEDROCK_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|preview|\d+(\.\d+){2,3})$/']
+  - name: Auto Update
+    description: Update the server to the selected version on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
