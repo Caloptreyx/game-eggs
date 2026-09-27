@@ -1,0 +1,248 @@
+name: Icarus
+author: thexylo@pm.me
+description: >-
+  PvE survival: drop from an orbital station onto the hostile planet Icarus, gather, craft and
+  build to survive a prospect, then return to orbit before time runs out. The Windows-only
+  dedicated server (Steam app 2089300) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server's own output is unusable under Proton, so Icarus.log is streamed to the console. The
+  # server reads no console input and has no RCON. It hangs during startup without a display, so it
+  # gets a virtual one (Xvfb), and it only finds Steam with SteamAppId set to the game's app id.
+  # -UserDir keeps Saved/ inside the server files instead of the Proton prefix. Wine starts the
+  # server in its own session, so the stop signal Wings sends to the process group does not reach
+  # it: the shell traps the signal, forwards it to the server and waits for it to save and exit.
+  # Xvfb runs in its own session so the signal does not take the display away mid-save. The name
+  # is expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    mkdir -p Icarus/Saved/Logs; : > Icarus/Saved/Logs/Icarus.log; rm -f /tmp/.X99-lock;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp & XVFB=$!;
+    DISPLAY=:99 SteamAppId=1149460 proton run ./Icarus/Binaries/Win64/IcarusServer-Win64-Shipping.exe
+    -Log -UserDir=Z:/home/container/Icarus
+    "-SteamServerName=${SERVER_NAME}" -PORT={{SERVER_PORT}} -QueryPort={{QUERY_PORT}}
+    {{EXTRA_ARGS}} </dev/null & SRV=$!;
+    trap 'pkill -INT -f "^\./Icarus/Binaries/Win64/IcarusServer-Win64-Shipping"' INT;
+    tail -n +1 -F Icarus/Saved/Logs/Icarus.log --pid=${SRV} 2>/dev/null &
+    wait ${SRV}; wait ${SRV}; kill ${XVFB} 2>/dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Icarus/Saved/Config/WindowsServer/ServerSettings.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/Icarus.DedicatedServerSettings].SessionName"
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].JoinPassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].AdminPassword"
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].ShutdownIfNotJoinedFor"
+          replace_with: "-1.000000"
+        - match: "[/Script/Icarus.DedicatedServerSettings].ShutdownIfEmptyFor"
+          replace_with: "-1.000000"
+        - match: "[/Script/Icarus.DedicatedServerSettings].AllowNonAdminsToLaunchProspects"
+          replace_with: "{{env.NON_ADMINS_LAUNCH}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].AllowNonAdminsToDeleteProspects"
+          replace_with: "{{env.NON_ADMINS_DELETE}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].ResumeProspect"
+          replace_with: "{{env.RESUME_PROSPECT}}"
+        - match: "[/Script/Icarus.DedicatedServerSettings].LoadProspect"
+          replace_with: "{{env.LOAD_PROSPECT}}"
+  startup:
+    done:
+      - "Engine is initialized. Leaving FEngineLoop::Init()"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Icarus dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Icarus/Binaries/Win64/IcarusServer-Win64-Shipping.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## the server does not create ServerSettings.ini itself; keep an existing one on reinstall
+      SETTINGS=/mnt/server/Icarus/Saved/Config/WindowsServer/ServerSettings.ini
+      mkdir -p /mnt/server/Icarus/Saved/Logs "$(dirname "${SETTINGS}")"
+      if [[ ! -f "${SETTINGS}" ]]; then
+          cat > "${SETTINGS}" <<'EOF'
+      [/Script/Icarus.DedicatedServerSettings]
+      SessionName=
+      JoinPassword=
+      MaxPlayers=8
+      AdminPassword=
+      ShutdownIfNotJoinedFor=-1.000000
+      ShutdownIfEmptyFor=-1.000000
+      AllowNonAdminsToLaunchProspects=True
+      AllowNonAdminsToDeleteProspects=False
+      LoadProspect=
+      CreateProspect=
+      ResumeProspect=True
+      LastProspectName=
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain " or \, which break the launch parameter.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Icarus Server
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:64", 'regex:/^[^"\\]+$/']
+  - name: Server Password
+    description: Password players need to join. Leave empty for a public server. Cannot contain " or \.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: [nullable, string, "max:64", 'regex:/^[^"\\]*$/']
+  - name: Admin Password
+    description: >-
+      Password for admin commands in the in-game chat (/AdminLogin <password>). If empty, anyone can
+      log in as admin. Cannot contain spaces, " or \.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: [nullable, string, "max:64", 'regex:/^[^\s"\\]*$/']
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,8"
+  - name: Resume Prospect
+    description: Resume the last prospect on start. (True or False)
+    order: 5
+    env_variable: RESUME_PROSPECT
+    default_value: "True"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Load Prospect
+    description: >-
+      Save name of a prospect to load on start, from Icarus/Saved/PlayerData/DedicatedServer/Prospects/
+      (without .json). Takes precedence over Resume Prospect. Leave empty to not force one.
+    order: 6
+    env_variable: LOAD_PROSPECT
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w-]+$/'
+  - name: Non-Admins Launch Prospects
+    description: Players who are not logged in as admin may create and load prospects in the lobby. (True or False)
+    order: 7
+    env_variable: NON_ADMINS_LAUNCH
+    default_value: "True"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Non-Admins Delete Prospects
+    description: Players who are not logged in as admin may delete prospects in the lobby. (True or False)
+    order: 8
+    env_variable: NON_ADMINS_DELETE
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Query Port
+    description: UDP port for Steam server queries (server browser). Needs its own allocation.
+    order: 9
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: 'Additional server launch parameters, e.g. -CreateProspect="Tier1_Forest_Recon_0 2 false MyProspect".'
+    order: 10
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 11
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Icarus dedicated server.
+    order: 12
+    env_variable: SRCDS_APPID
+    default_value: "2089300"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:2089300"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 13
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"

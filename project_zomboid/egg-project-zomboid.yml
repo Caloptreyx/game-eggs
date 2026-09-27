@@ -1,0 +1,264 @@
+name: Project Zomboid
+author: thexylo@pm.me
+description: >-
+  Project Zomboid is an open world isometric zombie survival game: loot, build, craft, fight and
+  survive for as long as you can in a zombie infested Kentucky. Native Linux dedicated server
+  (Steam app 380870).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Launched the way start-server.sh does it, through the bundled launcher and Java runtime
+  # (ProjectZomboid64.json holds the class path and base JVM options). JVM options go before "--",
+  # server options after it; the -Xmx given here overrides the one in the json. user.home and the
+  # cache dir put the Zomboid folder (config, saves, database) in the server root. The server
+  # reads console commands from stdin, and -adminpassword answers the admin password prompt of
+  # the first start. Values are expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    LD_LIBRARY_PATH=/home/container/linux64:/home/container:/home/container/jre64/lib
+    LD_PRELOAD=/home/container/jre64/lib/libjsig.so PATH="/home/container/jre64/bin:${PATH}"
+    ./ProjectZomboid64 -Xmx{{JAVA_MEMORY}}m -Duser.home=/home/container --
+    -servername servertest -cachedir=/home/container/Zomboid
+    -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -adminpassword "${ADMIN_PASSWORD}"
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # Created by the server on its first start with every setting and comment; the server keeps
+    # values it finds and adds the rest.
+    Zomboid/Server/servertest.ini:
+      parser: ini
+      replace:
+        - match: PublicName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: PublicDescription
+          replace_with: "{{env.SERVER_DESCRIPTION}}"
+        - match: Public
+          replace_with: "{{env.PUBLIC}}"
+        - match: Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: DefaultPort
+          replace_with: "{{server.build.default.port}}"
+        - match: UDPPort
+          replace_with: "{{env.UDP_PORT}}"
+        - match: UPnP
+          replace_with: "false"
+        - match: RCONPort
+          replace_with: "{{env.RCON_PORT}}"
+        - match: RCONPassword
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: Mods
+          replace_with: "{{env.MODS}}"
+        - match: WorkshopItems
+          replace_with: "{{env.WORKSHOP_ITEMS}}"
+  startup:
+    done:
+      - "*** SERVER STARTED ****"
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Project Zomboid dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/ProjectZomboid64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      # The Zomboid folder (config, saves) is not part of the game files and is kept on reinstall.
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the in-game and Steam server browsers.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Project Zomboid Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Description
+    description: Description shown in the in-game server browser. Use <LINE> for a line break.
+    order: 2
+    env_variable: SERVER_DESCRIPTION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Public
+    description: List the server in the in-game browser. (true or false)
+    order: 3
+    env_variable: PUBLIC
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Admin Password
+    description: >-
+      Password of the in-game account "admin", set on every start. Log in with it to use the admin
+      commands in the chat.
+    order: 5
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^\S+$/'
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 6
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Java Memory
+    description: >-
+      Maximum Java heap in MB. The server needs about 2 GB more than this on top, so keep it well
+      below the server's memory limit.
+    order: 7
+    env_variable: JAVA_MEMORY
+    default_value: "4096"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2048,65536"
+  - name: Mods
+    description: >-
+      Mod IDs to load, separated by semicolons, e.g. ModA;ModB. Leave empty for no mods. Written to
+      the config on every start.
+    order: 8
+    env_variable: MODS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:4096|regex:/^[^\r\n]*$/'
+  - name: Workshop Items
+    description: >-
+      Steam Workshop item IDs to download, separated by semicolons, e.g. 2169435993;2392709985.
+      Written to the config on every start.
+    order: 9
+    env_variable: WORKSHOP_ITEMS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:4096|regex:/^(\d+(;\d+)*)?$/'
+  - name: UDP Port
+    description: Second UDP game port. Needs its own allocation.
+    order: 10
+    env_variable: UDP_PORT
+    default_value: "16262"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: Enables RCON for remote admin tools. Leave empty to keep RCON off.
+    order: 11
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: RCON Port
+    description: TCP port for RCON. Needs its own allocation when RCON is enabled.
+    order: 12
+    env_variable: RCON_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional server options, e.g. -debuglog=Network or -nosteam.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. unstable or legacy41. Leave empty for the stable release.
+      Reinstall after changing it.
+    order: 15
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Project Zomboid dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "380870"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:380870"

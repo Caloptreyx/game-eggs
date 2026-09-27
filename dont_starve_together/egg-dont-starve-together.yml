@@ -1,0 +1,296 @@
+name: Don't Starve Together
+author: thexylo@pm.me
+description: >-
+  Fight, farm, build and explore together in the standalone multiplayer expansion to the uncompromising
+  wilderness survival game Don't Starve. Native Linux dedicated server (Steam app 343050) running the
+  overworld and, optionally, the caves shard of one cluster.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # A cluster is one Master (overworld) shard and optionally a Caves shard, both started here. The
+  # panel-managed keys of cluster.ini and the shards' server.ini are set by perl on every start
+  # (values are passed as arguments, never re-parsed by the shell); other keys in those files are
+  # kept. Console lines are relayed to the Master shard's Lua console, so c_save() etc. reach it; the
+  # Caves shard logs to DoNotStarveTogether/Cluster_1/Caves/server_log.txt. After "Shutting down" a
+  # shard only exits once it reads another input line, so both get an empty line every second.
+  # c_shutdown(true) saves and stops the Master; the Caves shard only reconnects when the Master
+  # goes away, so it gets its own c_shutdown(true), and the shell waits for both before the
+  # container exits. Keep "} }" spaced: "}}" is a placeholder delimiter for the image.
+  Default: >-
+    C=/home/container/DoNotStarveTogether/Cluster_1; mkdir -p ${C}/Master ${C}/Caves;
+    touch ${C}/cluster.ini ${C}/Master/server.ini ${C}/Caves/server.ini;
+    printf %s "${CLUSTER_TOKEN}" > ${C}/cluster_token.txt;
+    ini() { perl -0777 -i -pe 'BEGIN { @s = splice @ARGV, 1 } $_ .= "\n" if length && !/\n\z/;
+    for my $e (@s) { my ($x, $k, $v) = $e =~ /^(\w+)\.(\w+)=(.*)$/s;
+    s/^\[$x\][ \t]*\n/[$x]\n/m or $_ .= (length ? "\n" : "") . "[$x]\n";
+    s/(^\[$x\]\n(?:(?!\[)[^\n]*\n)*?)$k[ \t]*=[^\n]*\n/$1/m; s/^\[$x\]\n/[$x]\n$k = $v\n/m; }' "$@"; };
+    ini ${C}/cluster.ini "NETWORK.cluster_name=${SERVER_NAME}" "NETWORK.cluster_description=${SERVER_DESCRIPTION}"
+    "NETWORK.cluster_password=${SERVER_PASSWORD}" "GAMEPLAY.max_players=${MAX_PLAYERS}"
+    "GAMEPLAY.game_mode=${GAME_MODE}" "GAMEPLAY.pvp=${PVP}"
+    "SHARD.shard_enabled=$( [ "${ENABLE_CAVES}" = 1 ] && echo true || echo false )"
+    SHARD.bind_ip=127.0.0.1 SHARD.master_ip=127.0.0.1 "SHARD.master_port=${SHARD_PORT}";
+    ini ${C}/Master/server.ini "NETWORK.server_port=${SERVER_PORT}" SHARD.is_master=true SHARD.name=Master
+    "STEAM.master_server_port=${STEAM_MASTER_PORT}" "STEAM.authentication_port=${STEAM_AUTH_PORT}";
+    ini ${C}/Caves/server.ini "NETWORK.server_port=${CAVES_PORT}" SHARD.is_master=false SHARD.name=Caves
+    "STEAM.master_server_port=$(( STEAM_MASTER_PORT + 1 ))" "STEAM.authentication_port=$(( STEAM_AUTH_PORT + 1 ))";
+    test -z "${WORKSHOP_MODS}" || { for id in ${WORKSHOP_MODS//,/ }; do echo "ServerModSetup(\"${id}\")"; done > mods/dedicated_server_mods_setup.lua;
+    for s in Master Caves; do test -e ${C}/${s}/modoverrides.lua || { echo "return {"; for id in ${WORKSHOP_MODS//,/ }; do
+    echo "  [\"workshop-${id}\"] = { enabled = true },"; done; echo "}"; } > ${C}/${s}/modoverrides.lua; done; };
+    cd bin64; A=(-persistent_storage_root /home/container -conf_dir DoNotStarveTogether -cluster Cluster_1 -console);
+    S=/tmp/dst-master-stopped; rm -f ${S};
+    if [ "${ENABLE_CAVES}" = 1 ]; then ( until [ -e ${S} ]; do echo; sleep 1; done; echo "c_shutdown(true)";
+    while echo; do sleep 1; done ) | ./dontstarve_dedicated_server_nullrenderer_x64 "${A[@]}" -shard Caves >/dev/null 2>&1 & fi;
+    ( p=; while :; do IFS= read -r -t 1 l; r=$?; if [ ${r} -gt 128 ]; then p+=${l}; [ -n "${p}" ] || echo;
+    elif [ ${r} -eq 0 ]; then printf '%s\n' "${p}${l}"; p=; else while echo; do sleep 1; done; fi; done ) <&0
+    | ./dontstarve_dedicated_server_nullrenderer_x64 "${A[@]}" -shard Master; touch ${S}; wait
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Telling Client our new session identifier
+    strip_ansi: false
+  stop:
+    type: command
+    value: c_shutdown(true)
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Don't Starve Together dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/bin64/dontstarve_dedicated_server_nullrenderer_x64
+      CLUSTER_DIR=/mnt/server/DoNotStarveTogether/Cluster_1
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## cluster configuration
+      # An existing cluster is kept on reinstall. The panel-managed keys are set on every start.
+      mkdir -p "${CLUSTER_DIR}/Master" "${CLUSTER_DIR}/Caves"
+      if [[ ! -s "${CLUSTER_DIR}/cluster.ini" ]]; then
+          echo "Creating cluster.ini..."
+          # Shared secret of the shards; they only talk over 127.0.0.1.
+          CLUSTER_KEY=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          cat > "${CLUSTER_DIR}/cluster.ini" <<EOF || fail "could not create cluster.ini"
+      [GAMEPLAY]
+      game_mode = survival
+      max_players = 6
+      pvp = false
+      pause_when_empty = true
+
+      [NETWORK]
+      cluster_name = A Don't Starve Together Server
+      cluster_description =
+      cluster_password =
+      cluster_intention = cooperative
+      lan_only_cluster = false
+
+      [MISC]
+      console_enabled = true
+
+      [SHARD]
+      shard_enabled = false
+      bind_ip = 127.0.0.1
+      master_ip = 127.0.0.1
+      master_port = 10888
+      cluster_key = ${CLUSTER_KEY}
+      EOF
+      fi
+      # Without it a Caves shard generates a second overworld.
+      if [[ ! -e "${CLUSTER_DIR}/Caves/worldgenoverride.lua" && ! -e "${CLUSTER_DIR}/Caves/leveldataoverride.lua" ]]; then
+          echo "Creating the Caves worldgenoverride.lua..."
+          printf 'return {\n    override_enabled = true,\n    preset = "DST_CAVE",\n}\n' \
+              > "${CLUSTER_DIR}/Caves/worldgenoverride.lua" || fail "could not create the Caves worldgenoverride.lua"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Cluster Token
+    description: >-
+      Server token from https://accounts.klei.com/account/game/servers?game=DontStarveTogether
+      (or TheNet:GenerateClusterToken() in the game console). The server does not start without it.
+    order: 1
+    env_variable: CLUSTER_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:256|regex:/^\S+$/'
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: A Don't Starve Together Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Description
+    description: Description shown in the server browser.
+    order: 3
+    env_variable: SERVER_DESCRIPTION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "6"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Game Mode
+    description: survival, endless (no permanent death) or wilderness (random spawn, no resurrection).
+    order: 6
+    env_variable: GAME_MODE
+    default_value: survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:survival,endless,wilderness"
+  - name: PvP
+    description: Allow players to damage each other.
+    order: 7
+    env_variable: PVP
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Caves
+    description: >-
+      Run the Caves shard next to the overworld. (1 = on, 0 = off) Needs the Caves Port allocation
+      and roughly doubles memory use.
+    order: 8
+    env_variable: ENABLE_CAVES
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Caves Port
+    description: UDP game port of the Caves shard. Needs its own allocation when Caves is on.
+    order: 9
+    env_variable: CAVES_PORT
+    default_value: "11000"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Shard Port
+    description: >-
+      Port the shards use to talk to each other. It only listens on 127.0.0.1 inside the container
+      and needs no allocation.
+    order: 10
+    env_variable: SHARD_PORT
+    default_value: "10888"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Steam Master Server Port
+    description: >-
+      UDP port of the Master shard for Steam; the Caves shard uses this port + 1. No allocation needed.
+    order: 11
+    env_variable: STEAM_MASTER_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65534"
+  - name: Steam Authentication Port
+    description: >-
+      UDP port of the Master shard for Steam authentication; the Caves shard uses this port + 1. No
+      allocation needed.
+    order: 12
+    env_variable: STEAM_AUTH_PORT
+    default_value: "8766"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65534"
+  - name: Workshop Mods
+    description: >-
+      Steam Workshop ids of mods to download on start, separated by commas, e.g. 378160973,375850593.
+      Leave empty to manage mods/dedicated_server_mods_setup.lua by hand. See the README for enabling them.
+    order: 13
+    env_variable: WORKSHOP_MODS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^[\d, ]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
+    order: 15
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Don't Starve Together dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "343050"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:343050"

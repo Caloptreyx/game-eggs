@@ -1,0 +1,197 @@
+name: Valheim
+author: thexylo@pm.me
+description: >-
+  A brutal exploration and survival game for 1-10 players, set in a procedurally-generated
+  purgatory inspired by viking culture. Native Linux dedicated server (Steam app 896660), with the
+  optional crossplay backend.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server has no console input; it logs to stdout. It refuses to start with a password shorter
+  # than 5 characters but does not check that the password is not part of the server name, which
+  # the game requires, so that is checked first. The PlayFab (crossplay) library, loaded on every
+  # start, crashes when the container user has no passwd entry, so one is provided through
+  # nss_wrapper. The stop signal makes the server save the world before it exits. Values are
+  # expanded inside quotes, never re-parsed by the shell. Keep "} }" spaced: "}}" is a placeholder
+  # delimiter for the image.
+  Default: >-
+    if [[ "${SERVER_NAME,,}" == *"${SERVER_PASSWORD,,}"* ]]; then
+    echo "The Server Password must not be part of the Server Name."; exit 1; fi;
+    getent passwd "$(id -u)" >/dev/null || { printf "container:x:%s:%s::/home/container:/bin/bash\n" "$(id -u)" "$(id -g)" > /tmp/passwd;
+    export LD_PRELOAD=libnss_wrapper.so NSS_WRAPPER_PASSWD=/tmp/passwd NSS_WRAPPER_GROUP=/etc/group; };
+    LD_LIBRARY_PATH=/home/container/linux64 SteamAppId=892970 ./valheim_server.x86_64 -nographics -batchmode
+    -name "${SERVER_NAME}" -port {{SERVER_PORT}} -world "${WORLD_NAME}" -password "${SERVER_PASSWORD}"
+    -public {{PUBLIC}} -savedir /home/container/saves -saveinterval {{SAVE_INTERVAL}} -backups {{BACKUPS}}
+    $( [ "${CROSSPLAY}" = "1" ] && printf %s -crossplay ) {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Game server connected
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Valheim dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/valheim_server.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/saves
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Valheim Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Password
+    description: >-
+      Password players need to join. Required by the server: at least 5 characters, and it must
+      not be part of the Server Name (checked case-insensitively on start).
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "required|string|min:5|max:64"
+  - name: World Name
+    description: >-
+      World to load, created on first start. Letters, digits, _ and -, words separated by single
+      spaces.
+    order: 3
+    env_variable: WORLD_NAME
+    default_value: Dedicated
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+( [\w-]+)*$/'
+  - name: Public
+    description: List the server in the community server browser. (1 = on, 0 = join by IP only)
+    order: 4
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Crossplay
+    description: >-
+      Use the crossplay backend (PlayFab) so players on every platform can join, also by join code.
+      Traffic goes through a relay; the Game port is then not used. (1 = on, 0 = Steam only)
+    order: 5
+    env_variable: CROSSPLAY
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Save Interval
+    description: Seconds between world saves.
+    order: 6
+    env_variable: SAVE_INTERVAL
+    default_value: "1800"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:60,86400"
+  - name: Backups
+    description: >-
+      Automatic world backups to keep: one after 2 hours of play, the others 12 hours apart
+      (see -backupshort / -backuplong in the README).
+    order: 7
+    env_variable: BACKUPS
+    default_value: "4"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Extra Arguments
+    description: >-
+      Additional launch parameters, e.g. -preset hard -modifier raids none -setkey nomap
+      -instanceid 2
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. public-test. Leave empty for the stable release. Reinstall
+      after changing it.
+    order: 10
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Valheim dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "896660"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:896660"

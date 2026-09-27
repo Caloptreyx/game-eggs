@@ -1,0 +1,219 @@
+name: Unturned
+author: thexylo@pm.me
+description: >-
+  You're one of the few survivors left in the zombie apocalypse. Scavenge, build a base, team up
+  or fight other survivors. Native Linux dedicated server (Steam app 1110390).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server ignores these settings on the command line, so perl writes the panel-managed lines of
+  # Servers/<folder>/Server/Commands.dat on each start and keeps all other lines (values come from
+  # the environment, never through the shell). The server reads console commands from its terminal
+  # and needs the TTY the panel provides; "shutdown" saves before it exits. LD_LIBRARY_PATH points
+  # at the steamclient.so shipped with the server, as ServerHelper.sh does. Keep "} }" spaced: "}}"
+  # is a placeholder delimiter for the image.
+  Default: >-
+    CMDS="Servers/${SERVER_ID}/Server/Commands.dat"; mkdir -p "${CMDS%/*}"; touch "${CMDS}";
+    perl -e 'my $f = shift; open my $in, "<", $f or die "$f: $!\n";
+    my @l = grep { !/^\s*(?:name|port|password|maxplayers|map|perspective|mode|pve|cheats|owner|gslt)\b/i } <$in>;
+    close $in; s/\r?\n?\z/\n/ for @l; my %e = %ENV;
+    push @l, map { "$_\n" } "Name $e{SERVER_NAME}", "Port $e{SERVER_PORT}", "MaxPlayers $e{MAX_PLAYERS}",
+    "Map $e{SERVER_MAP}", "Perspective $e{PERSPECTIVE}", "Mode $e{DIFFICULTY}",
+    grep { defined } ($e{PVE} ? "PvE" : undef), ($e{CHEATS} ? "Cheats" : undef),
+    (length $e{SERVER_PASSWORD} ? "Password $e{SERVER_PASSWORD}" : undef),
+    (length $e{OWNER_STEAMID} ? "Owner $e{OWNER_STEAMID}" : undef),
+    (length $e{GSLT} ? "GSLT $e{GSLT}" : undef);
+    open my $out, ">", $f or die "$f: $!\n"; print $out @l; close $out or die "$f: $!\n";' "${CMDS}" &&
+    LD_LIBRARY_PATH=/home/container/linux64 ./Unturned_Headless.x86_64 -batchmode -nographics
+    "+InternetServer/${SERVER_ID}"
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Loading level: 100%"
+    strip_ansi: false
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Unturned dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Unturned_Headless.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      # The server itself loads linux64/steamclient.so from the depot (LD_LIBRARY_PATH in the startup).
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list, 5 to 50 characters.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: An Unturned Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|min:5|max:50|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. No spaces.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Game Server Login Token
+    description: >-
+      GSLT for Unturned (app 304930), from steamcommunity.com/dev/managegameservers. Without it the
+      server is not in the internet server list and can only be joined by Server Code or Steam invite.
+    order: 3
+    env_variable: GSLT
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+  - name: Map
+    description: >-
+      Map to load: PEI, Washington, Yukon, Russia, Germany, Alpha Valley, Monolith, ... Workshop maps
+      need their File ID in WorkshopDownloadConfig.json of the server folder.
+    order: 4
+    env_variable: SERVER_MAP
+    default_value: PEI
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64|regex:/^[\\w .'-]+$/"
+  - name: Max Players
+    description: Maximum number of players on the server.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "24"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: Difficulty
+    description: Easy, Normal or Hard. Selects the matching section defaults of Config.txt.
+    order: 6
+    env_variable: DIFFICULTY
+    default_value: Normal
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Easy,Normal,Hard"
+  - name: Perspective
+    description: Camera perspective players may use. Vehicle = first person on foot, third person in vehicles.
+    order: 7
+    env_variable: PERSPECTIVE
+    default_value: Both
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:First,Third,Both,Vehicle"
+  - name: PvE
+    description: Disable player versus player damage. (1 = on, 0 = off)
+    order: 8
+    env_variable: PVE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Cheats
+    description: Allow admins to use cheat commands such as give and vehicle. (1 = on, 0 = off)
+    order: 9
+    env_variable: CHEATS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Owner Steam ID
+    description: SteamID64 of the server owner, who gets admin rights in game. Leave empty for none.
+    order: 10
+    env_variable: OWNER_STEAMID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|regex:/^\d{17}$/'
+  - name: Server Folder
+    description: >-
+      Folder under Servers/ with this server's config and saves. Changing it starts a new world with
+      fresh settings.
+    order: 11
+    env_variable: SERVER_ID
+    default_value: Default
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 12
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install, e.g. preview. Leave empty for the stable release. Reinstall after changing it.
+    order: 13
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Unturned dedicated server.
+    order: 14
+    env_variable: SRCDS_APPID
+    default_value: "1110390"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1110390"

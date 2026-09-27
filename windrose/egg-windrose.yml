@@ -10,14 +10,20 @@ docker_images:
 file_denylist: []
 startup_commands:
   # The server's own output is unusable under Proton, so R5.log is streamed to the console. The
-  # server reads no console input. The shell waits on the server so it can finish before exiting.
+  # server reads no console input. Without a display it hangs during startup, and with one its
+  # D3D12 probe crashes without a GPU, so it gets a virtual display (Xvfb, in its own session so the
+  # stop signal does not take it away mid-save) and Proton's OpenGL-based D3D (WineD3D). It runs in
+  # its own process group under Proton, so the stop signal never reaches it: the shell forwards
+  # SIGINT to it, which makes it save and exit, and waits for it.
   # An empty Invite Code keeps the one the server generated; Wings cannot skip empty values itself.
   Default: >-
-    mkdir -p R5/Saved/Logs; : > R5/Saved/Logs/R5.log;
+    mkdir -p R5/Saved/Logs; : > R5/Saved/Logs/R5.log; rm -f /tmp/.X99-lock;
     [ -n "${INVITE_CODE}" ] && [ -f R5/ServerDescription.json ] && python3 -c 'import json,os;p="R5/ServerDescription.json";d=json.load(open(p));d["ServerDescription_Persistent"]["InviteCode"]=os.environ["INVITE_CODE"];json.dump(d,open(p,"w"),indent=2)';
-    proton run ./R5/Binaries/Win64/WindroseServer-Win64-Shipping.exe -log {{EXTRA_ARGS}} & SRV=$!;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp & XVFB=$!;
+    DISPLAY=:99 PROTON_USE_WINED3D=1 proton run ./R5/Binaries/Win64/WindroseServer-Win64-Shipping.exe -log {{EXTRA_ARGS}} & SRV=$!;
+    trap 'pkill -INT -f "^\./R5/Binaries/Win64/WindroseServer-Win64-Shipping"' INT;
     tail -n +1 -F R5/Saved/Logs/R5.log --pid=${SRV} 2>/dev/null &
-    wait ${SRV}
+    wait ${SRV}; wait ${SRV}; kill ${XVFB} 2>/dev/null
 force_outgoing_ip: false
 separate_port: false
 config:

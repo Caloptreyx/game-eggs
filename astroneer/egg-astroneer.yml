@@ -9,13 +9,25 @@ docker_images:
   Proton: ghcr.io/caloptreyx/steamcmd:proton
 file_denylist: []
 startup_commands:
-  # The server's own output is unusable under Proton, so its log is streamed to the console. The
-  # server reads no console input.
+  # The server writes no log and no console output under Proton (not even with -log, which only
+  # opens an empty console window), so the shell prints a fixed line once the game port is bound;
+  # that line marks the server as started (it is split in the command, which the image echoes,
+  # so the echo does not match). The server reads no console input. It hangs during
+  # startup without a display, so it gets a virtual one (Xvfb); PROTON_USE_XALIA=0 stops Proton's
+  # accessibility helper from failing on it. Wine starts the server in its own process group, so
+  # the stop signal Wings sends never reaches it, and Ctrl+C would kill it without saving. The
+  # shell traps the signal and creates Astro/Saved/EXITREQUEST/exitrequest, the server's own exit
+  # request: it saves and exits, and the shell waits for that. Xvfb and Proton run in their own
+  # sessions so the signal takes neither away mid-save.
   Default: >-
-    mkdir -p Astro/Saved/Logs; : > Astro/Saved/Logs/Astro.log;
-    proton run ./Astro/Binaries/Win64/AstroServer-Win64-Shipping.exe -log & SRV=$!;
-    tail -n +1 -F Astro/Saved/Logs/Astro.log --pid=${SRV} 2>/dev/null &
-    wait ${SRV}
+    mkdir -p Astro/Saved/EXITREQUEST; rm -f Astro/Saved/EXITREQUEST/exitrequest /tmp/.X99-lock;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp 2>/dev/null & XVFB=$!;
+    DISPLAY=:99 PROTON_USE_XALIA=0 setsid proton run ./Astro/Binaries/Win64/AstroServer-Win64-Shipping.exe
+    </dev/null & SRV=$!;
+    trap ": > Astro/Saved/EXITREQUEST/exitrequest" INT;
+    until ss -Hlun sport = :{{SERVER_PORT}} | grep -q . || ! kill -0 ${SRV} 2>/dev/null; do sleep 2; done;
+    kill -0 ${SRV} 2>/dev/null && echo "Astroneer server" "listening on port {{SERVER_PORT}}";
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done; kill ${XVFB} 2>/dev/null
 force_outgoing_ip: false
 separate_port: false
 config:
@@ -46,7 +58,7 @@ config:
           replace_with: "{{env.MAX_PLAYERS}}"
   startup:
     done:
-      - Dedicated server ready to start
+      - Astroneer server listening on port
     strip_ansi: false
   stop:
     type: signal

@@ -1,0 +1,176 @@
+name: Mindustry
+author: thexylo@pm.me
+description: >-
+  An automation tower defense RTS: build production chains to supply your turrets, defend against
+  waves of enemies or fight other players. Official Mindustry dedicated server from the GitHub
+  releases (Anuken/Mindustry).
+features:
+  - java_version
+docker_images:
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+file_denylist: []
+startup_commands:
+  # The server runs its command-line arguments as console commands, split at commas, so the panel
+  # settings are applied with "config" on every start, then the save slot is loaded (or the map is
+  # hosted when there is no save yet). "exit" does not save, so the console relay sends
+  # "save <slot>" before every "exit". Values are expanded inside quotes, never re-parsed by the
+  # shell. Java 8-17 set user.home to "?" when the container user has no passwd entry.
+  Default: >-
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar server-release.jar
+    "config port ${SERVER_PORT},config name ${SERVER_NAME},config desc ${SERVER_DESC:-off},playerlimit $( [ "${MAX_PLAYERS}" = 0 ] && printf off || printf %s "${MAX_PLAYERS}" ),config autosave $( [ "${AUTOSAVE}" = 1 ] && printf true || printf false ),config autosaveSpacing ${AUTOSAVE_INTERVAL},config autosaveAmount ${AUTOSAVE_AMOUNT},$( [ -f "config/saves/${SAVE_SLOT}.msav" ] && printf %s "load ${SAVE_SLOT}" || printf %s "host ${MAP} ${GAMEMODE}" )"
+    < <(while IFS= read -r line; do [ "${line%% *}" = exit ] && printf 'save %s\n' "${SAVE_SLOT}"; printf '%s\n' "${line}"; done)
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Opened a server on port "
+    strip_ansi: false
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Mindustry dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Only server-release.jar is replaced; config/ (settings, maps, saves, mods) is kept.
+
+      RELEASES_API="https://api.github.com/repos/Anuken/Mindustry/releases"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      case "${MINDUSTRY_VERSION,,}" in
+          ""|latest) release_url="${RELEASES_API}/latest" ;;
+          v*) release_url="${RELEASES_API}/tags/${MINDUSTRY_VERSION}" ;;
+          *) release_url="${RELEASES_API}/tags/v${MINDUSTRY_VERSION}" ;;
+      esac
+
+      release=$(curl -fsSL --retry 3 "${release_url}") || fail "Mindustry version '${MINDUSTRY_VERSION}' does not exist, or GitHub is unreachable"
+      version=$(jq -r '.tag_name' <<< "${release}")
+      jar_url=$(jq -r '.assets[] | select(.name == "server-release.jar") | .browser_download_url' <<< "${release}")
+      jar_sha256=$(jq -r '.assets[] | select(.name == "server-release.jar") | .digest // empty' <<< "${release}")
+      [[ -n "${jar_url}" ]] || fail "Mindustry ${version} has no dedicated server download"
+
+      echo "Downloading the Mindustry ${version} server..."
+      curl -fsSL --retry 3 -o server-release.jar.download "${jar_url}" || fail "could not download the Mindustry ${version} server"
+      # GitHub publishes checksums for newer releases only.
+      if [[ "${jar_sha256}" == sha256:* ]] && ! echo "${jar_sha256#sha256:}  server-release.jar.download" | sha256sum -c --quiet -; then
+          rm -f server-release.jar.download
+          fail "the downloaded Mindustry ${version} server is corrupt (checksum mismatch)"
+      fi
+      mv -f server-release.jar.download server-release.jar
+      echo "${version}" > .mindustry-version
+
+      echo "-----------------------------------------"
+      echo "Mindustry ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Mindustry Version
+    description: >-
+      latest for the newest release, or a release tag such as v146. Reinstall to change versions;
+      settings, maps and saves are kept. Clients must run the same version.
+    order: 1
+    env_variable: MINDUSTRY_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^(latest|v?\d+(\.\d+)?)$/'
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain commas.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: A Mindustry Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^,]+$/'
+  - name: Server Description
+    description: Description shown under the name in the server list. Cannot contain commas.
+    order: 3
+    env_variable: SERVER_DESC
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:100|regex:/^[^,]*$/'
+  - name: Max Players
+    description: Maximum number of players; 0 for unlimited.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,1000"
+  - name: Map
+    description: >-
+      Map hosted when there is no save yet, e.g. Ancient_Caldera, Fortress, Glacier, Veins. Use _
+      for spaces. Custom maps go into config/maps/. The console command "maps all" lists them.
+    order: 5
+    env_variable: MAP
+    default_value: Ancient_Caldera
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^,\s"\\]+$/'
+  - name: Game Mode
+    description: >-
+      Mode for the hosted map: survival (waves), attack (destroy enemy cores), pvp or sandbox. The
+      map must support the mode. A loaded save keeps its own mode.
+    order: 6
+    env_variable: GAMEMODE
+    default_value: survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:survival,attack,pvp,sandbox"
+  - name: Save Slot
+    description: >-
+      Save written when the server stops and loaded on the next start (config/saves/<slot>.msav).
+      Delete the file to start a new game. Letters, digits, _ and - only.
+    order: 7
+    env_variable: SAVE_SLOT
+    default_value: server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: Autosave
+    description: Save periodically while playing, into config/saves/auto_*.msav. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTOSAVE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Autosave Interval
+    description: Seconds between autosaves.
+    order: 9
+    env_variable: AUTOSAVE_INTERVAL
+    default_value: "300"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:60,86400"
+  - name: Autosave Slots
+    description: Number of autosave files kept; older ones are replaced.
+    order: 10
+    env_variable: AUTOSAVE_AMOUNT
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"

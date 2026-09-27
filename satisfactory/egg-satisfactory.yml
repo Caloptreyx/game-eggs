@@ -1,0 +1,151 @@
+name: Satisfactory
+author: thexylo@pm.me
+description: >-
+  Build huge factories, explore an alien planet and automate everything, alone or with friends.
+  Native Linux dedicated server (Steam app 1690800); no Wine needed.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server logs to stdout but reads nothing from stdin. Console lines are sent to its HTTPS API
+  # as RunCommand, allowed from localhost only by FG.DedicatedServer.AllowInsecureLocalAccess, and
+  # the command output is printed on the console. perl builds and reads the JSON, so console text is
+  # never re-parsed by the shell. The server does not save when it shuts down, so quit / stop / exit
+  # first save the running session as "<session>_shutdown". HOME keeps the saves and the server
+  # settings in the server directory. Keep "} }" spaced: "}}" is a placeholder delimiter for the
+  # image.
+  Default: >-
+    api() { curl -sk --max-time 60 "https://127.0.0.1:${SERVER_PORT}/api/v1" -H "Content-Type: application/json"
+    --data-binary "$(perl -MJSON::PP -e 'my $f = shift; print encode_json({ function => $f, data => { @ARGV } })' -- "$@")"; };
+    (while read -r line; do if [[ "${line,,}" =~ ^[[:space:]]*(quit|stop|exit)[[:space:]]*$ ]]; then
+    S=$(api QueryServerState | perl -MJSON::PP -e 'my $s = eval { decode_json(join "", <STDIN>)->{data}{serverGameState} };
+    print $s->{activeSessionName} if $s && $s->{isGameRunning}');
+    [ -n "${S}" ] && echo "Saving ${S}_shutdown before shutdown..." && api SaveGame saveName "${S}_shutdown"; fi;
+    api RunCommand command "${line}" | perl -MJSON::PP -e 'my $r = eval { decode_json(join "", <STDIN>) } or exit;
+    print $r->{data}{commandResult} // $r->{errorMessage} // $r->{errorCode} // "", "\n"'; done) <&0 &
+    HOME=/home/container ./Engine/Binaries/Linux/FactoryServer-Linux-Shipping FactoryGame
+    -Port={{SERVER_PORT}} -ReliablePort={{RELIABLE_PORT}} -multihome=0.0.0.0
+    "-ini:Game:[/Script/Engine.GameSession]:MaxPlayers=${MAX_PLAYERS}"
+    "-ini:Engine:[SystemSettings]:FG.DedicatedServer.AllowInsecureLocalAccess=1"
+    {{EXTRA_ARGS}} </dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "LogInit: Display: Engine is initialized."
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Satisfactory dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Engine/Binaries/Linux/FactoryServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Max Players
+    description: >-
+      Maximum number of players on the server. The game is tuned for 4; more players need more CPU
+      and memory.
+    order: 1
+    env_variable: MAX_PLAYERS
+    default_value: "4"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,127"
+  - name: Reliable Port
+    description: TCP port for reliable messaging (the game's second port). Needs its own allocation.
+    order: 2
+    env_variable: RELIABLE_PORT
+    default_value: "8888"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -DisableSeasonalEvents
+    order: 3
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 4
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. experimental. Leave empty for the stable release; use
+      public to switch back from experimental. Reinstall after changing it.
+    order: 5
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Satisfactory dedicated server.
+    order: 6
+    env_variable: SRCDS_APPID
+    default_value: "1690800"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1690800"

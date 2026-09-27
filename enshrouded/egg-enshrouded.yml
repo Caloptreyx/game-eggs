@@ -1,0 +1,200 @@
+name: Enshrouded
+author: thexylo@pm.me
+description: >-
+  Survival action RPG with voxel building: fight the Shroud, explore a vast world and build your
+  base, solo or with up to 16 players. The Windows-only dedicated server (Steam app 2278520) runs
+  through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server's own output is unusable under Proton, so logs/enshrouded_server.log is streamed to
+  # the console. The server reads no console input. It runs in its own process group under Proton,
+  # so the stop signal never reaches it: the shell forwards SIGINT to it, which makes it save and
+  # exit, and waits for it. Non-empty group passwords are written into userGroups by group name.
+  Default: >-
+    mkdir -p logs; : > logs/enshrouded_server.log;
+    [ -f enshrouded_server.json ] && python3 -c 'import json,os;p="enshrouded_server.json";d=json.load(open(p));v={"Admin":"ADMIN_PASSWORD","Friend":"FRIEND_PASSWORD","Guest":"GUEST_PASSWORD","Visitor":"VISITOR_PASSWORD"};[g.update(password=os.environ[v[g["name"]]]) for g in d.get("userGroups",[]) if os.environ.get(v.get(g.get("name"),""))];json.dump(d,open(p,"w"),indent="\t")';
+    proton run ./enshrouded_server.exe & SRV=$!;
+    trap "pkill -INT -x enshrouded_serv" INT;
+    tail -n +1 -F logs/enshrouded_server.log --pid=${SRV} 2>/dev/null &
+    wait ${SRV}; wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    enshrouded_server.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: ip
+          replace_with: "0.0.0.0"
+        - match: queryPort
+          replace_with: "{{server.build.default.port}}"
+        - match: slotCount
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: gameSettingsPreset
+          replace_with: "{{env.GAME_PRESET}}"
+        - match: logDirectory
+          replace_with: "./logs"
+  startup:
+    done:
+      - "[game_server] Switching state from LoadEcsScene to Run"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Enshrouded dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/enshrouded_server.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      mkdir -p /mnt/server/logs /mnt/server/savegame
+
+      echo "-----------------------------------------"
+      echo "Installation completed. The server writes enshrouded_server.json on first start, with"
+      echo "random group passwords; the panel settings are applied from the next start on."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Enshrouded Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,16"
+  - name: Difficulty Preset
+    description: >-
+      Gameplay difficulty: Default, Relaxed, Hard, Survival, or Custom to use the gameSettings
+      values in enshrouded_server.json.
+    order: 3
+    env_variable: GAME_PRESET
+    default_value: Default
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Default,Relaxed,Hard,Survival,Custom"
+  - name: Admin Password
+    description: >-
+      Password for the Admin group (build, chests, kick and ban). Leave empty to keep the one in
+      enshrouded_server.json.
+    order: 4
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Friend Password
+    description: >-
+      Password for the Friend group (build and chests). Leave empty to keep the one in
+      enshrouded_server.json.
+    order: 5
+    env_variable: FRIEND_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Guest Password
+    description: >-
+      Password for the Guest group (no building or chests in bases). Leave empty to keep the one in
+      enshrouded_server.json.
+    order: 6
+    env_variable: GUEST_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Visitor Password
+    description: >-
+      Password for the Visitor group (no changes to bases or the world). Leave empty to keep the
+      one in enshrouded_server.json.
+    order: 7
+    env_variable: VISITOR_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Enshrouded dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "2278520"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:2278520"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 10
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
