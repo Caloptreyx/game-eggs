@@ -1,0 +1,193 @@
+name: RimWorld Together
+author: thexylo@pm.me
+description: >-
+  RimWorld Together is a community multiplayer mod for RimWorld: every player runs their own colony on
+  a shared planet and can trade, visit, raid and send aid to each other. Official server from the
+  GitHub releases (RimWorld-Together/Rimworld-Together); players need the mod from the Steam Workshop.
+features: []
+docker_images:
+  Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a self-contained .NET build. The image has no libicu, so .NET runs in
+  # globalization-invariant mode; the server creates the en-US culture on start, which that mode
+  # only allows with predefined cultures off. The server compares the SHA-256 (upper-case hex) of the
+  # password a player enters with Configs/PasswordConfig.json, so the panel password is written there
+  # hashed on every start (empty = no password). Console lines go straight to the server's stdin.
+  Default: >-
+    export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY=0;
+    mkdir -p Configs && printf '{\n  "Password": "%s"\n}\n'
+    "$( [ -n "${SERVER_PASSWORD}" ] && printf %s "${SERVER_PASSWORD}" | sha256sum | cut -c1-64 | tr a-f A-F )"
+    > Configs/PasswordConfig.json;
+    exec ./RTServer
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Configs/ServerConfig.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: Port
+          replace_with: "{{server.build.default.port}}"
+        - match: Name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: Description
+          replace_with: "{{env.SERVER_DESC}}"
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: EnableServerBrowser
+          replace_with: "{{env.PUBLIC}}"
+  startup:
+    done:
+      - "Listening for users at "
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # RimWorld Together server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Downloads the self-contained Linux x64 server. Only the RTServer executable is replaced;
+      # Assets/ (world, players, saves), Configs/, Backups/ and Logs/ are kept on reinstall.
+
+      RELEASES_API="https://api.github.com/repos/RimWorld-Together/Rimworld-Together/releases"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      if [[ -z "${RT_VERSION}" || "${RT_VERSION,,}" == "latest" ]]; then
+          release_url="${RELEASES_API}/latest"
+      else
+          release_url="${RELEASES_API}/tags/${RT_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${release_url}") || fail "RimWorld Together version '${RT_VERSION}' does not exist, or GitHub is unreachable"
+      version=$(jq -r '.tag_name' <<< "${release}")
+
+      # Current releases ship Server-linux-x64.zip (RTServer); older ones linux-x64.zip (GameServer).
+      for asset in Server-linux-x64.zip linux-x64.zip; do
+          url=$(jq -r --arg a "${asset}" '.assets[] | select(.name == $a) | .browser_download_url' <<< "${release}")
+          sha256=$(jq -r --arg a "${asset}" '.assets[] | select(.name == $a) | .digest // empty' <<< "${release}")
+          [[ -n "${url}" ]] && break
+      done
+      [[ -n "${url}" ]] || fail "RimWorld Together ${version} has no Linux x64 server download"
+
+      echo "Downloading the RimWorld Together ${version} server..."
+      rm -rf .rtserver.zip .rtserver
+      curl -fsSL --retry 3 -o .rtserver.zip "${url}" || fail "could not download the RimWorld Together ${version} server"
+      if [[ "${sha256}" == sha256:* ]] && ! echo "${sha256#sha256:}  .rtserver.zip" | sha256sum -c --quiet -; then
+          rm -f .rtserver.zip
+          fail "the downloaded RimWorld Together ${version} server is corrupt (checksum mismatch)"
+      fi
+      unzip -q -o .rtserver.zip -d .rtserver || fail "could not extract the RimWorld Together ${version} server"
+      binary=""
+      for name in RTServer GameServer; do
+          [[ -f ".rtserver/${name}" ]] && binary=".rtserver/${name}" && break
+      done
+      [[ -n "${binary}" ]] || fail "the RimWorld Together ${version} download contains no server executable"
+      mv -f "${binary}" RTServer
+      chmod +x RTServer
+      rm -rf .rtserver.zip .rtserver
+      echo "${version}" > .rt-version
+
+      # The panel settings are written into ServerConfig.json before every start, so the file must
+      # exist. Same content as the server's own defaults; the server adds any missing keys itself.
+      mkdir -p Configs
+      if [[ ! -f Configs/ServerConfig.json ]]; then
+          echo "Creating Configs/ServerConfig.json..."
+          cat > Configs/ServerConfig.json << 'EOF'
+      {
+        "Name": "RimWorld Together Server",
+        "Description": "",
+        "DiscordURL": "",
+        "SteamWorkshopURL": "",
+        "IP": "0.0.0.0",
+        "Port": 25555,
+        "MaxPlayers": 100,
+        "Verbosity": 0,
+        "DisplayChatInConsole": false,
+        "UseUPnP": false,
+        "UseClientSave": true,
+        "EnableServerBrowser": true,
+        "EnableServerTelemetry": true
+      }
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "RimWorld Together ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: RimWorld Together Version
+    description: >-
+      latest for the newest release, or a release tag such as 26.10.4.1. Reinstall to change
+      versions; the world and settings are kept. Players must run the same mod version.
+    order: 1
+    env_variable: RT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|\d+(\.\d+)+(_\(\d+\))?)$/'
+  - name: Server Name
+    description: Name shown in the RimWorld Together server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: RimWorld Together Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Description
+    description: Description shown in the server browser.
+    order: 3
+    env_variable: SERVER_DESC
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Max Players
+    description: Maximum number of connected players; further connections are refused.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Server Password
+    description: >-
+      Password players must enter to join. Leave empty for no password. Printable ASCII only.
+      Replaces any password set with the setpassword console command on every start.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[\x20-\x7E]*$/'
+  - name: Public
+    description: >-
+      List the server in the public RimWorld Together server browser. Off still reports to the
+      browser service, but as a private server.
+    order: 6
+    env_variable: PUBLIC
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"

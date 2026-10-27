@@ -1,0 +1,428 @@
+name: Arma 3
+author: thexylo@pm.me
+description: >-
+  Arma 3, the military sandbox by Bohemia Interactive. Linux dedicated server (Steam app 233780) with
+  automatic server and Steam Workshop mod updates, Creator DLC branch and Headless Clients.
+features:
+  - steam_disk_space
+docker_images:
+  Arma 3: ghcr.io/caloptreyx/games:arma3
+file_denylist: []
+startup_commands:
+  # CLIENT_MODS and SERVER_MODS are not egg variables: the image entrypoint builds them from the
+  # modlist file, Additional Mods and Server-Side Mods before starting the server.
+  Default: >-
+    ./{{SERVER_BINARY}} -ip=0.0.0.0 -port={{SERVER_PORT}} -name=server -cfg=basic.cfg -config=server.cfg
+    "-mod={{CLIENT_MODS}}" "-serverMod={{SERVER_MODS}}" -limitFPS={{LIMIT_FPS}} {{STARTUP_PARAMS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # The installer writes these keys in the "key = value;" form. The "key=value;" form is matched
+    # too, so files edited by hand keep working.
+    server.cfg:
+      parser: file
+      replace:
+        - match: hostname
+          replace_with: hostname = "{{env.SERVER_NAME}}";
+        - match: password =
+          replace_with: password = "{{env.SERVER_PASSWORD}}";
+        - match: password=
+          replace_with: password = "{{env.SERVER_PASSWORD}}";
+        - match: passwordAdmin =
+          replace_with: passwordAdmin = "{{env.ADMIN_PASSWORD}}";
+        - match: passwordAdmin=
+          replace_with: passwordAdmin = "{{env.ADMIN_PASSWORD}}";
+        - match: maxPlayers
+          replace_with: maxPlayers = {{env.MAX_PLAYERS}};
+    # BattlEye renames these files when it loads them; insert_new recreates the entries on every start.
+    battleye/launch/beserver_x64.cfg:
+      parser: file
+      replace:
+        - match: RConPort
+          replace_with: RConPort {{env.RCON_PORT}}
+          insert_new: true
+        - match: RConPassword
+          replace_with: RConPassword {{env.RCON_PASSWORD}}
+          insert_new: true
+    battleye/launch/beserver.cfg:
+      parser: file
+      replace:
+        - match: RConPort
+          replace_with: RConPort {{env.RCON_PORT}}
+          insert_new: true
+        - match: RConPassword
+          replace_with: RConPassword {{env.RCON_PASSWORD}}
+          insert_new: true
+  startup:
+    done:
+      - Host identity created.
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Arma 3 dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      export HOME=/mnt/server
+      STEAMCMD_LOG=/tmp/steamcmd.log
+
+      if [[ -z "${STEAM_USER}" || "${STEAM_USER}" == "anonymous" || -z "${STEAM_PASS}" ]]; then
+          fail "a real Steam account is required to install Arma 3 (anonymous cannot); set [Host] Steam Username and Password"
+      fi
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p "${HOME}/steamcmd" "${HOME}/steamapps" # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C "${HOME}/steamcmd" || fail "could not extract SteamCMD"
+      cd "${HOME}/steamcmd" || fail "cannot enter ${HOME}/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+
+      beta=()
+      [[ -n "${STEAMCMD_BETAID}" ]] && beta=(-beta "${STEAMCMD_BETAID}")
+      # Public password of the profiling branch, from the Bohemia Interactive wiki.
+      [[ "${STEAMCMD_BETAID}" == "profiling" ]] && beta+=(-betapassword CautionSpecialProfilingAndTestingBranchArma3)
+
+      ## install the game; stdin is closed so a Steam Guard prompt fails instead of hanging
+      for attempt in $(seq 1 "${STEAMCMD_ATTEMPTS:-3}"); do
+          ./steamcmd.sh +force_install_dir "${HOME}" "+login \"${STEAM_USER}\" \"${STEAM_PASS}\"" \
+              +app_update "${STEAMCMD_APPID}" "${beta[@]}" validate +quit < /dev/null 2>&1 | tee "${STEAMCMD_LOG}"
+          [[ -f "${HOME}/arma3server_x64" ]] && grep -q "Success! App '${STEAMCMD_APPID}'" "${STEAMCMD_LOG}" && break
+          if grep -qE "Logging in user .*(FAILED|ERROR)|Login Failure|Invalid Password|Two-factor|Account Logon Denied|Steam Guard code" "${STEAMCMD_LOG}"; then
+              fail "Steam login failed: check the Steam Username/Password and turn Steam Guard off"
+          fi
+          if grep -qE "state is 0x(202|212)" "${STEAMCMD_LOG}"; then
+              fail "not enough disk space to install Arma 3; raise the server's disk limit"
+          fi
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${HOME}/arma3server_x64" ]] || fail "SteamCMD could not install app ${STEAMCMD_APPID}; check the install log"
+
+      ## steamclient libraries
+      mkdir -p "${HOME}/.steam/sdk32" "${HOME}/.steam/sdk64"
+      cp -v linux32/steamclient.so "${HOME}/.steam/sdk32/steamclient.so"
+      cp -v linux64/steamclient.so "${HOME}/.steam/sdk64/steamclient.so"
+
+      cd "${HOME}" || fail "cannot enter ${HOME}"
+      mkdir -p keys mpmissions battleye/launch
+
+      ## server.cfg: the panel keeps hostname, passwords and maxPlayers in sync on every start.
+      # Only created when missing, so custom settings survive reinstalls.
+      if [[ ! -s server.cfg ]]; then
+          echo "Creating server.cfg..."
+          cat > server.cfg << 'EOF'
+      // Arma 3 server configuration, see https://community.bistudio.com/wiki/Arma_3:_Server_Config_File
+      // hostname, password, passwordAdmin and maxPlayers are set from the panel on every start.
+
+      hostname = "Arma 3 Server";
+      password = "";
+      passwordAdmin = "";
+      //serverCommandPassword = "";
+      //admins[] = { "76561198000000000" };    // Steam IDs that can log in as admin without the password
+      maxPlayers = 32;
+
+      motd[] = { "Welcome to the server" };
+      motdInterval = 5;
+
+      // Missions run in this order. Leave the class empty to let admins pick one with #missions.
+      class Missions
+      {
+          class Mission1
+          {
+              template = "MP_ZGM_m11.Altis";
+              difficulty = "Regular";
+              class Params {};
+          };
+      };
+
+      persistent = 0;                  // keep the mission running when everyone leaves
+      voteMissionPlayers = 1;
+      voteThreshold = 0.33;
+
+      BattlEye = 1;
+      verifySignatures = 2;            // only clients with the server's mod keys (keys/) can join
+      kickDuplicate = 1;
+      allowedFilePatching = 0;         // 1 = Headless Clients only, 2 = everyone
+      disableVoN = 0;
+      vonCodec = 1;
+      vonCodecQuality = 20;
+      forcedDifficulty = "Regular";
+      timeStampFormat = "short";
+      logFile = "server_console.log";
+
+      // Headless Clients started by the panel connect from inside the container.
+      headlessClients[] = { "127.0.0.1" };
+      localClient[] = { "127.0.0.1" };
+
+      disconnectTimeout = 90;
+      maxDesync = 150;
+      maxPing = 250;
+      maxPacketLoss = 50;
+      kickClientsOnSlowNetwork[] = { 0, 0, 0, 0 };
+
+      onUnsignedData = "kick (_this select 0)";
+      onHackedData = "kick (_this select 0)";
+      EOF
+      fi
+
+      ## BattlEye RCon; the panel sets the port and password on every start.
+      for cfg in battleye/launch/beserver_x64.cfg battleye/launch/beserver.cfg; do
+          [[ -f "${cfg}" ]] || printf 'RConPort %s\nRConPassword %s\n' "${RCON_PORT}" "${RCON_PASSWORD}" > "${cfg}"
+      done
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: "[Host] Steam Username"
+    description: >-
+      Steam account used for installation and updates. Anonymous login cannot install Arma 3; the
+      account does not need to own it, unless Workshop mods are downloaded. Use a dedicated account.
+      Not visible to the server owner.
+    order: 1
+    env_variable: STEAM_USER
+    default_value: ""
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|not_in:anonymous"
+  - name: "[Host] Steam Password"
+    description: >-
+      Password of the Steam account. Steam Guard must be off for installs and updates to work.
+      Not visible to the server owner.
+    order: 2
+    env_variable: STEAM_PASS
+    default_value: ""
+    user_viewable: false
+    user_editable: false
+    secret: true
+    rules: "required|string"
+  - name: "[Host] Disable Mod Downloads/Updates"
+    description: >-
+      Workshop mod downloads need a Steam account that owns Arma 3. Set to 1 to turn them off when it
+      does not; mods can still be uploaded by hand. (1 = on, 0 = off)
+    order: 3
+    env_variable: DISABLE_MOD_UPDATES
+    default_value: "0"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:0,1"
+  - name: "[Host] SteamCMD Attempts"
+    description: How often SteamCMD retries a server or mod download after an error, e.g. a timeout on a large mod.
+    order: 4
+    env_variable: STEAMCMD_ATTEMPTS
+    default_value: "3"
+    user_viewable: false
+    user_editable: false
+    rules: "required|integer|between:1,10"
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 5
+    env_variable: SERVER_NAME
+    default_value: Arma 3 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:100|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 6
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Admin Password
+    description: >-
+      Password to log in as admin in game (#login). Leave empty to allow admin login only for the
+      Steam IDs in admins[] in server.cfg. Cannot contain double quotes.
+    order: 7
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 8
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,256"
+  - name: Automatic Updates
+    description: Check for server and Workshop mod updates on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: UPDATE_SERVER
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Branch
+    description: >-
+      public = default branch. creatordlc = also installs the Creator DLC server files; load a CDLC by
+      adding its folder (e.g. vn, gm, ws, spe) to Additional Mods. profiling = performance build; use
+      it with the arma3serverprofiling_x64 Server Binary. Applied on the next update.
+    order: 10
+    env_variable: STEAMCMD_BETAID
+    default_value: public
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|in:public,creatordlc,profiling"
+  - name: Modlist File
+    description: >-
+      Mod preset exported from the Arma 3 Launcher (HTML), uploaded to the server root. Its Workshop
+      mods are downloaded and loaded. Leave empty to not use a modlist.
+    order: 11
+    env_variable: MOD_FILE
+    default_value: modlist.html
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:128|regex:/^[^\/"]*$/'
+  - name: Additional Mods
+    description: >-
+      Semicolon-separated mod folders to load in addition to the modlist, e.g. @450814997;vn;@mymod;
+      Mods in @workshopID form are downloaded and updated automatically. Lowercase, no spaces.
+    order: 12
+    env_variable: MODIFICATIONS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:2048|regex:/^[^\s"]*$/'
+  - name: Server-Side Mods
+    description: >-
+      Semicolon-separated mod folders loaded with -serverMod: they run on the server only and players
+      do not need them. Mods in @workshopID form are downloaded and updated automatically.
+    order: 13
+    env_variable: SERVERMODS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^[^\s"]*$/'
+  - name: Optional Mods
+    description: >-
+      Semicolon-separated @workshopID mods that players may use but do not need, e.g. sound or UI
+      mods. Only their keys are installed; the server does not load them.
+    order: 14
+    env_variable: OPTIONALMODS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^(@\d+(;@\d+)*;?)?$/'
+  - name: RCon Port
+    description: BattlEye RCon port for remote admin tools. Needs its own allocation only when used remotely.
+    order: 15
+    env_variable: RCON_PORT
+    default_value: "2301"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCon Password
+    description: BattlEye RCon password for remote admin tools. Leave empty to disable RCon. Letters and digits only.
+    order: 16
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+  - name: Server FPS
+    description: >-
+      Simulation cycles per second the server aims for (-limitFPS). Higher values cost more CPU. Also
+      used by the Headless Clients.
+    order: 17
+    env_variable: LIMIT_FPS
+    default_value: "50"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:5,1000"
+  - name: Headless Clients
+    description: >-
+      Number of Headless Clients (0-5) started next to the server to take over AI. Only useful with
+      missions written for them; each one needs about 2 GB of extra RAM.
+    order: 18
+    env_variable: HC_NUM
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,5"
+  - name: Hide Headless Client Output
+    description: Keep Headless Client output out of the console. (1 = on, 0 = off)
+    order: 19
+    env_variable: HC_HIDE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: "[Repair] Make Mod Files Lowercase"
+    description: >-
+      Rename the files inside every loaded mod to lowercase on start. Enable for one start after
+      uploading mods from Windows, or when mods fail to load. Downloaded mods are always lowercase.
+      (1 = on, 0 = off)
+    order: 20
+    env_variable: MODS_LOWERCASE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: "[Repair] Validate Server Files"
+    description: >-
+      Validate all server files during Automatic Updates. Makes starts much slower; enable only when
+      needed. (1 = on, 0 = off)
+    order: 21
+    env_variable: VALIDATE_SERVER
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: "[Advanced] Extra Startup Parameters"
+    description: >-
+      Additional Arma 3 launch parameters, e.g. -autoInit -noLogs -filePatching. See
+      https://community.bistudio.com/wiki/Arma_3:_Startup_Parameters
+    order: 22
+    env_variable: STARTUP_PARAMS
+    default_value: -loadMissionToMemory
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: "[Advanced] Server Binary"
+    description: >-
+      Server executable. arma3server_x64 = 64-bit (recommended), arma3server = 32-bit. The profiling
+      binaries need the profiling Branch.
+    order: 23
+    env_variable: SERVER_BINARY
+    default_value: arma3server_x64
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|in:arma3server_x64,arma3server,arma3serverprofiling_x64,arma3serverprofiling"
+  - name: "[Advanced] Steam App ID"
+    description: Steam app id of the Arma 3 dedicated server.
+    order: 24
+    env_variable: STEAMCMD_APPID
+    default_value: "233780"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:233780"
