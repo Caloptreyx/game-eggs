@@ -3,16 +3,17 @@ author: thexylo@pm.me
 description: >-
   Horizon's native Minecraft: Java Edition 26.3 server (horizon-server): Horizon's own Rust engine
   instead of Java, with vanilla's settings, worlds and commands. Vanilla 26.3 clients and Horizon
-  clients can join. The installer prepares the game files from Mojang's 26.3 client and server.
+  clients can join. Horizon is installed and updated on start, and its game files are prepared from
+  Mojang's 26.3 client and server.
 features:
   - eula
 docker_images:
-  Horizon: ghcr.io/caloptreyx/java:25
+  Horizon: ghcr.io/caloptreyx/games:horizon
 file_denylist: []
 startup_commands:
-  # server.toml is the settings file; horizon-server writes server.properties from it on every
-  # start, so the allocation's port is set there. Java in the image is not used.
-  Default: ./horizon/horizon-server config set server.port={{SERVER_PORT}} && exec ./horizon/horizon-server run
+  # The image installs or updates Horizon, prepares the game files and writes the settings below
+  # into server.toml before this runs (see the README).
+  Default: exec ./horizon/horizon-server run
 force_outgoing_ip: false
 separate_port: false
 config:
@@ -35,184 +36,149 @@ scripts:
       # Server files: /mnt/server
       # Installer image: ghcr.io/caloptreyx/installers:debian
       #
-      # Installs horizon-server from Horizon's GitHub releases into horizon/, then prepares the game
-      # files Horizon reads (horizon/.local/horizon-client/<version>) with horizon-prepare. Preparing
-      # needs Minecraft's client and server jars and a Java runtime, which are downloaded into a scratch
-      # folder and removed afterwards.
-
-      REPO="horizon-rust/horizon"
-      ASSET="horizon-server-linux-x86_64.tar.gz"
-
-      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
-      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
-      fail() {
-          echo -e "\n[ERROR] $1\n"
-          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
-              echo "$1" > "${INSTALL_STATUS_FILE}"
-          fi
-          rm -rf "${WORK}"
-          exit 1
-      }
+      # horizon-server is downloaded and its game files prepared on start, by horizon-update in
+      # ghcr.io/caloptreyx/games:horizon. A reinstall makes the next start download and prepare
+      # again; worlds and settings are kept.
 
       mkdir -p /mnt/server
-      cd /mnt/server || fail "cannot enter /mnt/server"
-      # Scratch space on the server's disk: the container /tmp may be a small tmpfs.
-      WORK=/mnt/server/.horizon-install
-      rm -rf "${WORK}"
-      mkdir -p "${WORK}"
+      cd /mnt/server || exit 1
+      rm -f horizon/.horizon-release horizon/.local/horizon-client/.horizon-prepared
 
-      # Downloads $1 to $2 and checks it against the $3 checksum ($4: sha1sum or sha256sum).
-      download() {
-          curl -fsSL --retry 3 -o "$2.download" "$1" || return 1
-          if ! echo "$3  $2.download" | "$4" -c --quiet - >/dev/null 2>&1; then
-              rm -f "$2.download"
-              return 1
-          fi
-          mv -f "$2.download" "$2"
-      }
-
-      # --- horizon-server ---------------------------------------------------------------------------
-      case "${HORIZON_VERSION,,}" in
-          ""|latest|nightly) tag="nightly" ;;
-          *) tag="${HORIZON_VERSION}" ;;
-      esac
-      release=$(curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${REPO}/releases/tags/${tag}") \
-          || fail "Horizon release '${tag}' does not exist (or GitHub's API is unreachable)"
-      name=$(jq -r '.name // .tag_name' <<< "${release}")
-      name="${name#Horizon }"
-      url=$(jq -r --arg a "${ASSET}" '.assets[] | select(.name == $a) | .browser_download_url' <<< "${release}")
-      digest=$(jq -r --arg a "${ASSET}" '.assets[] | select(.name == $a) | .digest // empty' <<< "${release}")
-      [[ -n "${url}" ]] || fail "Horizon release '${tag}' has no ${ASSET}"
-      [[ "${digest}" == sha256:* ]] || fail "Horizon release '${tag}' publishes no SHA-256 for ${ASSET}"
-
-      echo "Downloading Horizon ${name}..."
-      download "${url}" "${WORK}/${ASSET}" "${digest#sha256:}" sha256sum \
-          || fail "could not download Horizon ${name} (download failed or checksum mismatch)"
-      mkdir -p "${WORK}/release"
-      tar -xzf "${WORK}/${ASSET}" -C "${WORK}/release" || fail "could not extract ${ASSET}"
-      source_dir=$(dirname "$(find "${WORK}/release" -name horizon-server -type f | head -n 1)")
-      [[ -x "${source_dir}/horizon-server" && -x "${source_dir}/horizon-engine" ]] || fail "${ASSET} holds no horizon-server"
-
-      # The prepared game files in horizon/.local outlive the release, as in Horizon's own installer.
-      if [[ -d horizon/.local ]]; then
-          mv horizon/.local "${WORK}/local"
-      fi
-      rm -rf horizon
-      mv "${source_dir}" horizon
-      if [[ -d "${WORK}/local" ]]; then
-          mv "${WORK}/local" horizon/.local
-      fi
-
-      # --- game files -------------------------------------------------------------------------------
-      lock=horizon/research-lock.json
-      mc_version=$(jq -r '.minecraft.version' "${lock}")
-      manifest_sha1=$(jq -r '.minecraft.manifest_sha1' "${lock}")
-      java_major=$(jq -r '.minecraft.java_major' "${lock}")
-      [[ -n "${mc_version}" && "${mc_version}" != null ]] || fail "${lock} names no Minecraft version"
-
-      if [[ "${PREPARE_GAME_FILES}" == "0" ]]; then
-          echo "Preparing the game files is off: upload a prepared ${mc_version} folder as resources/."
-      else
-          echo "Preparing the Minecraft ${mc_version} game files..."
-          mc="${WORK}/minecraft"
-          mkdir -p "${mc}/versions/${mc_version}" "${mc}/assets/indexes"
-
-          # Mojang's version file, the one Horizon pins.
-          version_json="${mc}/versions/${mc_version}/${mc_version}.json"
-          download "https://piston-meta.mojang.com/v1/packages/${manifest_sha1}/${mc_version}.json" "${version_json}" "${manifest_sha1}" sha1sum \
-              || fail "could not download the Minecraft ${mc_version} version file"
-
-          download "$(jq -r '.downloads.client.url' "${version_json}")" "${mc}/versions/${mc_version}/${mc_version}.jar" \
-              "$(jq -r '.downloads.client.sha1' "${version_json}")" sha1sum \
-              || fail "could not download the Minecraft ${mc_version} client"
-          download "$(jq -r '.downloads.server.url' "${version_json}")" "${WORK}/server.jar" \
-              "$(jq -r '.downloads.server.sha1' "${version_json}")" sha1sum \
-              || fail "could not download the Minecraft ${mc_version} server"
-
-          # The client libraries the official launcher installs on Linux (the last matching rule decides).
-          jq -r '.libraries[]
-              | select(.downloads.artifact != null)
-              | select((.rules // []) as $r
-                  | ($r | length) == 0
-                    or ([$r[] | select((.os.name // "linux") == "linux")] | last | .action) == "allow")
-              | .downloads.artifact | "\(.url) \(.path) \(.sha1)"' "${version_json}" > "${WORK}/libraries.txt"
-          while read -r lib_url lib_path lib_sha1; do
-              mkdir -p "$(dirname "${mc}/libraries/${lib_path}")"
-              download "${lib_url}" "${mc}/libraries/${lib_path}" "${lib_sha1}" sha1sum \
-                  || fail "could not download the library ${lib_path}"
-          done < "${WORK}/libraries.txt"
-
-          # The assets preparing imports: languages, fonts, the built-in packs and the menu panorama.
-          # Sounds are left out; a server plays none.
-          index_id=$(jq -r '.assetIndex.id' "${version_json}")
-          index="${mc}/assets/indexes/${index_id}.json"
-          download "$(jq -r '.assetIndex.url' "${version_json}")" "${index}" "$(jq -r '.assetIndex.sha1' "${version_json}")" sha1sum \
-              || fail "could not download the Minecraft ${mc_version} asset index"
-          jq -r '.objects | to_entries[]
-              | select(.key == "pack.mcmeta"
-                  or (.key | startswith("minecraft/lang/"))
-                  or (.key | startswith("minecraft/font/"))
-                  or (.key | startswith("minecraft/resourcepacks/"))
-                  or (.key | startswith("minecraft/textures/gui/title/background/")))
-              | .value.hash' "${index}" | sort -u > "${WORK}/assets.txt"
-          while read -r hash; do
-              mkdir -p "${mc}/assets/objects/${hash:0:2}"
-              download "https://resources.download.minecraft.net/${hash:0:2}/${hash}" "${mc}/assets/objects/${hash:0:2}/${hash}" "${hash}" sha1sum \
-                  || fail "could not download the asset ${hash}"
-          done < "${WORK}/assets.txt"
-
-          # A Java runtime of the version Horizon pins, for horizon-prepare's exporters.
-          jre=$(curl -fsSL --retry 3 "https://api.adoptium.net/v3/assets/latest/${java_major}/hotspot?architecture=x64&image_type=jre&os=linux&vendor=eclipse") \
-              || fail "could not look up a Java ${java_major} runtime"
-          jre_url=$(jq -r '.[0].binary.package.link // empty' <<< "${jre}")
-          jre_sha256=$(jq -r '.[0].binary.package.checksum // empty' <<< "${jre}")
-          [[ -n "${jre_url}" && -n "${jre_sha256}" ]] || fail "no Java ${java_major} runtime found"
-          echo "Downloading a Java ${java_major} runtime for preparing..."
-          download "${jre_url}" "${WORK}/jre.tar.gz" "${jre_sha256}" sha256sum || fail "could not download the Java ${java_major} runtime"
-          mkdir -p "${WORK}/jre"
-          tar -xzf "${WORK}/jre.tar.gz" -C "${WORK}/jre" --strip-components=1 || fail "could not extract the Java ${java_major} runtime"
-
-          JAVA_HOME="${WORK}/jre" PATH="${WORK}/jre/bin:${PATH}" HOME="${WORK}" \
-              ./horizon/horizon-prepare --prepare --root horizon --minecraft-dir "${mc}" --server-jar "${WORK}/server.jar" \
-              || fail "horizon-prepare could not prepare the Minecraft ${mc_version} game files (preparing needs at least 2 GB of memory: raise the server's memory limit and reinstall)"
-          # Only the prepared files are read at run time. The imported jars and the exporters' work folders
-          # are only needed while preparing, which downloads and rebuilds them on every reinstall.
-          find horizon/.local -mindepth 1 -maxdepth 1 ! -name horizon-client -exec rm -rf {} +
-      fi
-
-      # --- server.toml ------------------------------------------------------------------------------
-      if [[ ! -f server.toml ]]; then
-          if [[ -f server.properties ]]; then
-              ./horizon/horizon-server import server.properties || fail "could not import server.properties"
-          else
-              : > "${WORK}/empty.properties"
-              ./horizon/horizon-server import "${WORK}/empty.properties" || fail "could not write server.toml"
-          fi
-      fi
-
-      rm -rf "${WORK}"
       echo "-----------------------------------------"
-      echo "Horizon ${name} installed for Minecraft ${mc_version}."
+      echo "Installed. The first start downloads Horizon and prepares the game files,"
+      echo "which takes a few minutes and about 1 GB of memory."
       echo "-----------------------------------------"
 variables:
   - name: Horizon Version
     description: >-
       latest for the current Horizon Nightly (the only build Horizon ships), or a release tag such
-      as v0.2.97 or nightly-2026-10-29. Reinstall the server to update; worlds and settings are kept.
+      as v0.2.97 or nightly-2026-10-29. A changed version is installed on the next start.
     order: 1
     env_variable: HORIZON_VERSION
     default_value: latest
     user_viewable: true
     user_editable: true
     rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Auto Update
+    description: >-
+      1 checks for a new build of Horizon Version on every start and installs it (the game files
+      are prepared again, a few minutes). 0 keeps the installed build. (1 = on, 0 = off)
+    order: 2
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
   - name: Prepare Game Files
     description: >-
-      1 prepares the game files Horizon reads from Mojang's Minecraft 26.3 client and server during
-      installation. 0 skips it: upload a folder prepared with Horizon's launcher or horizon-prepare
-      as resources/ instead.
-    order: 2
+      1 prepares the game files Horizon reads from Mojang's Minecraft 26.3 client and server. 0
+      skips it: upload a folder prepared with Horizon's launcher or horizon-prepare as resources/
+      instead.
+    order: 3
     env_variable: PREPARE_GAME_FILES
     default_value: "1"
     user_viewable: true
     user_editable: true
     rules: "required|in:0,1"
+  - name: Online Mode
+    description: >-
+      true checks players' Minecraft accounts. false lets anyone join under any name, which Horizon's
+      own client needs (it cannot sign in to Microsoft accounts yet); keep the whitelist on then.
+      Empty keeps server.toml's value.
+    order: 4
+    env_variable: ONLINE_MODE
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:true,false"
+  - name: Whitelist
+    description: >-
+      true lets in only whitelisted players and operators (Horizon's default). Empty keeps
+      server.toml's value.
+    order: 5
+    env_variable: WHITELIST
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:true,false"
+  - name: Whitelisted Players
+    description: >-
+      Names added to the whitelist on every start, separated by commas. Remove a name here too
+      when you take it off the whitelist.
+    order: 6
+    env_variable: WHITELIST_PLAYERS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^[A-Za-z0-9_, ]*$/'
+  - name: Operators
+    description: >-
+      Names made operators on every start, separated by commas. Remove a name here too when you
+      deop it.
+    order: 7
+    env_variable: OPS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^[A-Za-z0-9_, ]*$/'
+  - name: MOTD
+    description: The line under the server's name in the server list. Empty keeps server.toml's value.
+    order: 8
+    env_variable: MOTD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Max Players
+    description: How many players can be online at once (1 to 1000). Empty keeps server.toml's value.
+    order: 9
+    env_variable: MAX_PLAYERS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|integer|between:1,1000"
+  - name: Game Mode
+    description: The default game mode. Empty keeps server.toml's value.
+    order: 10
+    env_variable: GAME_MODE
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:survival,creative,adventure,spectator"
+  - name: Difficulty
+    description: The world's difficulty. Empty keeps server.toml's value.
+    order: 11
+    env_variable: DIFFICULTY
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:peaceful,easy,normal,hard"
+  - name: View Distance
+    description: Chunks sent around each player (2 to 32). Empty keeps server.toml's value.
+    order: 12
+    env_variable: VIEW_DISTANCE
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|integer|between:2,32"
+  - name: Horizon Backups
+    description: >-
+      How often Horizon zips the world into backups/ while the server runs (30m, 6h, 1d...; it keeps
+      the last 12). 0 turns them off: Calagopus backups cover the world, and Horizon's use the
+      server's disk. Empty keeps server.toml's value.
+    order: 13
+    env_variable: BACKUP_INTERVAL
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:16|regex:/^(0|[1-9][0-9]*[mhd])$/'
+  - name: Pregeneration
+    description: >-
+      true enables Horizon's pregen console command, which generates the world around spawn ahead
+      of the players (pregen start 2500). Empty keeps server.toml's value.
+    order: 14
+    env_variable: PREGEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|in:true,false"
