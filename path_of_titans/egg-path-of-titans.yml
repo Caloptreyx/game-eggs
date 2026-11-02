@@ -1,0 +1,255 @@
+name: Path of Titans
+author: thexylo@pm.me
+description: >-
+  Path of Titans is a multiplayer dinosaur survival game: survive as a dinosaur in an ecosystem full of
+  AI creatures and up to 200 other players. Official Linux server, downloaded and updated with Alderon's
+  AlderonGamesCmd; it needs a hosting token from an Alderon Games account that owns the game.
+features: []
+docker_images:
+  Path of Titans: ghcr.io/caloptreyx/games:pathoftitans
+file_denylist: []
+startup_commands:
+  # The image updates the server first, fills in SERVER_GUID, RCON_PORT and RCON_PASSWORD when they are
+  # empty, and sends console lines over RCON. The Auth Token reaches the server as AG_AUTH_TOKEN.
+  Default: >-
+    ./PathOfTitans/Binaries/Linux/PathOfTitansServer-Linux-Shipping
+    "{{SERVER_MAP}}?listen?MaxPlayers={{MAX_PLAYERS}}"
+    -Port={{SERVER_PORT}}
+    -ServerName="{{SERVER_NAME}}"
+    -ServerGUID={{SERVER_GUID}}
+    -BranchKey={{BETA_BRANCH}}
+    -Database={{DATABASE}}
+    -RconPort={{RCON_PORT}}
+    -RconPassword="{{RCON_PASSWORD}}"
+    $( [ -n "${SERVER_LIST_IP}" ] && printf %s "-ServerListIP=${SERVER_LIST_IP}" )
+    -nullRHI -log
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    PathOfTitans/Saved/Config/LinuxServer/Game.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/PathOfTitans.IGameSession].ServerPassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[/Script/PathOfTitans.IGameSession].ServerDiscord"
+          replace_with: "{{env.SERVER_DISCORD}}"
+        - match: "[/Script/PathOfTitans.IGameSession].bEnforceWhitelist"
+          replace_with: "{{env.WHITELIST}}"
+        - match: "[/Script/PathOfTitans.IGameSession].bServerPaidUsersOnly"
+          replace_with: "{{env.PAID_USERS_ONLY}}"
+        # The console sends commands over RCON; the port and password are given on the command line.
+        - match: SourceRCON.bEnabled
+          replace_with: "true"
+  startup:
+    done:
+      - "Engine is initialized."
+    strip_ansi: false
+  # Unreal servers save and shut down cleanly on SIGINT.
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Path of Titans installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Downloads the server with Alderon's AlderonGamesCmd, which checks the Auth Token: a wrong token
+      # fails the installation here instead of on the first start. ghcr.io/caloptreyx/games:pathoftitans
+      # updates the server on every start.
+
+      ALDERON_CMD_URL="https://launcher-cdn.alderongames.com/AlderonGamesCmd-Linux-x64"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          rm -rf "${TOOL_DIR}"
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      [[ -n "${AG_AUTH_TOKEN}" ]] \
+          || fail "the Auth Token is empty: generate one at https://alderongames.com/oauth/hosting-token with the account that owns Path of Titans"
+
+      TOOL_DIR=$(mktemp -d)
+      echo "Downloading AlderonGamesCmd..."
+      curl -fsSL --retry 3 -o "${TOOL_DIR}/AlderonGamesCmd" "${ALDERON_CMD_URL}" || fail "could not download AlderonGamesCmd"
+      chmod +x "${TOOL_DIR}/AlderonGamesCmd"
+
+      echo "Downloading Path of Titans (${BETA_BRANCH})..."
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_BUNDLE_EXTRACT_BASE_DIR="${TOOL_DIR}/dotnet" HOME="${TOOL_DIR}" \
+          "${TOOL_DIR}/AlderonGamesCmd" --game path-of-titans --server true --beta-branch "${BETA_BRANCH}" \
+          --auth-token "${AG_AUTH_TOKEN}" --install-dir /mnt/server \
+          || fail "AlderonGamesCmd could not download Path of Titans: check the Auth Token (a new token revokes the old ones) and the Beta Branch"
+      rm -rf "${TOOL_DIR}"
+
+      [[ -f PathOfTitans/Binaries/Linux/PathOfTitansServer-Linux-Shipping ]] \
+          || fail "the download holds no PathOfTitans/Binaries/Linux/PathOfTitansServer-Linux-Shipping"
+      chmod +x PathOfTitans/Binaries/Linux/PathOfTitansServer-Linux-Shipping
+      mkdir -p PathOfTitans/Saved/Config/LinuxServer
+
+      echo "-----------------------------------------"
+      echo "Path of Titans installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Auth Token
+    description: >-
+      Hosting token from https://alderongames.com/oauth/hosting-token, signed in with the Alderon Games
+      account that owns Path of Titans. Generating a new token revokes the old ones: update every server
+      that uses them.
+    order: 1
+    env_variable: AG_AUTH_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:2048"
+  - name: Server Name
+    description: The name in the server list. Use underscores for spaces; they show as spaces.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: My_Path_of_Titans_Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\s"''`\\$]+$/'
+  - name: Server Map
+    description: >-
+      Panjura, Island (Gondwa) or Riparia, or a modded map's name (its mod must also be listed under
+      [PathOfTitans.Mods] in GameUserSettings.ini).
+    order: 3
+    env_variable: SERVER_MAP
+    default_value: Panjura
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9_-]+$/'
+  - name: Max Players
+    description: How many players can be on the server at once.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: Server Password
+    description: Password to join the server. Empty for none.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
+  - name: Whitelist
+    description: >-
+      true lets in only the Alderon IDs (such as 525-053-709) listed one per line in
+      PathOfTitans/Saved/Whitelist.txt.
+    order: 6
+    env_variable: WHITELIST
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Paid Users Only
+    description: true keeps free-to-play accounts out.
+    order: 7
+    env_variable: PAID_USERS_ONLY
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Discord Invite
+    description: >-
+      The code of a permanent Discord invite shown with the server (aY5CzgZk for
+      https://discord.gg/aY5CzgZk). Empty for none.
+    order: 8
+    env_variable: SERVER_DISCORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9-]*$/'
+  - name: Database
+    description: >-
+      Local keeps characters in PathOfTitans/Saved/DatabaseCache on this server (covered by backups).
+      Remote keeps them with Alderon and shares them between servers with the same Auth Token. Switching
+      from Local to Remote replaces the local characters: back up first.
+    order: 9
+    env_variable: DATABASE
+    default_value: Local
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Local,Remote"
+  - name: Beta Branch
+    description: production, or demo-public-test for the public test branch (the account needs access to it).
+    order: 10
+    env_variable: BETA_BRANCH
+    default_value: production
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:production,demo-public-test"
+  - name: Auto Update
+    description: Update the server on every start. (1 = on, 0 = off)
+    order: 11
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Server GUID
+    description: >-
+      The server's unique ID in Alderon's server list. Empty generates one on the first start and keeps
+      it in .pathoftitans-guid. Set it to keep the ID of a server you move here.
+    order: 12
+    env_variable: SERVER_GUID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|regex:/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/'
+  - name: RCON Port
+    description: >-
+      Source RCON port. Empty uses the game port + 2, Path of Titans' default. Add it as an allocation
+      to reach RCON from outside; the panel console uses it locally either way.
+    order: 13
+    env_variable: RCON_PORT
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|integer|between:1024,65535"
+  - name: RCON Password
+    description: >-
+      Password for RCON tools from outside (8 or more characters). Empty generates a random one on each
+      start, which only the panel console uses.
+    order: 14
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|min:8|max:64|regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
+  - name: Server List IP
+    description: >-
+      The address the server advertises in the server list. Empty for the default; set it when the list
+      shows the server but joining from it times out while direct connect works.
+    order: 15
+    env_variable: SERVER_LIST_IP
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9.:-]*$/'
+  - name: Extra Arguments
+    description: Additional server command line arguments.
+    order: 16
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
