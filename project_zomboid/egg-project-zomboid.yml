@@ -16,10 +16,11 @@ startup_commands:
   # cache dir put the Zomboid folder (config, saves, database) in the server root. The server
   # reads console commands from stdin, and -adminpassword answers the admin password prompt of
   # the first start. Values are expanded inside quotes, never re-parsed by the shell.
+  # -XX:-UseBASE64Intrinsics mitigates CVE-2026-114938 ("Java4Shell") in the bundled Java 17.
   Default: >-
     LD_LIBRARY_PATH=/home/container/linux64:/home/container:/home/container/jre64/lib
     LD_PRELOAD=/home/container/jre64/lib/libjsig.so PATH="/home/container/jre64/bin:${PATH}"
-    ./ProjectZomboid64 -Xmx{{JAVA_MEMORY}}m -Duser.home=/home/container --
+    ./ProjectZomboid64 -Xmx{{JAVA_MEMORY}}m -XX:-UseBASE64Intrinsics -Duser.home=/home/container --
     -servername servertest -cachedir=/home/container/Zomboid
     -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -adminpassword "${ADMIN_PASSWORD}"
     {{EXTRA_ARGS}}
