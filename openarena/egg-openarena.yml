@@ -1,0 +1,159 @@
+name: OpenArena
+author: thexylo@pm.me
+description: >-
+  OpenArena, the free and open source arena shooter based on the Quake III Arena engine: deathmatch,
+  team deathmatch, capture the flag and more. Release 0.8.8 dedicated server.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # baseoa/server.cfg (created once by the installer: game type, limits, bots, map rotation) runs
+  # first; name, passwords, player limit and the start map are then passed as +set options, so they
+  # win over the file. fs_homepath keeps logs and downloads in the server root. The console takes
+  # server commands (status, map, kick, say, addbot, ...); stopping sends quit. Values are expanded
+  # inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./oa_ded.x86_64 +set dedicated 2 +set fs_homepath /home/container +set net_port {{SERVER_PORT}}
+    +exec server.cfg +set sv_hostname "${SERVER_NAME}" +set g_password "${SERVER_PASSWORD}"
+    +set rconpassword "${RCON_PASSWORD}" +set sv_maxclients {{MAX_PLAYERS}} +map "${MAP}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "AAS initialized"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # OpenArena server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # OpenArena 0.8.8 is the final release; it is downloaded once. baseoa/server.cfg and the maps
+      # you added are kept on reinstall.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## OpenArena 0.8.8 (the openarena.ws download points to the archived tuxfamily mirror)
+      if [[ ! -x oa_ded.x86_64 || ! -s baseoa/pak0.pk3 ]]; then
+          echo "Downloading OpenArena 0.8.8 (about 400 MB)..."
+          curl -fsSL --retry 3 -o "${WORK}/openarena.zip" https://sourceforge.net/projects/oarena/files/openarena-0.8.8.zip/download \
+              || curl -fsSL --retry 3 -o "${WORK}/openarena.zip" "https://web.archive.org/web/2024/http://download.tuxfamily.org/openarena/rel/088/openarena-0.8.8.zip" \
+              || fail "could not download OpenArena 0.8.8"
+          unzip -qo "${WORK}/openarena.zip" 'openarena-0.8.8/oa_ded.x86_64' 'openarena-0.8.8/baseoa/*' 'openarena-0.8.8/missionpack/*' \
+              'openarena-0.8.8/COPYING' 'openarena-0.8.8/LINUXNOTES' -d "${WORK}" || fail "could not extract OpenArena 0.8.8"
+          [[ -f "${WORK}/openarena-0.8.8/oa_ded.x86_64" ]] || fail "the OpenArena archive has no server"
+          cp -a "${WORK}/openarena-0.8.8"/. /mnt/server/ || fail "could not install OpenArena"
+          chmod +x oa_ded.x86_64
+      fi
+
+      ## baseoa/server.cfg: created once; the panel's name, passwords, player limit and map win over it
+      if [[ ! -f baseoa/server.cfg ]]; then
+          cat > baseoa/server.cfg << 'EOF'
+      // OpenArena server settings. The panel sets sv_hostname, g_password, rconpassword,
+      // sv_maxclients and the start map after this file runs.
+      //
+      // Game type: 0 = deathmatch, 1 = tournament, 3 = team deathmatch, 4 = capture the flag,
+      // 5 = one flag CTF, 6 = overload, 7 = harvester, 8 = elimination, 9 = CTF elimination,
+      // 10 = last man standing, 11 = double domination, 12 = domination
+      set g_gametype 0
+      set fraglimit 30
+      set capturelimit 8
+      set timelimit 15
+      // Bots fill the server up to this many players (0 = no bots), at skill 1-5
+      set bot_minplayers 0
+      set g_spSkill 3
+      set g_allowVote 1
+      set g_inactivity 0
+      set sv_allowDownload 1
+      set sv_pure 1
+
+      // Map rotation (deathmatch maps); after the start map, the rotation begins at d1
+      set d1 "map aggressor ; set nextmap vstr d2"
+      set d2 "map oa_dm1 ; set nextmap vstr d3"
+      set d3 "map oa_dm2 ; set nextmap vstr d4"
+      set d4 "map oa_dm3 ; set nextmap vstr d5"
+      set d5 "map oa_dm4 ; set nextmap vstr d6"
+      set d6 "map oa_dm5 ; set nextmap vstr d1"
+      set nextmap "vstr d1"
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: OpenArena Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to turn rcon off.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Map
+    description: Map to start with, e.g. aggressor, oa_dm1 - oa_dm7, oa_ctf2, oa_rpg3dm2.
+    order: 5
+    env_variable: MAP
+    default_value: aggressor
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Extra Arguments
+    description: Additional +set options, e.g. +set g_gametype 4 +set bot_minplayers 4.
+    order: 6
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
