@@ -1,0 +1,257 @@
+name: Space Engineers
+author: thexylo@pm.me
+description: >-
+  Sandbox game about engineering, construction, exploration and survival in space and on planets.
+  The Windows-only dedicated server (Steam app 298740) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server runs on Proton's built-in .NET (Wine Mono). It refuses to start unless the registry
+  # shows the Visual C++ 2015-2019 runtime, which Wine provides itself, so the shell adds that key
+  # first. It keeps config, world and logs in the instance folder (-path) and writes no console
+  # output, so its newest log is streamed to the console; older logs are moved to instance/Logs.
+  # It reads no console input. Server Password is stored as the salted hash the server expects.
+  # Wine starts the server in its own process group, and SIGINT would make it exit without saving,
+  # so the shell traps the stop signal and calls the server's Remote API (local only, port 8080,
+  # signed with RemoteSecurityKey from the config): save the world, then shut down; it waits for
+  # that. Proton runs in its own session so the signal does not take it away.
+  Default: >-
+    mkdir -p instance/Logs; mv instance/SpaceEngineersDedicated_*.log instance/Logs/ 2>/dev/null;
+    python3 -c 'import base64,hashlib,os,re;f="instance/SpaceEngineers-Dedicated.cfg";c=open(f).read();
+    s=base64.b64decode(re.search("<ServerPasswordSalt>(.+?)</ServerPasswordSalt>",c).group(1));pw=os.environ["SERVER_PASSWORD"];
+    h=base64.b64encode(hashlib.pbkdf2_hmac("sha1",pw.encode(),s,10000,20)).decode() if pw else "";
+    open(f,"w").write(re.sub("<ServerPasswordHash>.*?</ServerPasswordHash>|<ServerPasswordHash ?/>","<ServerPasswordHash>"+h+"</ServerPasswordHash>",c))';
+    api() { python3 -c 'import base64,hashlib,hmac,random,re,sys,urllib.request as u,email.utils as e;
+    k=re.search("<RemoteSecurityKey>(.+?)</RemoteSecurityKey>",open("instance/SpaceEngineers-Dedicated.cfg").read()).group(1);
+    p="/vrageremote"+sys.argv[2];n=str(random.getrandbits(48));d=e.formatdate(usegmt=True);
+    h=base64.b64encode(hmac.new(base64.b64decode(k),(p+"\r\n"+n+"\r\n"+d+"\r\n").encode(),hashlib.sha1).digest()).decode();
+    u.urlopen(u.Request("http://127.0.0.1:8080"+p,method=sys.argv[1],headers={"Date":d,"Authorization":n+":"+h}),timeout=600)' "$@" 2>/dev/null; };
+    export PROTON_USE_XALIA=0;
+    proton run reg add 'HKLM\SOFTWARE\Classes\Installer\Dependencies\Microsoft.VS.VC_RuntimeMinimumVSU_amd64,v14' /f >/dev/null 2>&1;
+    setsid proton run ./DedicatedServer64/SpaceEngineersDedicated.exe -noconsole -ignorelastsession
+    -path 'Z:\home\container\instance' -port {{SERVER_PORT}} -maxPlayers "${MAX_PLAYERS}" {{EXTRA_ARGS}} </dev/null & SRV=$!;
+    trap 'echo "Saving the world and stopping..."; api PATCH /v1/session && api DELETE /v1/server || pkill -INT -f "^\./DedicatedServer64/SpaceEngineersDedicated\.exe"' INT;
+    until ls instance/SpaceEngineersDedicated_*.log >/dev/null 2>&1 || ! kill -0 ${SRV} 2>/dev/null; do sleep 1; done;
+    tail -n +1 -F instance/SpaceEngineersDedicated_*.log --pid=${SRV} 2>/dev/null &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    instance/SpaceEngineers-Dedicated.cfg:
+      parser: xml
+      create_new: false
+      replace:
+        - match: ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: WorldName
+          replace_with: "{{env.WORLD_NAME}}"
+        - match: LoadWorld
+          replace_with: "{{env.WORLD_NAME}}"
+        - match: PremadeCheckpointPath
+          replace_with: 'Z:\home\container\Content\CustomWorlds\{{env.WORLD_TEMPLATE}}'
+        - match: SessionSettings.GameMode
+          replace_with: "{{env.GAME_MODE}}"
+        - match: SessionSettings.MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: IP
+          replace_with: 0.0.0.0
+        - match: ServerPort
+          replace_with: "{{server.build.default.port}}"
+        - match: SteamPort
+          replace_with: "{{env.STEAM_PORT}}"
+        - match: IgnoreLastSession
+          replace_with: "true"
+        - match: ServerPasswordHash
+          replace_with: ""
+        - match: RemoteApiEnabled
+          replace_with: "true"
+        - match: RemoteApiIP
+          replace_with: 127.0.0.1
+        - match: RemoteApiPort
+          replace_with: "8080"
+  startup:
+    done:
+      - "Game ready..."
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Space Engineers dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/DedicatedServer64/SpaceEngineersDedicated.exe
+      CONFIG=/mnt/server/instance/SpaceEngineers-Dedicated.cfg
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries (Proton passes the server's Steam calls on to the Linux library)
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server config: a new world named after LoadWorld is created from PremadeCheckpointPath on the
+      ## first start. The panel settings are written into it on every start; the password salt and the
+      ## Remote API key (used to save and stop the server) are generated once here.
+      mkdir -p /mnt/server/instance
+      if [[ ! -f "${CONFIG}" ]]; then
+          cat > "${CONFIG}" <<EOF
+      <?xml version="1.0"?>
+      <MyConfigDedicated xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+        <SessionSettings>
+          <GameMode>Survival</GameMode>
+          <MaxPlayers>4</MaxPlayers>
+        </SessionSettings>
+        <LoadWorld>World</LoadWorld>
+        <IP>0.0.0.0</IP>
+        <SteamPort>8766</SteamPort>
+        <ServerPort>27016</ServerPort>
+        <ServerName>Space Engineers Server</ServerName>
+        <WorldName>World</WorldName>
+        <PremadeCheckpointPath>Z:\home\container\Content\CustomWorlds\Star System</PremadeCheckpointPath>
+        <IgnoreLastSession>true</IgnoreLastSession>
+        <ServerPasswordHash />
+        <ServerPasswordSalt>$(head -c 16 /dev/urandom | base64)</ServerPasswordSalt>
+        <RemoteApiEnabled>true</RemoteApiEnabled>
+        <RemoteSecurityKey>$(head -c 16 /dev/urandom | base64)</RemoteSecurityKey>
+        <RemoteApiIP>127.0.0.1</RemoteApiIP>
+        <RemoteApiPort>8080</RemoteApiPort>
+      </MyConfigDedicated>
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Space Engineers Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: World Name
+    description: >-
+      Name of the world to load from instance/Saves. When it does not exist, a new world with this
+      name is created from the World Template.
+    order: 2
+    env_variable: WORLD_NAME
+    default_value: World
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9 _.-]+$/'
+  - name: World Template
+    description: Built-in world a new world is created from (only used when the world does not exist yet).
+    order: 3
+    env_variable: WORLD_TEMPLATE
+    default_value: Star System
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Star System,Empty World,Earth Planet,Mars Planet,Alien Planet,Moon Base,Home System,Alien System,Distant Moons,Lone Survivor,Crashed Red Ship,Red Ship,Red Ship 2,Pertam Orbiter,Green Station,Asteroid Armory,Rival Platforms,Dead Drop Arena"
+  - name: Game Mode
+    description: Game mode of a new world (Survival or Creative). Existing worlds keep their own.
+    order: 4
+    env_variable: GAME_MODE
+    default_value: Survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Survival,Creative"
+  - name: Max Players
+    description: Maximum number of players.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "4"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 6
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Steam Port
+    description: UDP port for Steam communication.
+    order: 7
+    env_variable: STEAM_PORT
+    default_value: "8766"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional server launch parameters.
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Space Engineers dedicated server.
+    order: 10
+    env_variable: SRCDS_APPID
+    default_value: "298740"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:298740"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 11
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
