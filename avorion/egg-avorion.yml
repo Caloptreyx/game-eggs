@@ -1,0 +1,232 @@
+name: Avorion
+author: thexylo@pm.me
+description: >-
+  A procedural co-op space sandbox where players build their own space ships out of dynamically
+  scalable blocks. Fight epic space battles, explore, mine, trade, wage wars and build your own
+  empire. Native Linux dedicated server (Steam app 565060).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Folded into a single line. The galaxy lives in galaxies/<Galaxy Name>/. The server password can
+  # only be set in the galaxy's server.ini, so it is written there on every start (the file is
+  # created with just that entry for a new galaxy; the server adds every other setting to it).
+  # Seed and Scenario only apply when the galaxy is created. The query ports are fixed offsets
+  # from the game port: +1 game query, +2 Steam query, +3 Steam master. The server looks up its
+  # home directory (for galaxy backups, ~/.avorion/backups) through the passwd database and aborts
+  # when the container user has no entry, so one is provided through nss_wrapper. The console takes
+  # server commands (/save, /stop, /kick, ...); /stop saves the galaxy before the server exits.
+  # Values are expanded inside quotes, never re-parsed by the shell. Keep "} }" spaced: "}}" is a
+  # placeholder delimiter for the image.
+  Default: >-
+    GALAXY_DIR="galaxies/${GALAXY_NAME}"; mkdir -p "${GALAXY_DIR}";
+    if [ -f "${GALAXY_DIR}/server.ini" ]; then NEW_GALAXY=0;
+    else NEW_GALAXY=1; printf '[Administration]\npassword=\n' > "${GALAXY_DIR}/server.ini"; fi;
+    perl -pi -e 's/^password=.*/password=$ENV{SERVER_PASSWORD}/' "${GALAXY_DIR}/server.ini";
+    getent passwd "$(id -u)" >/dev/null || { printf "container:x:%s:%s::/home/container:/bin/bash\n" "$(id -u)" "$(id -g)" > /tmp/passwd;
+    export LD_PRELOAD=libnss_wrapper.so NSS_WRAPPER_PASSWD=/tmp/passwd NSS_WRAPPER_GROUP=/etc/group; };
+    LD_LIBRARY_PATH=./linux64 ./bin/AvorionServer --datapath galaxies --galaxy-name "${GALAXY_NAME}"
+    --port {{SERVER_PORT}} --query-port $(( {{SERVER_PORT}} + 1 ))
+    --steam-query-port $(( {{SERVER_PORT}} + 2 )) --steam-master-port $(( {{SERVER_PORT}} + 3 ))
+    --server-name "${SERVER_NAME}" --max-players {{MAX_PLAYERS}} --difficulty {{DIFFICULTY}}
+    --save-interval {{SAVE_INTERVAL}} --listed $( [ "${LISTED}" = "1" ] && echo true || echo false )
+    $( [ -n "${ADMIN_ID}" ] && printf -- '--admin %s' "${ADMIN_ID}" )
+    $( [ "${NEW_GALAXY}" = "1" ] && printf -- '--scenario %s' "${SCENARIO}" )
+    $( [ "${NEW_GALAXY}" = "1" ] && [ -n "${SEED}" ] && printf -- '--seed %s' "${SEED}" )
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Server startup complete.
+    strip_ansi: false
+  stop:
+    type: command
+    value: /stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Avorion dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/bin/AvorionServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/galaxies
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Avorion Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. No spaces.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Admin SteamID64
+    description: >-
+      SteamID64 of a player to add as server administrator, e.g. 76561198000000000. Admins are kept
+      in the galaxy's admin.xml; removing the ID here does not remove an existing admin.
+    order: 3
+    env_variable: ADMIN_ID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|regex:/^\d{17}$/'
+  - name: Galaxy Name
+    description: >-
+      Galaxy to load from galaxies/, created on first start. Letters, digits, _ and -. Changing it
+      starts a new galaxy; the old one is kept.
+    order: 4
+    env_variable: GALAXY_NAME
+    default_value: avorion_galaxy
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players online at the same time.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,250"
+  - name: Difficulty
+    description: >-
+      -3 = Beginner, -2 = Easy, -1 = Normal, 0 = Veteran, 1 = Expert, 2 = Hardcore, 3 = Insane.
+    order: 6
+    env_variable: DIFFICULTY
+    default_value: "-1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|in:-3,-2,-1,0,1,2,3"
+  - name: Scenario
+    description: normal or creative. Only applies when a new galaxy is created.
+    order: 7
+    env_variable: SCENARIO
+    default_value: normal
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|in:normal,creative"
+  - name: Seed
+    description: >-
+      Galaxy seed, letters and digits. Leave empty for a random seed. Only applies when a new galaxy
+      is created.
+    order: 8
+    env_variable: SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+  - name: Listed
+    description: >-
+      List the server in the public server browser. Unlisted servers can only be joined directly,
+      which needs the Game Query port to be 27003 (see the README). (1 = on, 0 = off)
+    order: 9
+    env_variable: LISTED
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Save Interval
+    description: Seconds between automatic galaxy saves.
+    order: 10
+    env_variable: SAVE_INTERVAL
+    default_value: "600"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:60,86400"
+  - name: Extra Arguments
+    description: >-
+      Additional server parameters, e.g. --collision-damage 0.5 --same-start-sector false
+      --threads 4. Run ./bin/AvorionServer --help for the full list.
+    order: 11
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 12
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. beta. Leave empty for the stable release. Reinstall after
+      changing it.
+    order: 13
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Avorion dedicated server.
+    order: 14
+    env_variable: SRCDS_APPID
+    default_value: "565060"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:565060"
