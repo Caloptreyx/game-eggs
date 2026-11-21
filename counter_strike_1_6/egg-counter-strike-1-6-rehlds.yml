@@ -1,0 +1,261 @@
+name: Counter-Strike 1.6 - ReHLDS
+author: thexylo@pm.me
+description: >-
+  Counter-Strike 1.6 on ReHLDS, the reverse-engineered and improved GoldSource engine, with
+  ReGameDLL_CS, Metamod-R, AMX Mod X and ReAPI. Native Linux HLDS (Steam app 90).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The ReHLDS engine and ReGameDLL_CS game library are kept in .rehlds/ and copied over the
+  # Steam files on every start, so an HLDS update through SteamCMD never brings back the stock
+  # engine; liblist.gam is pointed at Metamod-R for the same reason. hlds_run is the server's own
+  # start script; ulimit keeps a crash from writing a core file into the server directory. Name and
+  # passwords are written to cstrike/server.cfg on every start. The console takes server commands
+  # (status, changelevel, amxx plugins, meta list, ...); stopping sends quit.
+  Default: >-
+    cp -a .rehlds/engine/. ./ && cp -a .rehlds/cstrike/. cstrike/ &&
+    sed -i 's|^gamedll_linux.*|gamedll_linux "addons/metamod/metamod_i386.so"|' cstrike/liblist.gam;
+    ulimit -c 0; ./hlds_run -game cstrike -console -port {{SERVER_PORT}} +ip 0.0.0.0 -strictportbind
+    -norestart +sv_lan 0 +maxplayers {{MAX_PLAYERS}} +map "{{SRCDS_MAP}}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    cstrike/server.cfg:
+      parser: file
+      replace:
+        - match: "hostname "
+          replace_with: hostname "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "sv_password "
+          replace_with: sv_password "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "rcon_password "
+          replace_with: rcon_password "{{env.RCON_PASSWORD}}"
+          insert_new: true
+  startup:
+    done:
+      - Connection to Steam servers successful
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Counter-Strike 1.6 ReHLDS dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/hlds_linux
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game. App 90 (HLDS) only installs the cstrike files completely after a first
+      ## pass with the Windows platform; the Linux pass then adds the Linux binaries. The released
+      ## ReHLDS needs the pre-25th-anniversary engine files, so the steam_legacy branch is installed
+      ## (the current branch's steam_api lacks SteamGameServer_Init).
+      ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+          +app_set_config 90 mod cstrike +app_update "${SRCDS_APPID}" -beta "${SRCDS_BETAID}" validate +quit \
+          || echo "SteamCMD Windows pass ended with an error; continuing with the Linux pass"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType linux +login anonymous \
+              +app_set_config 90 mod cstrike +app_update "${SRCDS_APPID}" -beta "${SRCDS_BETAID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" && -d /mnt/server/cstrike/maps ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" && -d /mnt/server/cstrike/maps ]] \
+          || fail "SteamCMD could not install app ${SRCDS_APPID} with Counter-Strike; check the install log and free disk space"
+      # The Windows pass leaves Windows binaries that the Linux server does not use.
+      find /mnt/server -maxdepth 2 \( -name '*.exe' -o -name '*.dll' \) -delete
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## ReHLDS stack from the upstream releases: the ReHLDS engine and ReGameDLL_CS are staged in
+      ## .rehlds/ (the startup copies them over the Steam files); Metamod-R, AMX Mod X and ReAPI are
+      ## installed into cstrike/addons, keeping existing configuration files.
+      STAGE=/mnt/server/.rehlds
+      rm -rf "${STAGE}" /tmp/rehlds && mkdir -p "${STAGE}/engine" "${STAGE}/cstrike" /tmp/rehlds
+      cd /tmp/rehlds || fail "cannot enter /tmp/rehlds"
+      for repo in ReHLDS ReGameDLL_CS Metamod-R ReAPI; do
+          URL=$(curl -fsSL "https://api.github.com/repos/rehlds/${repo}/releases/latest" \
+              | jq -r '.assets[] | select(.name | test("-bin-.*\\.zip$")) | .browser_download_url')
+          [[ -n "${URL}" ]] || fail "could not find the latest ${repo} release"
+          echo "Installing ${URL##*/}"
+          curl -fsSL -o "${repo}.zip" "${URL}" || fail "could not download ${URL}"
+          mkdir -p "${repo}" && unzip -q -o "${repo}.zip" -d "${repo}" || fail "could not extract ${URL##*/}"
+      done
+      cp -a ReHLDS/bin/linux32/. "${STAGE}/engine/" || fail "the ReHLDS release has no bin/linux32"
+      chmod +x "${STAGE}/engine/hlds_linux" "${STAGE}/engine/hltv" # the release zip has no exec bits
+      cp -a ReGameDLL_CS/bin/linux32/cstrike/dlls ReGameDLL_CS/bin/linux32/cstrike/delta.lst "${STAGE}/cstrike/" \
+          || fail "the ReGameDLL_CS release has no Linux cs.so"
+      # ReGameDLL's game.cfg and game_init.cfg are only added when missing
+      for f in game.cfg game_init.cfg; do
+          [[ -f "/mnt/server/cstrike/${f}" ]] || cp -a "ReGameDLL_CS/bin/linux32/cstrike/${f}" /mnt/server/cstrike/
+      done
+
+      AMXX_BASE=$(curl -fsSL https://www.amxmodx.org/amxxdrop/1.10/amxmodx-latest-base-linux) || fail "could not look up AMX Mod X"
+      AMXX_CS=$(curl -fsSL https://www.amxmodx.org/amxxdrop/1.10/amxmodx-latest-cstrike-linux) || fail "could not look up AMX Mod X"
+      for f in "${AMXX_BASE}" "${AMXX_CS}"; do
+          echo "Installing ${f}"
+          curl -fsSL -o amxx.tar.gz "https://www.amxmodx.org/amxxdrop/1.10/${f}" || fail "could not download ${f}"
+          mkdir -p amxx && tar -xzf amxx.tar.gz -C amxx || fail "could not extract ${f}"
+      done
+      cd /mnt/server/cstrike || fail "cannot enter cstrike"
+      # binaries and plugins are replaced on every install, existing configs are kept
+      mkdir -p addons/metamod
+      cp -a /tmp/rehlds/Metamod-R/addons/metamod/metamod_i386.so addons/metamod/
+      [[ -f addons/metamod/config.ini ]] || cp -a /tmp/rehlds/Metamod-R/addons/metamod/config.ini addons/metamod/
+      cp -an /tmp/rehlds/amxx/addons/. addons/
+      cp -a /tmp/rehlds/amxx/addons/amxmodx/{dlls,modules,plugins,scripting,data} addons/amxmodx/ \
+          || fail "could not install AMX Mod X"
+      cp -a /tmp/rehlds/ReAPI/addons/amxmodx/modules/. addons/amxmodx/modules/
+      grep -qx "reapi" addons/amxmodx/configs/modules.ini || echo "reapi" >> addons/amxmodx/configs/modules.ini
+      touch addons/metamod/plugins.ini
+      grep -q "amxmodx_mm_i386.so" addons/metamod/plugins.ini || echo "linux addons/amxmodx/dlls/amxmodx_mm_i386.so" >> addons/metamod/plugins.ini
+
+      ## server.cfg: the panel keeps hostname and passwords in sync on every start.
+      # Only created when missing or blank, so custom settings survive reinstalls.
+      CFG=/mnt/server/cstrike/server.cfg
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // Counter-Strike 1.6 server configuration.
+      // hostname, sv_password and rcon_password are set from the panel.
+      hostname "Counter-Strike 1.6 Server"
+      sv_password ""
+      rcon_password ""
+
+      mp_timelimit 30
+      mp_roundtime 2.5
+      mp_freezetime 6
+      mp_buytime 0.25
+      mp_startmoney 800
+      mp_friendlyfire 0
+      mp_autoteambalance 1
+      mp_limitteams 2
+      sv_region 255
+      sv_allowupload 0
+      sv_allowdownload 1
+      log on
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned.cfg
+      exec listip.cfg
+      EOF
+      fi
+      touch /mnt/server/cstrike/banned.cfg /mnt/server/cstrike/listip.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: "Counter-Strike 1.6 ReHLDS Server"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: Map to load on start, e.g. de_dust2, de_inferno, cs_office, de_nuke.
+    order: 2
+    env_variable: SRCDS_MAP
+    default_value: de_dust2
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,32"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 5
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +sys_ticrate 1000 -pingboost 2.
+    order: 6
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 7
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam Branch
+    description: HLDS branch; ReHLDS needs steam_legacy.
+    order: 8
+    env_variable: SRCDS_BETAID
+    default_value: steam_legacy
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:steam_legacy"
+  - name: Steam App ID
+    description: "Steam app id of the Half-Life dedicated server (HLDS)."
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "90"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:90"
