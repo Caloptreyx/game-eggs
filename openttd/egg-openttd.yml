@@ -1,0 +1,261 @@
+name: OpenTTD
+author: thexylo@pm.me
+description: >-
+  OpenTTD, the open source transport simulation game based on Transport Tycoon Deluxe. Official
+  Linux dedicated server with the free OpenGFX graphics set.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # OpenTTD uses its own folder (the server root) for saves (save/), downloaded content and
+  # scripts. The game saved on exit (save/autosave/exit.sav) is loaded again on start when it
+  # exists; otherwise a new map is generated from the settings in openttd.cfg. -x keeps the server
+  # from rewriting openttd.cfg. The server loads the libraries shipped in lib/ (the binary does not
+  # look there itself). It reads console commands (save, say, kick, ...) from the console; stopping
+  # sends exit, which saves the game first (autosave_on_exit).
+  Default: >-
+    SAVE=/home/container/save/autosave/exit.sav;
+    LD_LIBRARY_PATH=/home/container/lib ./openttd -D 0.0.0.0:{{SERVER_PORT}} -c /home/container/openttd.cfg -x
+    $( [ -f "${SAVE}" ] && printf -- '-g %s' "${SAVE}" ) {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    openttd.cfg:
+      parser: ini
+      replace:
+        - match: network.server_name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: network.server_password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: network.rcon_password
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: network.admin_password
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: network.server_game_type
+          replace_with: "{{env.GAME_TYPE}}"
+        - match: network.max_clients
+          replace_with: "{{env.MAX_CLIENTS}}"
+        - match: network.max_companies
+          replace_with: "{{env.MAX_COMPANIES}}"
+        - match: network.server_port
+          replace_with: "{{server.build.default.port}}"
+        - match: network.server_admin_port
+          replace_with: "{{env.ADMIN_PORT}}"
+        - match: gui.autosave_on_exit
+          replace_with: "true"
+        - match: game_creation.map_x
+          replace_with: "{{env.MAP_X}}"
+        - match: game_creation.map_y
+          replace_with: "{{env.MAP_Y}}"
+        - match: game_creation.starting_year
+          replace_with: "{{env.STARTING_YEAR}}"
+  startup:
+    done:
+      - "Network revision name:"
+    strip_ansi: false
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # OpenTTD dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; openttd.cfg, save/ and content_download/ are kept.
+
+      CDN=https://cdn.openttd.org
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the version: stable or testing from the CDN's latest.yaml, or a fixed version
+      latest() { # $1 = openttd-releases|opengfx-releases, $2 = stable|testing
+          curl -fsSL --retry 3 "${CDN}/$1/latest.yaml" | awk -v want="$2" '
+              /^- version:/ { v = $3 } /name:/ && $2 == want { print v; exit }'
+      }
+      case "${OPENTTD_VERSION:-stable}" in
+          stable|testing) version=$(latest openttd-releases "${OPENTTD_VERSION:-stable}") ;;
+          *) version="${OPENTTD_VERSION}" ;;
+      esac
+      [[ -n "${version}" ]] || fail "could not look up the OpenTTD ${OPENTTD_VERSION} version"
+      gfx=$(latest opengfx-releases stable)
+      [[ -n "${gfx}" ]] || fail "could not look up the OpenGFX version"
+
+      echo "Downloading OpenTTD ${version}..."
+      curl -fsSL --retry 3 -o "${WORK}/openttd.tar.xz" \
+          "${CDN}/openttd-releases/${version}/openttd-${version}-linux-generic-amd64.tar.xz" \
+          || fail "could not download OpenTTD ${version} (does the version exist?)"
+      rm -rf ai baseset game lang lib scripts docs share openttd
+      tar -xJf "${WORK}/openttd.tar.xz" --strip-components=1 || fail "could not extract OpenTTD ${version}"
+      [[ -x openttd ]] || fail "the OpenTTD ${version} archive has no server binary"
+
+      echo "Downloading OpenGFX ${gfx}..."
+      curl -fsSL --retry 3 -o "${WORK}/opengfx.zip" "${CDN}/opengfx-releases/${gfx}/opengfx-${gfx}-all.zip" \
+          || fail "could not download OpenGFX ${gfx}"
+      unzip -q -o "${WORK}/opengfx.zip" -d "${WORK}" || fail "could not extract OpenGFX"
+      mkdir -p baseset
+      tar -xf "${WORK}"/opengfx-*.tar -C baseset || fail "could not extract OpenGFX"
+      echo "${version}" > .openttd-version
+
+      ## openttd.cfg: the panel only replaces keys that exist, so the managed ones are created here;
+      ## the server adds every other setting the first time it saves its config.
+      if [[ ! -f openttd.cfg ]]; then
+          cat > openttd.cfg << 'EOF'
+      [network]
+      server_name = OpenTTD Server
+      server_password =
+      rcon_password =
+      admin_password =
+      server_game_type = public
+      max_clients = 25
+      max_companies = 15
+      server_port = 3979
+      server_admin_port = 3977
+
+      [gui]
+      autosave_on_exit = true
+
+      [game_creation]
+      map_x = 8
+      map_y = 8
+      starting_year = 1950
+      EOF
+      fi
+      mkdir -p save
+
+      echo "-----------------------------------------"
+      echo "OpenTTD ${version} with OpenGFX ${gfx} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: OpenTTD Version
+    description: >-
+      stable for the current release, testing for the newest release candidate, or a version such as
+      15.3. Players need the same version. Reinstall to change versions; saves and openttd.cfg are kept.
+    order: 1
+    env_variable: OPENTTD_VERSION
+    default_value: stable
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(stable|testing|\d+\.\d+(-(beta|RC)\d+)?)$/'
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: OpenTTD Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: RCON Password
+    description: Password for remote console commands from game clients (rcon). Leave empty to turn rcon off.
+    order: 4
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Admin Password
+    description: >-
+      Password of the admin port (for admin tools such as bots). Leave empty to turn the admin port
+      off.
+    order: 5
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Visibility
+    description: public (listed in the server list), invite-only (join by invite code) or local (LAN and direct connect only).
+    order: 6
+    env_variable: GAME_TYPE
+    default_value: public
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:public,invite-only,local"
+  - name: Max Clients
+    description: Maximum number of connected players.
+    order: 7
+    env_variable: MAX_CLIENTS
+    default_value: "25"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,255"
+  - name: Max Companies
+    description: Maximum number of companies.
+    order: 8
+    env_variable: MAX_COMPANIES
+    default_value: "15"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,240"
+  - name: Map Width
+    description: Width of a new map as a power of two (6 = 64 tiles ... 12 = 4096 tiles). Only for new maps.
+    order: 9
+    env_variable: MAP_X
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:6,12"
+  - name: Map Height
+    description: Height of a new map as a power of two (6 = 64 tiles ... 12 = 4096 tiles). Only for new maps.
+    order: 10
+    env_variable: MAP_Y
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:6,12"
+  - name: Starting Year
+    description: Starting year of a new map.
+    order: 11
+    env_variable: STARTING_YEAR
+    default_value: "1950"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,5000000"
+  - name: Admin Port
+    description: TCP port of the admin port, used by admin tools. Needs its own allocation when the Admin Password is set.
+    order: 12
+    env_variable: ADMIN_PORT
+    default_value: "3977"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
