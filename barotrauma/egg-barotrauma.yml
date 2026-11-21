@@ -1,0 +1,172 @@
+name: Barotrauma
+author: thexylo@pm.me
+description: >-
+  Barotrauma is a 2D co-op submarine simulator - in space, on Jupiter's moon Europa - with
+  survival horror and RPG elements. Steer your submarine, complete missions, fight monsters, fix
+  leaks, operate machinery, man the guns and stay alert. Native Linux dedicated server (Steam app
+  1026340).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, ports, visibility, player limit and password are passed as launch arguments, which take
+  # precedence over serversettings.xml; the server writes them back to that file. On a terminal the
+  # server's key-by-key console reader fills the input line with garbage and runs it as commands
+  # (it even swallows the panel's commands), so its output is piped and its input is /dev/null: the
+  # server then disables console input, and the console only shows the log. The pipe's reader
+  # ignores SIGINT so it outlives the server and catches its shutdown messages. -public takes
+  # true/false. Values are expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./DedicatedServer -name "${SERVER_NAME}" -port {{SERVER_PORT}} -queryport {{QUERY_PORT}}
+    -public $( [ "${PUBLIC}" = "1" ] && printf true || printf false )
+    -maxplayers {{MAX_PLAYERS}} -password "${SERVER_PASSWORD}" {{EXTRA_ARGS}} < /dev/null 2>&1
+    | (trap '' INT; cat)
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Server started
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Barotrauma dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/DedicatedServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries (Steam server registration and queries)
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list (at most 60 characters).
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Barotrauma Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:60|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for an open server.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players (1-16).
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,16"
+  - name: Public
+    description: >-
+      List the server in the in-game server browser. Steam queries on the Query Port only answer
+      when this is on. (1 = on, 0 = join by IP only)
+    order: 4
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: >-
+      Additional launch parameters, e.g. -playstyle Serious -karmaenabled true -language German
+    order: 5
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install. Leave empty for the stable release. Reinstall after changing
+      it.
+    order: 7
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Query Port
+    description: >-
+      UDP port for Steam server queries (server list). Must differ from the game port and needs its
+      own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Steam App ID
+    description: Steam app id of the Barotrauma dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "1026340"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1026340"
