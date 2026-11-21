@@ -1,0 +1,338 @@
+name: Terraria
+author: thexylo@pm.me
+description: >-
+  Dig, fight, explore, build! The official Terraria dedicated server from terraria.org, or TShock,
+  the server mod with accounts, permissions, anti-cheat and plugins.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Server Type picks the binary the install script put in place. The vanilla server ships its own
+  # Mono runtime. TShock is a .NET application: the install script puts the runtime into .dotnet/,
+  # which DOTNET_ROOT points the launcher to. The image has no ICU library, so .NET runs in
+  # invariant globalization mode; PREDEFINED_CULTURES_ONLY=0 lets TShock still create the en-US
+  # culture it asks for. TShock takes the port and player slots from the command line (its own
+  # config.json would override serverconfig.txt otherwise).
+  Default: >-
+    if [ "${SERVER_TYPE}" = "tshock" ]; then
+    [ -x ./TShock.Server ] || { echo "TShock is not installed. Reinstall the server after changing Server Type."; exit 1; };
+    export DOTNET_ROOT=/home/container/.dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY=0;
+    exec ./TShock.Server -config serverconfig.txt -port {{SERVER_PORT}} -maxplayers {{MAX_PLAYERS}} {{EXTRA_ARGS}};
+    else
+    [ -x ./TerrariaServer.bin.x86_64 ] || { echo "The vanilla server is not installed. Reinstall the server after changing Server Type."; exit 1; };
+    exec ./TerrariaServer.bin.x86_64 -config serverconfig.txt {{EXTRA_ARGS}};
+    fi
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # Plain key=value file; the plain parser writes values as-is, as Terraria reads them.
+    serverconfig.txt:
+      parser: file
+      create_new: false
+      replace:
+        - match: world=
+          replace_with: world=/home/container/worlds/{{env.WORLD_NAME}}.wld
+          insert_new: true
+        - match: worldpath=
+          replace_with: worldpath=/home/container/worlds
+          insert_new: true
+        - match: worldname=
+          replace_with: worldname={{env.WORLD_NAME}}
+          insert_new: true
+        - match: autocreate=
+          replace_with: autocreate={{env.WORLD_SIZE}}
+          insert_new: true
+        - match: difficulty=
+          replace_with: difficulty={{env.DIFFICULTY}}
+          insert_new: true
+        - match: seed=
+          replace_with: seed={{env.WORLD_SEED}}
+          insert_new: true
+        - match: port=
+          replace_with: port={{server.build.default.port}}
+          insert_new: true
+        - match: maxplayers=
+          replace_with: maxplayers={{env.MAX_PLAYERS}}
+          insert_new: true
+        - match: password=
+          replace_with: password={{env.SERVER_PASSWORD}}
+          insert_new: true
+        - match: motd=
+          replace_with: motd={{env.MOTD}}
+          insert_new: true
+        - match: secure=
+          replace_with: secure={{env.SECURE}}
+          insert_new: true
+  startup:
+    done:
+      - Server started
+    strip_ansi: false
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Terraria (vanilla or TShock) server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs the server selected by Server Type. Worlds, serverconfig.txt and tshock/ are kept on
+      # reinstall.
+
+      TERRARIA_API="https://terraria.org/api"
+      TSHOCK_REPO="Pryaxis/TShock"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      # The installer's /tmp is a small tmpfs (unzip stalls on a "disk full?" prompt when it runs
+      # out), so downloads are unpacked next to the server files instead.
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}"
+      mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      export TMPDIR="${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      # Server files are unpacked to ${WORK}/files first, then put in place by put_files. Each install
+      # lists the files it added in .terraria-files and removes the previous list first: TShock refuses
+      # to start next to the vanilla TerrariaServer.exe, and old binaries must not linger. User files
+      # (worlds, tshock/, plugins added to ServerPlugins/) are never in the list, so they are kept.
+      STAGE="${WORK}/files"
+      MANIFEST=.terraria-files
+
+      put_files() {
+          if [[ -f "${MANIFEST}" ]]; then
+              while IFS= read -r file; do
+                  case "${file}" in ""|/*|*..*) continue ;; esac
+                  rm -f -- "${file}"
+              done < "${MANIFEST}"
+              # Directories left empty go too.
+              sed -n 's#/[^/]*$##p' "${MANIFEST}" | sort -ru | while IFS= read -r dir; do
+                  rmdir -p --ignore-fail-on-non-empty -- "${dir}" 2> /dev/null
+              done
+          fi
+          cp -a "${STAGE}/." /mnt/server/ || fail "could not copy the server files"
+          (cd "${STAGE}" && find . \( -type f -o -type l \) -printf '%P\n') > "${MANIFEST}"
+      }
+
+      install_vanilla() {
+          local requested="${TERRARIA_VERSION,,}" archive digits version
+          if [[ -z "${requested}" || "${requested}" == "latest" ]]; then
+              # Newest first, e.g. ["terraria-server-1458.zip", ...]
+              archive=$(curl -fsSL --retry 3 "${TERRARIA_API}/get/dedicated-servers-names" | jq -r '.[0] // empty')
+              [[ "${archive}" =~ ^terraria-server-[0-9]+\.zip$ ]] || fail "could not look up the latest Terraria server version"
+          else
+              archive="terraria-server-${requested//./}.zip"
+          fi
+          digits="${archive#terraria-server-}"
+          digits="${digits%.zip}"
+          version=$(sed -E 's/(.)/\1./g; s/\.$//' <<< "${digits}")
+
+          echo "Downloading the Terraria ${version} dedicated server..."
+          if ! curl -fsSL --retry 3 -o "${WORK}/terraria-server.zip" "${TERRARIA_API}/download/pc-dedicated-server/${archive}"; then
+              fail "could not download Terraria server ${version}; check that the version exists"
+          fi
+          unzip -q -o "${WORK}/terraria-server.zip" "${digits}/Linux/*" -d "${WORK}/terraria" < /dev/null \
+              || fail "could not extract the Linux server from Terraria ${version}"
+          [[ -f "${WORK}/terraria/${digits}/Linux/TerrariaServer.bin.x86_64" ]] || fail "the Terraria ${version} archive has no Linux server"
+          mv "${WORK}/terraria/${digits}/Linux" "${STAGE}"
+          put_files
+          rm -rf .dotnet # only TShock uses it
+          chmod +x TerrariaServer.bin.x86_64 TerrariaServer
+          echo "vanilla ${version}" > .terraria-version
+      }
+
+      install_tshock() {
+          local requested="${TSHOCK_VERSION}" release_url release tag url dotnet_channel
+          if [[ -z "${requested}" || "${requested,,}" == "latest" ]]; then
+              release_url="https://api.github.com/repos/${TSHOCK_REPO}/releases/latest"
+          else
+              release_url="https://api.github.com/repos/${TSHOCK_REPO}/releases/tags/${requested}"
+          fi
+          release=$(curl -fsSL --retry 3 "${release_url}") || fail "could not find TShock release '${requested:-latest}'"
+          tag=$(jq -r '.tag_name' <<< "${release}")
+          url=$(jq -r '[.assets[] | select(.name | test("linux-x64.*\\.zip$")) | .browser_download_url][0] // empty' <<< "${release}")
+          [[ -n "${url}" ]] || fail "TShock ${tag} has no linux-x64 build"
+
+          echo "Downloading TShock ${tag} ($(jq -r '.name' <<< "${release}"))..."
+          curl -fsSL --retry 3 -o "${WORK}/tshock.zip" "${url}" || fail "could not download TShock ${tag}"
+          unzip -q -o "${WORK}/tshock.zip" -d "${STAGE}" < /dev/null || fail "could not extract TShock ${tag}"
+          # The zip holds a tar archive that keeps the file permissions.
+          for archive in "${STAGE}"/*.tar; do
+              [[ -f "${archive}" ]] || continue
+              tar -xf "${archive}" -C "${STAGE}" && rm -f "${archive}" || fail "could not extract TShock ${tag}"
+          done
+          [[ -f "${STAGE}/TShock.Server" ]] || fail "the TShock ${tag} archive has no TShock.Server"
+          put_files
+          chmod +x TShock.Server
+          echo "tshock ${tag}" > .terraria-version
+
+          ## .NET runtime: the version TShock was built for (e.g. 9.0 for TShock 6)
+          dotnet_channel=$(jq -r '.runtimeTarget.name' ServerPlugins/TShockAPI.deps.json | sed -n 's/.*Version=v\([0-9]*\.[0-9]*\).*/\1/p')
+          [[ -n "${dotnet_channel}" ]] || fail "could not read the .NET version TShock ${tag} needs"
+          echo "Installing the .NET ${dotnet_channel} runtime..."
+          rm -rf .dotnet
+          curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh \
+              || fail "could not download the .NET install script"
+          bash "${WORK}/dotnet-install.sh" --channel "${dotnet_channel}" --runtime dotnet --install-dir /mnt/server/.dotnet --no-path \
+              || fail "could not install the .NET ${dotnet_channel} runtime"
+      }
+
+      case "${SERVER_TYPE}" in
+          tshock) install_tshock ;;
+          *) install_vanilla ;;
+      esac
+
+      ## serverconfig.txt: created once; the panel settings are written to it on every start
+      mkdir -p worlds
+      if [[ ! -f serverconfig.txt ]]; then
+          echo "Creating serverconfig.txt..."
+          cat > serverconfig.txt << 'EOF'
+      # Terraria server configuration: https://terraria.wiki.gg/wiki/Server#Server_config_file
+      # World, port, players, password, motd and the other panel settings are rewritten on every start.
+      world=/home/container/worlds/world.wld
+      worldpath=/home/container/worlds
+      worldname=world
+      autocreate=2
+      difficulty=0
+      seed=
+      port=7777
+      maxplayers=8
+      password=
+      motd=
+      secure=1
+      upnp=0
+      npcstream=60
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Terraria server installed: $(cat .terraria-version)."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Type
+    description: >-
+      vanilla for the official server, tshock for TShock (accounts, permissions, anti-cheat,
+      plugins). Reinstall after changing it; worlds and settings are kept.
+    order: 1
+    env_variable: SERVER_TYPE
+    default_value: vanilla
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:vanilla,tshock"
+  - name: Terraria Version
+    description: >-
+      Vanilla server version: latest, or a version such as 1.4.4.9. Players need the same version.
+      Reinstall to change versions.
+    order: 2
+    env_variable: TERRARIA_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|\d+(\.\d+){2,3})$/']
+  - name: TShock Version
+    description: >-
+      TShock release: latest, or a release tag such as v6.2.1. Each TShock release supports one
+      Terraria version (see the release name). Reinstall to change versions.
+    order: 3
+    env_variable: TSHOCK_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|v?\d+(\.\d+)*(-[\w.]+)?)$/']
+  - name: World Name
+    description: >-
+      World to load from worlds/<name>.wld; a new world is created when it does not exist. Letters,
+      digits, spaces, _ and - only.
+    order: 4
+    env_variable: WORLD_NAME
+    default_value: world
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+( [\w-]+)*$/'
+  - name: World Size
+    description: Size of a new world. (1 = small, 2 = medium, 3 = large)
+    order: 5
+    env_variable: WORLD_SIZE
+    default_value: "2"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:1,2,3"
+  - name: Difficulty
+    description: Difficulty of a new world. (0 = classic, 1 = expert, 2 = master, 3 = journey)
+    order: 6
+    env_variable: DIFFICULTY
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: World Seed
+    description: >-
+      Seed for a new world, also secret seeds such as "for the worthy". Leave empty for a random
+      seed. Has no effect on existing worlds.
+    order: 7
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 8
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,255"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 9
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Message of the Day
+    description: Message shown to players when they join (vanilla server; TShock uses tshock/motd.txt).
+    order: 10
+    env_variable: MOTD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Anti-Cheat
+    description: Terraria's built-in cheat protection. (1 = on, 0 = off)
+    order: 11
+    env_variable: SECURE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: >-
+      Additional launch parameters, e.g. -lang 2 (vanilla), -worldevil crimson or -ip 0.0.0.0
+      (TShock).
+    order: 12
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
