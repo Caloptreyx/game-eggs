@@ -1,0 +1,129 @@
+name: CS2D
+author: thexylo@pm.me
+description: >-
+  CS2D (Counter-Strike 2D), Unreal Software's free top-down 2D shooter inspired by Counter-Strike:
+  terrorists against counter-terrorists with bomb, hostage, VIP, deathmatch and zombie modes, Lua
+  scripting and custom maps. Linux dedicated server.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, password, player limit and the RCON password are written to sys/server.cfg on every
+  # start; the port is a launch argument (fixed while running). Everything else in server.cfg,
+  # sys/mapcycle.cfg and the Lua scripts stays yours. There is nothing to save; the stop signal
+  # (SIGINT) shuts the server down.
+  Default: ./cs2d_dedicated -port {{SERVER_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    sys/server.cfg:
+      parser: file
+      replace:
+        - match: "sv_name "
+          replace_with: "sv_name {{env.SERVER_NAME}}"
+        - match: "sv_password "
+          replace_with: "sv_password {{env.SERVER_PASSWORD}}"
+        - match: "sv_rcon "
+          replace_with: "sv_rcon {{env.RCON_PASSWORD}}"
+        - match: "sv_maxplayers "
+          replace_with: "sv_maxplayers {{env.MAX_PLAYERS}}"
+        - match: "sv_hostport "
+          replace_with: "sv_hostport {{server.build.default.port}}"
+  startup:
+    done:
+      - "----- Server started -----"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # CS2D dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the game files: the current Linux release linked from cs2d.com (unrealsoftware.de needs the
+      ## file's cid parameter for the direct download)
+      GAME_URL=$(curl -fsSL https://www.cs2d.com/download.php | grep -Eo 'https?://[^" ]+get\.php\?get=cs2d_[0-9]+_linux\.zip' | head -1)
+      [[ -n "${GAME_URL}" ]] || fail "could not find the CS2D Linux download on cs2d.com"
+      GAME_FILE=${GAME_URL#*get=}
+      CID=$(curl -fsSL "${GAME_URL}" | grep -o "<a[^>]*download=\"${GAME_FILE}\"[^>]*>" | head -1 | grep -Eo 'cid=[0-9]+')
+      [[ -n "${CID}" ]] || fail "could not resolve the download link of ${GAME_FILE}"
+      echo "Downloading ${GAME_FILE}"
+      curl -fsSL -o game.zip "${GAME_URL}&${CID}" || fail "could not download ${GAME_FILE}"
+
+      # Settings, map cycle, bans and scripts survive reinstalls: existing files in sys/ are kept.
+      rm -rf .cs2d-new && mkdir .cs2d-new
+      unzip -q game.zip -d .cs2d-new || fail "could not extract ${GAME_FILE}"
+      rm -f game.zip
+      cp -rn .cs2d-new/sys/. sys/ 2>/dev/null || { mkdir -p sys && cp -rn .cs2d-new/sys/. sys/; }
+      rm -rf .cs2d-new/sys
+      cp -r .cs2d-new/. . || fail "could not copy the game files"
+      rm -rf .cs2d-new
+
+      ## the dedicated server binary
+      curl -fsSL -o dedicated.zip https://www.unrealsoftware.de/files_pub/cs2d_dedicated_linux.zip \
+          || fail "could not download the CS2D dedicated server"
+      unzip -q -o dedicated.zip cs2d_dedicated || fail "could not extract the CS2D dedicated server"
+      rm -f dedicated.zip
+      chmod +x cs2d_dedicated
+      [[ -f sys/server.cfg ]] || fail "the game files have no sys/server.cfg"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the U.S.G.N. server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: CS2D Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: RCON Password
+    description: Password for remote administration. Leave empty to disable RCON.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
