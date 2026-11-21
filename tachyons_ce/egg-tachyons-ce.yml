@@ -1,0 +1,117 @@
+name: Tachyons CE
+author: thexylo@pm.me
+description: >-
+  Tachyons Community Edition, the free multiplayer space game in the style of FTL: crew ships
+  together, board, raid and fight across a persistent universe. Java dedicated server.
+features: []
+docker_images:
+  Java 8: ghcr.io/caloptreyx/java:8
+  Java 11: ghcr.io/caloptreyx/java:11
+file_denylist: []
+startup_commands:
+  # The port and the autosave interval are written to config.cfg on every start; everything else
+  # in it stays yours. The universe, ships and players are kept in DataBase/; /exit saves them and
+  # stops the server.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -jar TachyonsCEServer.jar
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.cfg:
+      parser: file
+      replace:
+        - match: "SERVER_PORT="
+          replace_with: "SERVER_PORT={{server.build.default.port}}"
+        - match: "AUTOSAVE_TIME="
+          replace_with: "AUTOSAVE_TIME={{env.AUTOSAVE_TIME}}"
+        - match: "ALLOW_SERVER_RESET="
+          replace_with: "ALLOW_SERVER_RESET={{env.ALLOW_SERVER_RESET}}"
+  startup:
+    done:
+      - "SERVER STARTED"
+    strip_ansi: true
+  stop:
+    type: command
+    value: /exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Tachyons CE dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=Dav-Edward/TachyonsCE
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      # The release zip (165 MB) does not fit the installer's /tmp; it is unpacked on the server disk.
+      WORK=/mnt/server/.tachyons-install
+      rm -rf "${WORK}" && mkdir -p "${WORK}"
+      cd "${WORK}" || fail "cannot enter ${WORK}"
+
+      if [[ -z "${VERSION}" || "${VERSION}" == "latest" ]]; then
+          RELEASE_URL="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          RELEASE_URL="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
+      fi
+      DOWNLOAD_URL=$(curl -fsSL "${RELEASE_URL}" | jq -r '.assets[] | select(.name == "TachyonsCE.zip") | .browser_download_url')
+      [[ -n "${DOWNLOAD_URL}" ]] || fail "no TachyonsCE.zip in release ${VERSION:-latest} of ${REPO}"
+      echo "Downloading ${DOWNLOAD_URL}"
+      curl -fsSL -o TachyonsCE.zip "${DOWNLOAD_URL}" || fail "could not download ${DOWNLOAD_URL}"
+
+      # The release bundles the Windows client and JRE; only the server/ folder is installed.
+      rm -rf tachyons && mkdir tachyons
+      unzip -q TachyonsCE.zip 'server/*' -d tachyons || fail "could not extract TachyonsCE.zip"
+      [[ -f tachyons/server/TachyonsCEServer.jar ]] || fail "TachyonsCE.zip has no server/TachyonsCEServer.jar"
+      rm -f TachyonsCE.zip
+
+      # Settings and the database survive reinstalls: config.cfg and the other .cfg files are only
+      # copied when missing, DataBase/ is never touched.
+      cd tachyons/server || fail "cannot enter the extracted server folder"
+      for cfg in *.cfg; do
+          [[ -f "/mnt/server/${cfg}" ]] && rm -f "${cfg}"
+      done
+      rm -f *.bat *.exe launch4j.xml
+      cp -r . /mnt/server/ || fail "could not copy the server files"
+      cd /mnt/server && rm -rf "${WORK}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Version
+    description: Release tag to install (for example v1.0.2), or latest. Applied on reinstall.
+    order: 1
+    env_variable: VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Autosave Interval
+    description: Seconds between automatic saves of the universe.
+    order: 2
+    env_variable: AUTOSAVE_TIME
+    default_value: "300"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:30,86400"
+  - name: Allow Server Reset
+    description: Let players vote to reset the universe. (1 = on, 0 = off)
+    order: 3
+    env_variable: ALLOW_SERVER_RESET
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
