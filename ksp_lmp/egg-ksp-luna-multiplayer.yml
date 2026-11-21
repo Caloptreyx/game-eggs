@@ -1,0 +1,238 @@
+name: "Kerbal Space Program: Luna Multiplayer"
+author: thexylo@pm.me
+description: >-
+  Luna Multiplayer (LMP), the multiplayer mod for Kerbal Space Program: fly, dock and build bases
+  together in a shared universe. Official self-contained Linux server from the LMP GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a self-contained .NET program in LMPServer/; its translations need the ICU
+  # libraries the image lacks, which the installer puts into .icu/. Settings are the XML files in
+  # LMPServer/Config; name, passwords, player limit and ports are written into them on every start.
+  # The server rewrites them on every start declaring encoding="utf-16" (the content is UTF-8),
+  # which the panel's XML parser rejects, so the declaration is corrected after the server exits;
+  # the shell forwards the stop signal to the server and waits for it (env --default-signal undoes
+  # the SIGINT ignore the shell sets for background commands). The console takes server
+  # commands (/help, /listclients, /kick, /backup now, ...); the stop signal (SIGINT) backs the
+  # universe up and shuts down.
+  Default: >-
+    cd LMPServer; LD_LIBRARY_PATH=/home/container/.icu env --default-signal=INT ./Server <&0 & SRV=$!;
+    trap 'kill -INT ${SRV}' INT TERM; while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done;
+    sed -i '1s/encoding="utf-16"/encoding="utf-8"/' Config/*.xml
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    LMPServer/Config/GeneralSettings.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: Description
+          replace_with: "{{env.DESCRIPTION}}"
+        - match: Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: AdminPassword
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: GameMode
+          replace_with: "{{env.GAME_MODE}}"
+    LMPServer/Config/ConnectionSettings.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: Port
+          replace_with: "{{server.build.default.port}}"
+    LMPServer/Config/MasterServerSettings.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: RegisterWithMasterServer
+          replace_with: "{{env.PUBLIC}}"
+    LMPServer/Config/WebsiteSettings.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: EnableWebsite
+          replace_with: "{{env.WEBSITE}}"
+        - match: Port
+          replace_with: "{{env.WEBSITE_PORT}}"
+  startup:
+    done:
+      - "All systems up and running"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Luna Multiplayer (KSP) server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The program files in LMPServer/ are replaced; LMPServer/Config, Universe, Plugins and logs
+      # are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${LMP_VERSION}" || "${LMP_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/LunaMultiplayer/LunaMultiplayer/releases/latest
+      else
+          api="https://api.github.com/repos/LunaMultiplayer/LunaMultiplayer/releases/tags/${LMP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up Luna Multiplayer ${LMP_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name == "LunaMultiplayer-Server-linux-x64-Release.zip") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "Luna Multiplayer ${LMP_VERSION} has no Linux server download"
+
+      echo "Downloading Luna Multiplayer server ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/lmp.zip" "${url}" || fail "could not download Luna Multiplayer ${tag}"
+      unzip -qo "${WORK}/lmp.zip" -d "${WORK}/lmp" || fail "could not extract Luna Multiplayer ${tag}"
+      src="${WORK}/lmp/LMPServer-linux-x64"
+      [[ -f "${src}/Server" ]] || fail "the Luna Multiplayer ${tag} archive has no Linux server"
+      mkdir -p LMPServer
+      # Keep the settings, the universe, plugins and logs; replace everything else.
+      for keep in Config Universe Plugins logs; do
+          [[ -e "LMPServer/${keep}" ]] && rm -rf "${src:?}/${keep}"
+      done
+      cp -a "${src}"/. LMPServer/ || fail "could not install Luna Multiplayer ${tag}"
+      chmod +x LMPServer/Server
+      cp -a "${WORK}/lmp/LMP Readme.txt" . 2>/dev/null
+      echo "${tag}" > .lmp-version
+
+      ## ICU (the server's translations need it), taken from this Debian release, which matches the image
+      echo "Installing ICU into .icu/..."
+      apt-get update -qq || fail "apt-get update failed"
+      ICU_PACKAGE=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n 1)
+      [[ -n "${ICU_PACKAGE}" ]] || fail "no ICU package found"
+      apt-get install -y -qq --no-install-recommends "${ICU_PACKAGE}" > /dev/null || fail "could not install ${ICU_PACKAGE}"
+      rm -rf .icu && mkdir -p .icu
+      cp -a /usr/lib/x86_64-linux-gnu/libicu{uc,i18n,data}.so.* .icu/ || fail "could not copy ICU"
+
+      ## settings: the server writes its XML settings and the universe on the first run; run it once so
+      ## the panel can apply its values on the first start. The files are UTF-8 but declare
+      ## encoding="utf-16", which the panel's XML parser rejects, so the declaration is corrected.
+      if [[ ! -f LMPServer/Config/GeneralSettings.xml ]]; then
+          echo "Creating the default settings..."
+          (cd LMPServer && LD_LIBRARY_PATH=/mnt/server/.icu exec ./Server < /dev/null > "${WORK}/firstrun.log" 2>&1) &
+          pid=$!
+          for i in $(seq 1 60); do grep -q "All systems up and running" "${WORK}/firstrun.log" 2>/dev/null && break; sleep 1; done
+          kill -INT "${pid}" 2>/dev/null
+          for i in $(seq 1 15); do kill -0 "${pid}" 2>/dev/null || break; sleep 1; done
+          kill -9 "${pid}" 2>/dev/null
+          [[ -f LMPServer/Config/GeneralSettings.xml ]] || { cat "${WORK}/firstrun.log"; fail "the server did not create its settings"; }
+      fi
+      for f in LMPServer/Config/*.xml; do
+          sed -i '1s/encoding="utf-16"/encoding="utf-8"/' "${f}" || fail "could not fix the encoding of ${f}"
+      done
+
+      echo "-----------------------------------------"
+      echo "Luna Multiplayer ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Luna Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+  - name: Description
+    description: Description shown in the server list.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: Luna Multiplayer server
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:200|regex:/^[^<>&\r\n]*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+  - name: Admin Password
+    description: Password for admin commands from the in-game admin window. Leave empty for none.
+    order: 4
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Game Mode
+    description: Sandbox, Science or Career. Applies to a new universe.
+    order: 6
+    env_variable: GAME_MODE
+    default_value: Sandbox
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Sandbox,Science,Career"
+  - name: Public
+    description: Register with the LMP master servers (server list). (true / false)
+    order: 7
+    env_variable: PUBLIC
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Website
+    description: Serve the server status as JSON over HTTP on the Website Port. (true / false)
+    order: 8
+    env_variable: WEBSITE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Website Port
+    description: TCP port of the status website. Needs its own allocation when Website is on.
+    order: 9
+    env_variable: WEBSITE_PORT
+    default_value: "8900"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: LMP Version
+    description: latest, or a release tag such as 0.29.2. Players need the matching client mod. Reinstall to update.
+    order: 10
+    env_variable: LMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|[0-9][\w.-]*)$/']
