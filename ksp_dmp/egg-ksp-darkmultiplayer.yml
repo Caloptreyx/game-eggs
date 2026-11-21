@@ -1,0 +1,203 @@
+name: "Kerbal Space Program: DarkMultiPlayer"
+author: thexylo@pm.me
+description: >-
+  DarkMultiPlayer (DMP), the multiplayer mod for Kerbal Space Program: fly, dock and build together
+  in a shared universe with subspace time warp. Official DMP server from d-mp.org, run on Mono.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a .NET Framework program; it runs on Mono, which the installer unpacks from the
+  # Debian packages into .mono/ (the image has none). Settings are in Config/Settings.txt; port,
+  # name, player limit, modes, whitelist and MOTD are written into it on every start. The console
+  # takes server commands (/help, /listclients, /kick, /say, ...); /exit stops the server.
+  Default: >-
+    M=/home/container/.mono;
+    export MONO_CFG_DIR=$M/etc MONO_CONFIG=$M/etc/mono/config LD_LIBRARY_PATH=$M/usr/lib/x86_64-linux-gnu:$M/usr/lib:$M/lib/x86_64-linux-gnu;
+    exec $M/usr/bin/mono DMPServer.exe
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Config/Settings.txt:
+      parser: properties
+      replace:
+        - match: port
+          replace_with: "{{server.build.default.port}}"
+        - match: serverName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: maxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: gameMode
+          replace_with: "{{env.GAME_MODE}}"
+        - match: gameDifficulty
+          replace_with: "{{env.DIFFICULTY}}"
+        - match: warpMode
+          replace_with: "{{env.WARP_MODE}}"
+        - match: modpackMode
+          replace_with: "{{env.MODPACK_MODE}}"
+        - match: whitelisted
+          replace_with: "{{env.WHITELIST}}"
+        - match: cheats
+          replace_with: "{{env.CHEATS}}"
+        - match: serverMotd
+          replace_with: "{{env.MOTD}}"
+  startup:
+    done:
+      - "Ready!"
+    strip_ansi: true
+  stop:
+    type: command
+    value: /exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # DarkMultiPlayer (KSP) server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The program files are replaced; Config/, Universe/, Plugins/ and logs/ are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## DMP server: the newest release listed on d-mp.org, or a fixed version
+      if [[ -z "${DMP_VERSION}" || "${DMP_VERSION}" == "latest" ]]; then
+          path=$(curl -fsSL --retry 3 https://d-mp.org/downloads | grep -oE '/builds/release/v[0-9.]+/DMPServer\.zip' | head -n 1)
+          [[ -n "${path}" ]] || fail "could not find the DMP server download on d-mp.org"
+      else
+          path="/builds/release/v${DMP_VERSION#v}/DMPServer.zip"
+      fi
+      echo "Downloading https://d-mp.org${path}..."
+      curl -fsSL --retry 3 -o "${WORK}/dmp.zip" "https://d-mp.org${path}" || fail "could not download https://d-mp.org${path}"
+      unzip -qo "${WORK}/dmp.zip" -d "${WORK}/dmp" </dev/null || fail "could not extract the DMP server"
+      [[ -f "${WORK}/dmp/DMPServer/DMPServer.exe" ]] || fail "the DMP download has no DMPServer.exe"
+      cp -a "${WORK}/dmp/DMPServer"/. ./ || fail "could not install the DMP server"
+      echo "Installed DMP server $(cat git-version.txt 2>/dev/null)"
+
+      ## Mono, unpacked from this Debian release's packages (the same release as the runtime image)
+      echo "Installing Mono into .mono/..."
+      apt-get update -qq || fail "apt-get update failed"
+      mkdir -p "${WORK}/debs"
+      apt-get install -y -qq --download-only -o Dir::Cache::archives="${WORK}/debs" \
+          mono-runtime libmono-system-runtime-serialization4.0-cil libmono-system-io-compression4.0-cil > /dev/null \
+          || fail "could not download the Mono packages"
+      rm -rf .mono && mkdir -p .mono
+      for deb in "${WORK}"/debs/*.deb; do
+          dpkg -x "${deb}" .mono || fail "could not unpack ${deb}"
+      done
+      [[ -x .mono/usr/bin/mono ]] || fail "Mono was not installed"
+
+      ## settings: the server only writes Config/Settings.txt on its first run; the keys the panel
+      ## sets are created here so they apply on the first start (the server adds the rest)
+      mkdir -p Config
+      if [[ ! -f Config/Settings.txt ]]; then
+          printf '%s\n' "port=6702" "serverName=DMP Server" "maxPlayers=20" "gameMode=SANDBOX" \
+              "gameDifficulty=NORMAL" "warpMode=SUBSPACE" "modpackMode=NONE" "whitelisted=False" \
+              "cheats=True" "serverMotd=Welcome, %name%!" > Config/Settings.txt
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Server name.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: DMP Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n=]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Game Mode
+    description: SANDBOX, SCIENCE or CAREER.
+    order: 3
+    env_variable: GAME_MODE
+    default_value: SANDBOX
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:SANDBOX,SCIENCE,CAREER"
+  - name: Difficulty
+    description: EASY, NORMAL, MODERATE or HARD.
+    order: 4
+    env_variable: DIFFICULTY
+    default_value: NORMAL
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:EASY,NORMAL,MODERATE,HARD"
+  - name: Warp Mode
+    description: >-
+      Time warp: SUBSPACE (each player warps on their own and can sync to others), MCW_FORCE,
+      MCW_VOTE, MCW_LOWEST or NONE.
+    order: 5
+    env_variable: WARP_MODE
+    default_value: SUBSPACE
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:SUBSPACE,MCW_FORCE,MCW_VOTE,MCW_LOWEST,NONE"
+  - name: Modpack Mode
+    description: NONE, CKAN or GAMEDATA (players get mods from the server, see the README).
+    order: 6
+    env_variable: MODPACK_MODE
+    default_value: NONE
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:NONE,CKAN,GAMEDATA"
+  - name: Whitelist
+    description: Only players on the whitelist (/whitelist) can join. (True / False)
+    order: 7
+    env_variable: WHITELIST
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Cheats
+    description: Allow cheats (the KSP debug menu). (True / False)
+    order: 8
+    env_variable: CHEATS
+    default_value: "True"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: MOTD
+    description: Message shown to players when they join; %name% is the player's name.
+    order: 9
+    env_variable: MOTD
+    default_value: "Welcome, %name%!"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:200|regex:/^[^\r\n]+$/'
+  - name: DMP Version
+    description: DMP server version from d-mp.org (e.g. 0.3.8.5), or latest. Applied on reinstall.
+    order: 10
+    env_variable: DMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^(latest|v?[0-9.]+)$/'
