@@ -1,0 +1,160 @@
+name: Modiverse
+author: thexylo@pm.me
+description: >-
+  Modiverse, the free sandbox for creating and playing mods such as TTT, Deathrun, FortWars and
+  roleplay, with props, lights, thrusters and wheels to build with. Native Linux dedicated server
+  (Steam app 1549820).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, ports and player limit are launch arguments. Game modes, maps and assets (Workshop item
+  # ids), the RCON password, PIN and MOTD come from KJMod/Binaries/Linux/ServerData/
+  # ServerConfiguration.json (seeded by the installer with the developer's Deathrun example). The
+  # server reads no console input; the stop signal (SIGINT) shuts it down.
+  Default: >-
+    ./KJMod/Binaries/Linux/KJModServer -port={{SERVER_PORT}} -queryport={{QUERY_PORT}}
+    -SteamServerName="${SERVER_NAME}" -KJModBaseUGCFolder=ServerData -DoNotRestartOnEmpty -InitUGCs
+    -maxplayers={{MAX_PLAYERS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    KJMod/Binaries/Linux/ServerData/ServerConfiguration.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: rconPassword
+          replace_with: '"{{env.RCON_PASSWORD}}"'
+  startup:
+    done:
+      - "listening on port"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Modiverse dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/KJMod/Binaries/Linux/KJModServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      rm -f /mnt/server/KJModServer.sh
+
+      ## ServerConfiguration.json: seeded once with the developer's example map cycle (Deathrun)
+      DATA_DIR=/mnt/server/KJMod/Binaries/Linux/ServerData
+      mkdir -p "${DATA_DIR}"
+      if [[ ! -f "${DATA_DIR}/ServerConfiguration.json" ]]; then
+          cat > "${DATA_DIR}/ServerConfiguration.json" << 'EOF'
+      {
+        "version": 1,
+        "pin": "0000",
+        "motdURL": "",
+        "motdDelay": 5,
+        "rconPassword": "",
+        "mapCycle": [
+          {"gameMode": "2285067974", "comment": "Deathrun, Deathrun Example Map", "map": "2286680373", "assets": ["2229481041"], "duration": 1800}
+        ]
+      }
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Modiverse Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players (2 to 128).
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,128"
+  - name: RCON Password
+    description: RCON password written to ServerConfiguration.json.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 5
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Modiverse dedicated server.
+    order: 6
+    env_variable: SRCDS_APPID
+    default_value: "1549820"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1549820"
