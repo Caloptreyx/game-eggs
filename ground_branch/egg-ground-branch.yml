@@ -1,0 +1,195 @@
+name: Ground Branch
+author: thexylo@pm.me
+description: >-
+  Ground Branch, the tactical first-person shooter from BlackFoot Studios: realistic close-quarters
+  PvP and co-op missions. The Windows-only dedicated server (Steam app 476400) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server's own output is unusable under Proton, so its log file is streamed to the console.
+  # The server reads no console input (admins use the in-game admin commands). It gets a virtual
+  # display (Xvfb, in its own session so the stop signal does not take it away);
+  # PROTON_USE_XALIA=0 stops Proton's accessibility helper from failing on it. The server only
+  # initializes Steam with the game's own app id (SteamAppId=16900, as in its steam_appid.txt), not
+  # the dedicated server's, which Proton would announce. Wine runs the server
+  # in its own process group, so the stop signal never reaches it: the shell forwards SIGINT to it
+  # and waits for it. Name, password and player limit are written to
+  # GroundBranch/ServerConfig/Server.ini on every start.
+  Default: >-
+    mkdir -p GroundBranch/Saved/Logs; : > GroundBranch/Saved/Logs/GroundBranch.log; rm -f /tmp/.X99-lock;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp 2>/dev/null & XVFB=$!;
+    DISPLAY=:99 PROTON_USE_XALIA=0 SteamAppId=16900 proton run ./GroundBranch/Binaries/Win64/GroundBranchServer-Win64-Shipping.exe
+    -log MultiHome=0.0.0.0 Port={{SERVER_PORT}} QueryPort={{QUERY_PORT}} {{EXTRA_ARGS}} >/dev/null 2>&1 & SRV=$!;
+    trap 'pkill -INT -f "GroundBranchServer-Win64-Shipping\.exe"' INT;
+    tail -n +1 -F GroundBranch/Saved/Logs/GroundBranch.log --pid=${SRV} 2>/dev/null &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done; kill ${XVFB} 2>/dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    GroundBranch/ServerConfig/Server.ini:
+      parser: file
+      create_new: false
+      replace:
+        - match: "ServerName="
+          replace_with: "ServerName={{env.SERVER_NAME}}"
+        - match: "ServerPassword="
+          replace_with: "ServerPassword={{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "MaxPlayers="
+          replace_with: "MaxPlayers={{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "Bringing World /Game/GroundBranch/Maps/"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Ground Branch dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/GroundBranch/Binaries/Win64/GroundBranchServer-Win64-Shipping.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## Server.ini: created once; the panel writes its settings into it on every start
+      mkdir -p /mnt/server/GroundBranch/ServerConfig /mnt/server/GroundBranch/Saved/Logs
+      if [[ ! -f /mnt/server/GroundBranch/ServerConfig/Server.ini ]]; then
+          cat > /mnt/server/GroundBranch/ServerConfig/Server.ini << 'EOF'
+      [/Script/RBZooKeeper.ZKServer]
+      ; Name of the server (64 characters max)
+      ServerName=Ground Branch Server
+      ; Message of the day (512 characters max)
+      ServerMOTD="Welcome!"
+      ; Password required to join the server
+      ServerPassword=
+      ; Maximum number of players allowed on this server
+      MaxPlayers=16
+      MaxSpectators=0
+      EOF
+      fi
+      # Without a map list the server stays on its empty default map. A co-op rotation (Intel
+      # Retrieval) is created once; edit it for PvP missions or other settings.
+      if [[ ! -f /mnt/server/GroundBranch/ServerConfig/MapList.ini ]]; then
+          cat > /mnt/server/GroundBranch/ServerConfig/MapList.ini << 'EOF'
+      [/script/rbzookeeper.zkmaplist]
+      MapList=/Game/GroundBranch/Maps/Depot/Depot?Mission=/Game/GroundBranch/Mission/Depot/IntelRetrieval?opforcount=30?difficulty=2?roundtime=60?teamexfil=1?timeofday=0800?timelimit=60?readycountdowntime=60
+      MapList=/Game/GroundBranch/Maps/City/City?Mission=/Game/GroundBranch/Mission/City/IntelRetrieval?opforcount=30?difficulty=2?roundtime=60?teamexfil=1?timeofday=0800?timelimit=60?readycountdowntime=60
+      MapList=/Game/GroundBranch/Maps/Creek/Creek?Mission=/Game/GroundBranch/Mission/Creek/IntelRetrieval?opforcount=30?difficulty=2?roundtime=60?teamexfil=1?timeofday=0800?timelimit=60?readycountdowntime=60
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list (64 characters max).
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Ground Branch Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Query Port
+    description: UDP port for Steam server queries (server list). Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional server launch parameters.
+    order: 5
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Ground Branch dedicated server.
+    order: 7
+    env_variable: SRCDS_APPID
+    default_value: "476400"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:476400"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 8
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
