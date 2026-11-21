@@ -1,0 +1,193 @@
+name: StarMade
+author: thexylo@pm.me
+description: >-
+  StarMade, the free voxel space sandbox: build ships and stations block by block, mine asteroids
+  and planets, trade, form factions and fight in a procedurally generated universe. Java dedicated
+  server, installed and updated with the official StarMade starter.
+features: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+file_denylist: []
+startup_commands:
+  # The game lives in StarMade/ next to the official starter, which updates it on every start when
+  # Auto Update is on (without its database backup). Player limit, server list name, description
+  # and announcement, the super admin password, autosave interval and world name are written to
+  # StarMade/server.cfg on every start; everything else in it stays yours. "/shutdown 0" saves the
+  # universe and stops the server.
+  Default: >-
+    if [ "${AUTO_UPDATE}" = "1" ]; then java -jar StarMade-Starter.jar -nogui -nobackup; fi;
+    cd StarMade && java -Xms256M -XX:MaxRAMPercentage=85.0 -javaagent:StarMade.jar
+    --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED
+    -jar StarMade.jar -server -port:{{SERVER_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    StarMade/server.cfg:
+      parser: file
+      replace:
+        - match: "MAX_CLIENTS = "
+          replace_with: "MAX_CLIENTS = {{env.MAX_PLAYERS}}"
+        - match: "SERVER_LIST_NAME = "
+          replace_with: "SERVER_LIST_NAME = {{env.SERVER_NAME}}"
+        - match: "SERVER_LIST_DESCRIPTION = "
+          replace_with: "SERVER_LIST_DESCRIPTION = {{env.SERVER_DESCRIPTION}}"
+        - match: "ANNOUNCE_SERVER_TO_SERVERLIST = "
+          replace_with: "ANNOUNCE_SERVER_TO_SERVERLIST = {{env.ANNOUNCE}}"
+        - match: "HOST_NAME_TO_ANNOUNCE_TO_SERVER_LIST = "
+          replace_with: "HOST_NAME_TO_ANNOUNCE_TO_SERVER_LIST = {{env.ANNOUNCE_HOST}}"
+        - match: "SUPER_ADMIN_PASSWORD_USE = "
+          replace_with: "SUPER_ADMIN_PASSWORD_USE = {{env.SUPER_ADMIN_PASSWORD_USE}}"
+        - match: "SUPER_ADMIN_PASSWORD = "
+          replace_with: "SUPER_ADMIN_PASSWORD = {{env.SUPER_ADMIN_PASSWORD}}"
+        - match: "SECTOR_AUTOSAVE_SEC = "
+          replace_with: "SECTOR_AUTOSAVE_SEC = {{env.AUTOSAVE_SEC}}"
+        - match: "WORLD = "
+          replace_with: "WORLD = {{env.WORLD_NAME}}"
+  startup:
+    done:
+      - "SenableGameState(1)"
+    strip_ansi: true
+  stop:
+    type: command
+    value: /shutdown 0
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # StarMade dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      STARTER_URL=http://files.star-made.org/StarMade-Starter.jar
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## a Java runtime for the starter (on the server disk: the installer's /tmp is too small)
+      rm -rf .installer-jre && mkdir -p .installer-jre
+      curl -fsSL "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jre/hotspot/normal/eclipse" \
+          | tar -xz -C .installer-jre --strip-components=1 || fail "could not download a Java runtime"
+      export PATH="/mnt/server/.installer-jre/bin:${PATH}"
+
+      ## the official starter downloads the current release into StarMade/
+      curl -fsSL -o StarMade-Starter.jar "${STARTER_URL}" || fail "could not download ${STARTER_URL}"
+      java -jar StarMade-Starter.jar -nogui -nobackup 2>&1 | grep -vE '^(Downloading|\[UPDATER\] Does Not Exist)' \
+          || fail "the StarMade starter failed"
+      [[ -f StarMade/StarMade.jar ]] || fail "the StarMade starter did not install StarMade/StarMade.jar"
+      rm -rf .installer-jre
+
+      ## server.cfg: seeded once with the keys the panel manages; the server adds the rest on first start
+      if [[ ! -f StarMade/server.cfg ]]; then
+          cat > StarMade/server.cfg << 'EOF'
+      WORLD = world0 //set world to use
+      SECTOR_AUTOSAVE_SEC = 300 //Time interval in secs the server will autosave (-1 for never)
+      MAX_CLIENTS = 40 //Max number of clients allowed on this server
+      SUPER_ADMIN_PASSWORD_USE = false //Enable super admin for this server
+      SUPER_ADMIN_PASSWORD = mypassword31! //Super admin password for this server
+      ANNOUNCE_SERVER_TO_SERVERLIST = false //announces the server to the starmade server list
+      HOST_NAME_TO_ANNOUNCE_TO_SERVER_LIST = localhost //this must be a valid hostname (either ip or host name)
+      SERVER_LIST_NAME = NoName //max length 64 characters
+      SERVER_LIST_DESCRIPTION = NoDescription //max length 128 characters
+      EOF
+      fi
+      cat StarMade/version.txt
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name in the StarMade server list (up to 64 characters).
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: StarMade Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n\/]+$/'
+  - name: Server Description
+    description: Description in the StarMade server list (up to 128 characters).
+    order: 2
+    env_variable: SERVER_DESCRIPTION
+    default_value: A StarMade server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:128|regex:/^[^\r\n\/]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "40"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,500"
+  - name: Announce To Server List
+    description: Announce the server to the StarMade server list. (true or false)
+    order: 4
+    env_variable: ANNOUNCE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Announced Host
+    description: Public host name or IP the server list gives to players.
+    order: 5
+    env_variable: ANNOUNCE_HOST
+    default_value: localhost
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:255|regex:/^[A-Za-z0-9.-]+$/'
+  - name: Use Super Admin Password
+    description: Allow players to become admin with the super admin password. (true or false)
+    order: 6
+    env_variable: SUPER_ADMIN_PASSWORD_USE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Super Admin Password
+    description: Super admin password (only used when enabled above).
+    order: 7
+    env_variable: SUPER_ADMIN_PASSWORD
+    default_value: changeme
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^[^\s\/]+$/'
+  - name: Autosave Interval
+    description: Seconds between autosaves (-1 for never).
+    order: 8
+    env_variable: AUTOSAVE_SEC
+    default_value: "300"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:-1,86400"
+  - name: World Name
+    description: World (universe) to load; a new name creates a new one.
+    order: 9
+    env_variable: WORLD_NAME
+    default_value: world0
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: Auto Update
+    description: Update StarMade with the official starter on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
