@@ -1,0 +1,152 @@
+name: "ET: Legacy"
+author: thexylo@pm.me
+description: >-
+  ET: Legacy, the open source continuation of Wolfenstein: Enemy Territory, the free team-based
+  objective shooter. Official Linux server (etlded) with the original game data.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # etmain/etl_server.cfg (the documented server config shipped with ET: Legacy, copied once) runs
+  # first; name, passwords, player limit and the start map are then passed as +set options, so they
+  # win over the file. fs_homepath keeps logs, downloads and profiles in the server root. The
+  # console takes server commands (status, map, kick, say, ...); stopping sends quit. Values are
+  # expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./etlded +set fs_homepath /home/container +set net_port {{SERVER_PORT}} +exec etl_server.cfg
+    +set sv_hostname "${SERVER_NAME}" +set g_password "${SERVER_PASSWORD}" +set rconpassword "${RCON_PASSWORD}"
+    +set sv_maxclients {{MAX_PLAYERS}} +set omnibot_enable {{BOTS}}
+    $( [ "${BOTS}" = "1" ] && printf %s '+set omnibot_path ./legacy/omni-bot' ) +map "${MAP}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Game Initialization completed"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # ET: Legacy server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The ET: Legacy files are replaced; etmain/etl_server.cfg, the maps you added and the
+      # original game data (downloaded once) are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## the current 64-bit Linux release, as linked from the official download page
+      page=$(curl -fsSL --retry 3 https://www.etlegacy.com/download) || fail "could not open etlegacy.com/download"
+      read -r url file < <(perl -0ne 'print "$1 $2\n" and exit if /data-href="([^"]+)"\s+class="[^"]*"\s+title="(etlegacy-v[\d.]+-x86_64\.tar\.gz)"/' <<< "${page}")
+      [[ -n "${url}" && -n "${file}" ]] || fail "could not find the Linux x86_64 release on etlegacy.com/download"
+      echo "Downloading ${file}..."
+      curl -fsSL --retry 3 -o "${WORK}/etl.tar.gz" "${url}" || fail "could not download ${file}"
+      tar -xzf "${WORK}/etl.tar.gz" -C "${WORK}" || fail "could not extract ${file}"
+      src=$(dirname "$(find "${WORK}" -maxdepth 2 -name 'etlded.x86_64' | head -n 1)")
+      [[ -f "${src}/etlded.x86_64" ]] || fail "${file} has no server binary"
+      rm -rf legacy etlded
+      cp -an "${src}"/. /mnt/server/ || fail "could not install ${file}"
+      cp -a "${src}"/legacy "${src}"/etlded.x86_64 /mnt/server/ || fail "could not install ${file}"
+      ln -sf etlded.x86_64 etlded
+      chmod +x etlded.x86_64
+      # The client, its renderer and desktop integration files are not needed on a server.
+      rm -rf etl.x86_64 etl_bot.x86_64.sh librenderer_*.so applications icons metainfo mime man
+      echo "${file}" > .etl-version
+
+      ## the original Enemy Territory game data (pak0-2), mirrored by the ET: Legacy project
+      mkdir -p etmain
+      for pak in pak0.pk3 pak1.pk3 pak2.pk3; do
+          if [[ ! -s "etmain/${pak}" ]]; then
+              echo "Downloading ${pak}..."
+              curl -fsSL --retry 3 -o "etmain/${pak}" "https://mirror.etlegacy.com/etmain/${pak}" \
+                  || fail "could not download the Enemy Territory game data (${pak})"
+          fi
+      done
+      [[ -f etmain/etl_server.cfg ]] || fail "etmain/etl_server.cfg is missing from ${file}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: ET Legacy Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to turn rcon off.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Map
+    description: Map to start with, e.g. oasis, battery, goldrush, radar, railgun, fueldump.
+    order: 5
+    env_variable: MAP
+    default_value: oasis
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Bots
+    description: Fill the server with Omni-bot bots (shipped with ET Legacy). (1 = on, 0 = off)
+    order: 6
+    env_variable: BOTS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional +set options, e.g. +set g_gametype 4 +set timelimit 20.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
