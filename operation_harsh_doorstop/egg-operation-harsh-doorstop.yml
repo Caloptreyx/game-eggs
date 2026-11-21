@@ -1,0 +1,158 @@
+name: "Operation: Harsh Doorstop"
+author: thexylo@pm.me
+description: >-
+  Operation: Harsh Doorstop, the free large-scale tactical military shooter on Unreal Engine 4 with
+  combined arms and mod support. Native Linux dedicated server (Steam app 950900).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Map, player limit, name, ports and RCON are launch arguments. The server logs to the console but
+  # reads no console input; console lines are sent to it over RCON (local only), which is up once
+  # the server has started. The stop signal (SIGINT) shuts it down.
+  Default: >-
+    (while read -r line; do rcon -a "127.0.0.1:{{RCON_PORT}}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    ./HarshDoorstop/Binaries/Linux/HarshDoorstopServer-Linux-Shipping HarshDoorstop
+    "${MAP}?MaxPlayers={{MAX_PLAYERS}}" -SteamServerName="${SERVER_NAME}" -Port={{SERVER_PORT}} -MULTIHOME=0.0.0.0
+    -QueryPort={{QUERY_PORT}} -EnableRCON -RCONPort={{RCON_PORT}} -RCONPassword="${RCON_PASSWORD}" -log {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "RCON server listening on"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Operation: Harsh Doorstop dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/HarshDoorstop/Binaries/Linux/HarshDoorstopServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Harsh Doorstop Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: Map (and game mode options) to start with, e.g. AAS-TestMap.
+    order: 2
+    env_variable: MAP
+    default_value: AAS-TestMap
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:128|regex:/^[\w\-?=]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,100"
+  - name: RCON Password
+    description: RCON password, also used by the panel console. No spaces or double quotes.
+    order: 4
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:6|max:64|regex:/^[^\s"]+$/'
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 5
+    env_variable: QUERY_PORT
+    default_value: "27005"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: TCP port for RCON. The panel console uses it locally; it needs its own allocation only for remote tools.
+    order: 6
+    env_variable: RCON_PORT
+    default_value: "7779"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: "Steam app id of the Operation: Harsh Doorstop dedicated server."
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "950900"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:950900"
