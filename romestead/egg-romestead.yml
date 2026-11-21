@@ -1,0 +1,172 @@
+name: Romestead
+author: thexylo@pm.me
+description: >-
+  Rome has fallen! Rebuild civilization in this action-adventure survival game for 1-8 players.
+  Cross-platform .NET 8 dedicated server (Steam app 4763510), run natively on Linux.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # SteamCMD cannot download this server anonymously ("Not for anonymous users"), but Steam serves its
+  # depots to anonymous DepotDownloader logins, so updates run here instead of in the image (the egg
+  # sets no SRCDS_APPID for that reason); its per-file progress lines are left out of the console.
+  # The panel settings are written into config.json after the update, which can replace the file;
+  # perl edits only these keys and keeps the rest. An empty password is written as "" because with
+  # null the server waits for a password on the console. The server's analytics library crashes
+  # unless ~/.local/share exists. The image has no ICU, so .NET runs in invariant globalization mode
+  # and the server's request for the en-US culture is allowed. The server reads commands from the
+  # console; "stop" saves the world and exits. Its output goes through cat: with the terminal as
+  # output, the world generation progress display leaves garbage in the console input, which breaks
+  # the first command typed after a new world is created.
+  Default: >-
+    mkdir -p .local/share;
+    if [ "${AUTO_UPDATE}" = "1" ]; then ./.depotdownloader/DepotDownloader -app 4763510 -os linux -dir /home/container
+    $( [ -n "${BETA_BRANCH}" ] && printf -- "-branch %s" "${BETA_BRANCH}" ) | grep -v "^ *[0-9.]*% "; fi;
+    perl -MJSON::PP -e 'my $j = JSON::PP->new->pretty->canonical; my $c = {};
+    if (open my $in, "<", "config.json") { local $/; $c = $j->decode(<$in>); close $in; }
+    my %e = %ENV; $c->{Port} = $e{SERVER_PORT} + 0; $c->{MaxPlayers} = $e{MAX_PLAYERS} + 0;
+    $c->{AutoStartWorldName} = $e{WORLD_NAME}; $c->{AutoCreateAndLoadWorld} = JSON::PP::true;
+    $c->{AutoCreateWorldSize} = $e{WORLD_SIZE} + 0;
+    $c->{AutoCreateWorldSeed} = length($e{WORLD_SEED}) ? $e{WORLD_SEED} : undef;
+    $c->{Password} = $e{SERVER_PASSWORD} // "";
+    open my $out, ">", "config.json" or die "cannot write config.json: $!"; print $out $j->encode($c);' || exit 1;
+    DOTNET_ROOT=/home/container/.dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+    DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY=0 ./.dotnet/dotnet Server.dll | cat
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Server ready
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Romestead dedicated server installation script (.NET 8 server, run natively on Linux)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_DLL=/mnt/server/Server.dll
+      DOTNET=/mnt/server/.dotnet/dotnet
+      DEPOTDOWNLOADER=/mnt/server/.depotdownloader/DepotDownloader
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download DepotDownloader
+      # SteamCMD refuses anonymous downloads of this app ("Not for anonymous users"), while Steam serves
+      # its depots to anonymous DepotDownloader logins. The self-contained build needs no .NET.
+      cd /tmp || fail "cannot enter /tmp"
+      curl -fsSL -o depotdownloader.zip \
+          https://github.com/SteamRE/DepotDownloader/releases/latest/download/DepotDownloader-linux-x64.zip \
+          || fail "could not download DepotDownloader"
+      mkdir -p /mnt/server/.depotdownloader
+      unzip -oq depotdownloader.zip -d /mnt/server/.depotdownloader || fail "could not extract DepotDownloader"
+      chmod +x "${DEPOTDOWNLOADER}"
+
+      ## install the server; Steam downloads occasionally fail on the first attempt
+      for attempt in 1 2 3; do
+          "${DEPOTDOWNLOADER}" -app 4763510 -os linux -dir /mnt/server -validate \
+              $([[ -z "${BETA_BRANCH}" ]] || printf %s "-branch ${BETA_BRANCH}") && [[ -f "${SERVER_DLL}" ]] && break
+          echo "DepotDownloader attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_DLL}" ]] || fail "DepotDownloader could not install app 4763510; check the install log and free disk space"
+
+      ## .NET 8 runtime (the server needs it and the image does not have it)
+      # dotnet-install.sh downloads and unpacks in TMPDIR; the installer's /tmp is too small for that.
+      export TMPDIR=/mnt/server/.install-tmp
+      mkdir -p "${TMPDIR}"
+      curl -fsSL -o "${TMPDIR}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh \
+          || fail "could not download dotnet-install.sh"
+      bash "${TMPDIR}/dotnet-install.sh" --channel 8.0 --runtime dotnet --install-dir /mnt/server/.dotnet \
+          || fail "could not install the .NET 8 runtime"
+      rm -rf "${TMPDIR}"
+      [[ -x "${DOTNET}" ]] || fail "the .NET 8 runtime is missing after installation"
+
+      mkdir -p /mnt/server/.local/share /mnt/server/saved_worlds
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: World Name
+    description: >-
+      World to load on start, created when it does not exist yet. Stored in saved_worlds/<World Name>/.
+      Letters, digits, spaces, _ and -.
+    order: 1
+    env_variable: WORLD_NAME
+    default_value: World
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+( [\w-]+)*$/'
+  - name: World Size
+    description: >-
+      Size of a newly created world. (0 = Small, 1 = Standard, 2 = Large; Large needs 8 GB of memory
+      to generate)
+    order: 2
+    env_variable: WORLD_SIZE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2"
+  - name: World Seed
+    description: Seed for a newly created world. Leave empty for a random one.
+    order: 3
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:32|regex:/^[\w-]*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of players. The game is balanced for 1-8 players.
+    order: 5
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Auto Update
+    description: Update the server through DepotDownloader on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install, e.g. 0.25.2-beta. Leave empty for the stable release. Reinstall
+      after changing it.
+    order: 7
+    env_variable: BETA_BRANCH
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
