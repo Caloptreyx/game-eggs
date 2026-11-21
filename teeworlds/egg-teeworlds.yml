@@ -1,0 +1,171 @@
+name: Teeworlds
+author: thexylo@pm.me
+description: >-
+  Teeworlds, the free online multiplayer 2D shooter with grappling hooks: deathmatch, team
+  deathmatch, capture the flag and last man standing. Official Linux server from the GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server keeps its user data (autoexec.cfg, maps, demos) in $XDG_DATA_HOME/teeworlds, which is
+  # set to teeworlds-data/teeworlds/ in the server root. Every argument is run as a console command
+  # after autoexec.cfg, so the panel settings win over the file. The server reads no console input
+  # (admins use the in-game remote console). Values are expanded inside quotes, never re-parsed by
+  # the shell. The stop signal (SIGINT) makes the server shut down cleanly.
+  Default: >-
+    export XDG_DATA_HOME=/home/container/teeworlds-data;
+    ./teeworlds_srv "sv_port {{SERVER_PORT}}" "sv_name \"${SERVER_NAME}\""
+    "password \"${SERVER_PASSWORD}\"" "sv_rcon_password \"${RCON_PASSWORD}\""
+    "sv_max_clients {{MAX_PLAYERS}}" "sv_register {{PUBLIC}}" "sv_gametype {{GAME_TYPE}}"
+    "sv_map \"${SERVER_MAP}\"" ${EXTRA_ARGS:+"${EXTRA_ARGS}"}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "server name is"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Teeworlds server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; teeworlds-data/ (settings, maps, demos) is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the version: the latest GitHub release, or a fixed release tag
+      if [[ -z "${TEEWORLDS_VERSION}" || "${TEEWORLDS_VERSION}" == "latest" ]]; then
+          version=$(curl -fsSL --retry 3 https://api.github.com/repos/teeworlds/teeworlds/releases/latest | jq -r '.tag_name // empty')
+          [[ -n "${version}" ]] || fail "could not look up the latest Teeworlds version"
+      else
+          version="${TEEWORLDS_VERSION}"
+      fi
+
+      echo "Downloading Teeworlds ${version}..."
+      curl -fsSL --retry 3 -o "${WORK}/teeworlds.tar.gz" \
+          "https://github.com/teeworlds/teeworlds/releases/download/${version}/teeworlds-${version}-linux_x86_64.tar.gz" \
+          || fail "could not download Teeworlds ${version} (does the version exist?)"
+      rm -rf data teeworlds_srv
+      tar -xzf "${WORK}/teeworlds.tar.gz" --strip-components=1 || fail "could not extract Teeworlds ${version}"
+      [[ -x teeworlds_srv ]] || fail "the Teeworlds ${version} archive has no server binary"
+      # The client is not needed on a server.
+      rm -f teeworlds
+      echo "${version}" > .teeworlds-version
+
+      ## user folder: the server reads autoexec.cfg and maps from here before its own data/
+      USERDIR=/mnt/server/teeworlds-data/teeworlds
+      mkdir -p "${USERDIR}/maps"
+      if [[ ! -f "${USERDIR}/autoexec.cfg" ]]; then
+          cat > "${USERDIR}/autoexec.cfg" << 'EOF'
+      # Teeworlds server settings, run on every start before the panel settings (which win).
+      sv_motd "Welcome!"
+      sv_maprotation "dm1 dm2 dm6 dm7 dm8 dm9"
+      sv_scorelimit 20
+      sv_timelimit 0
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Teeworlds ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Teeworlds Version
+    description: latest for the current release, or a release tag such as 0.7.5. Reinstall to update; your settings and maps are kept.
+    order: 1
+    env_variable: TEEWORLDS_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|\d+(\.\d+)*)$/'
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Teeworlds Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Admin password for the in-game remote console. Leave empty and the server prints a random one on every start.
+    order: 4
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Game Type
+    description: dm (deathmatch), tdm (team deathmatch), ctf (capture the flag), lms (last man standing) or lts (last team standing).
+    order: 5
+    env_variable: GAME_TYPE
+    default_value: dm
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:dm,tdm,ctf,lms,lts"
+  - name: Map
+    description: Map to start with (a .map file in teeworlds-data/teeworlds/maps/ or the built-in data/maps/, without .map), e.g. dm1, ctf2.
+    order: 6
+    env_variable: SERVER_MAP
+    default_value: dm1
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n\/]+$/'
+  - name: Max Players
+    description: Maximum number of players (1-64).
+    order: 7
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Public
+    description: Register the server in the Teeworlds server browser. (1 = listed, 0 = join by address only)
+    order: 8
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional console commands, separated by ; e.g. sv_scorelimit 30; sv_timelimit 10
+    order: 9
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
