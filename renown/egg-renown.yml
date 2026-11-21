@@ -1,0 +1,275 @@
+name: Renown
+author: thexylo@pm.me
+description: >-
+  Intense medieval multiplayer survival in a vast, ever-evolving world: gather resources, build
+  strongholds and fight brutal physics-based melee battles, alone or with your clan. Native Linux
+  dedicated server (Steam app 1512690), installed anonymously.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Console lines are sent to the server over RCON (Source RCON), so commands work once it is up.
+  # The EOS client id and secret are the public values Renown's own Steam launch options pass to
+  # every dedicated server; the server cannot register its session without them. The server binary
+  # is started directly (Renown_CombatServer.sh only runs it with the same arguments). It exits on
+  # SIGINT without saving, so it runs in its own session, out of reach of the stop signal: the
+  # shell traps the signal, asks the server to save over RCON (saveworld), waits until the save file
+  # is rewritten (at most 60 seconds), then forwards SIGINT and waits for the server to exit.
+  Default: >-
+    (while read -r line; do rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    setsid ./Renown_Combat/Binaries/Linux/Renown_CombatServer-Linux-Shipping Renown_Combat
+    -PORT={{SERVER_PORT}} -QUERYPORT={{QUERY_PORT}} -BeaconPort={{BEACON_PORT}} -RCONPort={{RCON_PORT}} -log
+    -ini:Engine:[EpicOnlineServices]:DedicatedServerClientId=xyza78917DzEE5Ey0isciVt66QDm5IzM
+    -ini:Engine:[EpicOnlineServices]:DedicatedServerClientSecret=m/mrnywFCdeA1mW3ZSvv3qcVlQlfwi1a+7Z63Q44EGU
+    {{EXTRA_ARGS}} & SRV=$!;
+    trap 'touch /tmp/stop-request; echo "Stop requested: saving the world...";
+    rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" saveworld >/dev/null 2>&1 & END=$((SECONDS + 60));
+    until [ -n "$(find Renown_Combat/Saved/SaveGames -maxdepth 1 -name "${SAVE_NAME}.sav" -newer /tmp/stop-request 2>/dev/null)" ]
+    || [ ${SECONDS} -ge ${END} ] || ! kill -0 ${SRV} 2>/dev/null; do sleep 1; done; sleep 2; kill -INT ${SRV} 2>/dev/null' INT;
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Renown_Combat/Saved/Config/LinuxServer/Game.ini:
+      parser: ini
+      replace:
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].ServerName"
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].ServerPassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].AdminPassword"
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].Region"
+          replace_with: "{{env.REGION}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].MOTD"
+          replace_with: "{{env.MOTD}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].GameSaveName"
+          replace_with: "{{env.SAVE_NAME}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].EnableRCON"
+          replace_with: "True"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].RCONPort"
+          replace_with: "{{env.RCON_PORT}}"
+        - match: "[/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C].RCONPassword"
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: "[/Script/Engine.GameSession].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "*EOS* Successfully Started EOS Session"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Renown dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Renown_CombatServer.sh
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## Game.ini: the panel only replaces keys that exist in the file, so they are created here
+      CONFIG=/mnt/server/Renown_Combat/Saved/Config/LinuxServer/Game.ini
+      if ! grep -q 'Renown_GameInstance_C\]' "${CONFIG}" 2>/dev/null; then
+          mkdir -p "$(dirname "${CONFIG}")"
+          cat >> "${CONFIG}" << 'EOF'
+
+      [/Game/Core/Blueprints/Renown_GameInstance.Renown_GameInstance_C]
+      ServerName=
+      ServerPassword=
+      AdminPassword=
+      MaxPlayers=40
+      Region=
+      MOTD=
+      GameSaveName=Save 1
+      EnableRCON=True
+      RCONPort=25575
+      RCONPassword=
+
+      [/Script/Engine.GameSession]
+      MaxPlayers=40
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Renown Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Admin Password
+    description: Password for in-game admin rights.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "40"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: Region
+    description: >-
+      Region tag shown in the server list and usable as a filter, e.g. US East, Europe, Asia, or any
+      own tag such as Modded.
+    order: 5
+    env_variable: REGION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:32"
+  - name: Message of the Day
+    description: Message shown to players when they join.
+    order: 6
+    env_variable: MOTD
+    default_value: Welcome to Renown!
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Save Name
+    description: Name of the survival save to load or create.
+    order: 7
+    env_variable: SAVE_NAME
+    default_value: Save 1
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w -]+$/'
+  - name: Query Port
+    description: UDP port for Steam server queries and the server list. Needs its own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Beacon Port
+    description: UDP beacon port used by the server queue and lobby. Needs its own allocation.
+    order: 9
+    env_variable: BEACON_PORT
+    default_value: "9999"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      TCP port of the RCON server. The panel console uses it locally; give it its own allocation
+      only for remote admin tools.
+    order: 10
+    env_variable: RCON_PORT
+    default_value: "25575"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: Password of the RCON server, also used by the panel console. No spaces.
+    order: 11
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:6|max:64|regex:/^\S+$/'
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 12
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 13
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install: beta or experimental. Leave empty for the stable release.
+      Reinstall after changing it.
+    order: 14
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|in:beta,experimental"
+  - name: Steam App ID
+    description: Steam app id of the Renown dedicated server.
+    order: 15
+    env_variable: SRCDS_APPID
+    default_value: "1512690"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1512690"
