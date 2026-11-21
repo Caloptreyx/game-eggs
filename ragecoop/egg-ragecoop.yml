@@ -1,0 +1,177 @@
+name: RAGECOOP
+author: thexylo@pm.me
+description: >-
+  RAGECOOP, the cooperative multiplayer mod for Grand Theft Auto V single player: explore and play
+  missions together with synced traffic and NPCs. Self-contained Linux server from GitHub.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads Settings.xml (seeded by the installer); name, description, port, player limit,
+  # welcome message and master server listing are written into it on every start. Typed console
+  # lines are sent as chat messages, or run as commands when they start with /; the stop signal
+  # (SIGINT) shuts it down. The image has no ICU library, so .NET runs in globalization-invariant
+  # mode.
+  Default: ulimit -c 0; DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 exec ./RageCoop.Server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Settings.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: Port
+          replace_with: "{{server.build.default.port}}"
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: Name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: Description
+          replace_with: "{{env.DESCRIPTION}}"
+        - match: WelcomeMessage
+          replace_with: "{{env.WELCOME_MESSAGE}}"
+        - match: AnnounceSelf
+          replace_with: "{{env.PUBLIC}}"
+  startup:
+    done:
+      - "Listening for clients"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # RAGECOOP server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server program is replaced; Settings.xml and Resources/ are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${RAGECOOP_VERSION}" || "${RAGECOOP_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/RAGECOOP/RAGECOOP-V/releases/latest
+      else
+          api="https://api.github.com/repos/RAGECOOP/RAGECOOP-V/releases/tags/${RAGECOOP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up RAGECOOP ${RAGECOOP_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name == "RageCoop.Server-linux-x64.zip") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "RAGECOOP ${RAGECOOP_VERSION} has no Linux server download"
+
+      echo "Downloading the RAGECOOP server ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/server.zip" "${url}" || fail "could not download RAGECOOP ${tag}"
+      unzip -qo "${WORK}/server.zip" -d "${WORK}/server" || fail "could not extract RAGECOOP ${tag}"
+      [[ -f "${WORK}/server/RageCoop.Server" ]] || fail "the RAGECOOP ${tag} archive has no server"
+      cp -a "${WORK}/server"/. /mnt/server/ || fail "could not install RAGECOOP ${tag}"
+      chmod +x RageCoop.Server
+      mkdir -p Resources
+      echo "${tag}" > .ragecoop-version
+
+      ## Settings.xml: seeded once (the server's defaults) so the panel can write its values into it
+      if [[ ! -f Settings.xml ]]; then
+          cat > Settings.xml << 'EOF'
+      <?xml version="1.0" encoding="utf-8"?>
+      <Settings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <Port>4499</Port>
+        <MaxPlayers>32</MaxPlayers>
+        <MaxLatency>500</MaxLatency>
+        <Name>RAGECOOP server</Name>
+        <Website>https://ragecoop.com/</Website>
+        <Description>RAGECOOP server</Description>
+        <GameMode>FreeRoam</GameMode>
+        <Language>English</Language>
+        <WelcomeMessage>Welcome on this server :)</WelcomeMessage>
+        <AnnounceSelf>false</AnnounceSelf>
+        <MasterServer>https://masterserver.ragecoop.com/</MasterServer>
+        <LogLevel>0</LogLevel>
+        <NpcStreamingDistance>500</NpcStreamingDistance>
+        <PlayerStreamingDistance>-1</PlayerStreamingDistance>
+        <WeatherTimeSync>true</WeatherTimeSync>
+        <AllowedUsernameChars>ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890-_</AllowedUsernameChars>
+        <UseP2P>false</UseP2P>
+        <UseZeroTier>false</UseZeroTier>
+        <UseVoice>false</UseVoice>
+        <ZeroTierNetworkID>8056c2e21c000001</ZeroTierNetworkID>
+        <AutoUpdate>false</AutoUpdate>
+        <KickGodMode>false</KickGodMode>
+        <KickSpamming>true</KickSpamming>
+        <SpamLimit>100</SpamLimit>
+      </Settings>
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "RAGECOOP ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: RAGECOOP server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+  - name: Description
+    description: Description shown in the server list.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: RAGECOOP server
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:200|regex:/^[^<>&\r\n]*$/'
+  - name: Welcome Message
+    description: Message shown to players when they join.
+    order: 3
+    env_variable: WELCOME_MESSAGE
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:200|regex:/^[^<>&\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Public
+    description: Announce the server to the RAGECOOP master server. (true / false)
+    order: 5
+    env_variable: PUBLIC
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: RAGECOOP Version
+    description: latest, or a release tag such as 1.5.4.7. Players need a compatible client. Reinstall to update.
+    order: 6
+    env_variable: RAGECOOP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|[0-9][\w.-]*)$/']
