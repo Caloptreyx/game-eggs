@@ -1,0 +1,202 @@
+name: Left 4 Dead 2
+author: thexylo@pm.me
+description: >-
+  Left 4 Dead 2, the co-op zombie shooter for four survivors (versus: four against four infected).
+  Native Source dedicated server (Steam app 222860), installed anonymously.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Game Mode (mp_gamemode) goes before the map so the first map loads in that mode. ulimit keeps
+  # a crash from writing a core file into the server directory. Values are expanded inside quotes,
+  # never re-parsed by the shell.
+  Default: >-
+    ulimit -c 0; ./srcds_run -game left4dead2 -console -port {{SERVER_PORT}} +ip 0.0.0.0 -strictportbind
+    -norestart +maxplayers {{MAX_PLAYERS}} +mp_gamemode "${GAME_MODE}" +map "${SRCDS_MAP}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    left4dead2/cfg/server.cfg:
+      parser: file
+      replace:
+        - match: "hostname "
+          replace_with: hostname "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "sv_password "
+          replace_with: sv_password "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "rcon_password "
+          replace_with: rcon_password "{{env.RCON_PASSWORD}}"
+          insert_new: true
+  startup:
+    done:
+      - Connection to Steam servers successful
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Left 4 Dead 2 dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/srcds_run
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game. A fresh Linux install fails with "Invalid platform"; installing the Windows
+      ## files first and then updating to the Linux platform works (the Linux update replaces them).
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +@sSteamCmdForcePlatformType windows +app_update "${SRCDS_APPID}" \
+              +@sSteamCmdForcePlatformType linux +app_update "${SRCDS_APPID}" validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server.cfg: the panel keeps hostname and passwords in sync on every start.
+      # Only created when missing or blank (Steam ships an empty one), so custom settings survive reinstalls.
+      CFG=/mnt/server/left4dead2/cfg/server.cfg
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // Left 4 Dead 2 server configuration.
+      // hostname, sv_password and rcon_password are set from the panel.
+      hostname "Left 4 Dead 2 Server"
+      sv_password ""
+      rcon_password ""
+
+      // Let players join by IP and from the server browser, not only through lobbies.
+      sv_allow_lobby_connect_only 0
+      sv_region 255
+      sv_lan 0
+      sv_allowupload 0
+      sv_allowdownload 1
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned_user.cfg
+      exec banned_ip.cfg
+      EOF
+      fi
+      touch /mnt/server/left4dead2/cfg/banned_user.cfg /mnt/server/left4dead2/cfg/banned_ip.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Left 4 Dead 2 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Game Mode
+    description: Game mode (mp_gamemode).
+    order: 2
+    env_variable: GAME_MODE
+    default_value: coop
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:coop,realism,versus,survival,scavenge,teamversus,teamscavenge,mutation12"
+  - name: Map
+    description: >-
+      Map to load on start, e.g. c1m1_hotel (Dead Center), c2m1_highway (Dark Carnival),
+      c5m1_waterfront (The Parish).
+    order: 3
+    env_variable: SRCDS_MAP
+    default_value: c1m1_hotel
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players (4 in co-op, 8 in versus).
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +sv_steamgroup 123456 +z_difficulty Hard.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Left 4 Dead 2 dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "222860"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:222860"
