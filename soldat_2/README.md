@@ -25,7 +25,7 @@ The server reads no console input; use RCON. The panel's stop sends SIGINT and t
 
 `autoconfig.ini` is seeded by the installer and completed by the server on its first start. Besides the panel's values it holds the map cycle (`[GamesCycle]`, cycles in `Cycles/`), lobby and voting rules, team balance, bots (`FillBotsCount`, `FillBotsDifficulty`), automatic shutdown after hours or matches (`AutoShutdownAfterHours`, `AutoShutdownAfterMatches`) and the built-in patcher (`UseBuiltInPatching`, `RestartAfterPatching`). Edit it while the server is stopped. Custom levels go in `Levels/Custom/`, custom configs in `Configs/Custom/`.
 
-The server shuts itself down after 12 hours or 50 matches by default (`faq.txt` and the setting names describe this; it was not observed in testing); Calagopus then shows it as stopped. Raise those values in `autoconfig.ini` for longer runs.
+The server's defaults shut it down after 12 hours or 50 matches (`AutoShutdownAfterHours = 12`, `AutoShutdownAfterMatches = 50`; not observed in testing); Calagopus then shows it as stopped. Raise those values in `autoconfig.ini` for longer runs.
 
 ## Requirements
 
