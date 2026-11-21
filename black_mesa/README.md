@@ -34,6 +34,12 @@ Without a token the server logs in to Steam anonymously and gets a new Steam ID 
 
 Stopping sends `quit`; the server shuts down within seconds. The game keeps no world saves. The egg turns core dumps off so a crash leaves no core files behind.
 
+## SourceCoop (co-op campaign)
+
+`egg-black-mesa-sourcecoop.yml` runs the single-player campaign in co-op with [SourceCoop](https://github.com/ampreeT/SourceCoop). The installer adds the current stable Metamod:Source and SourceMod (1.12) and the newest SourceCoop release for Black Mesa, and creates the developer's co-op `server.cfg` (team play, no timelimit, home map). Server name, passwords, friendly fire and the starting/home map are set from the panel; Starting Map defaults to `bm_c0a0a`.
+
+SourceCoop's memory extension (Source Scramble) only exists for 32-bit servers, so this egg always runs the 32-bit `srcds_run`. Its plugins (voting, revive, scoring, difficulty, thirdperson and more) are listed with `sm plugins list` in the console. Reinstalling updates Metamod:Source, SourceMod and SourceCoop and keeps `server.cfg`. The co-op server needs about 350 MB of memory with no players and the same 33 GB of disk.
+
 ## Requirements
 
 About 280 MB of memory for an empty, hibernating server; more with players. Plan for 1-2 GB. The installation takes about 33 GB of disk, so give the server at least 40 GB: it does not start while the disk limit is exceeded.
