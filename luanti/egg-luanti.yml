@@ -1,0 +1,208 @@
+name: Luanti
+author: thexylo@pm.me
+description: >-
+  Luanti (formerly Minetest), the open source voxel game engine: run Minetest Game, VoxeLibre,
+  Mineclonia or any other game from ContentDB. Headless luantiserver from the games:luanti image.
+features: []
+docker_images:
+  Luanti: ghcr.io/caloptreyx/games:luanti
+file_denylist: []
+startup_commands:
+  # LUANTI_USER_PATH puts Luanti's user folder (games, mods, worlds) in luanti/ in the server root.
+  # The panel settings are written to luanti/luanti.conf on every start (missing keys are added);
+  # everything else in that file stays yours. The server reads no console input (admins use chat
+  # commands in game); the stop signal (SIGINT) makes it save the world and exit. Values reach perl
+  # through the environment, never re-parsed by the shell.
+  Default: >-
+    export LUANTI_USER_PATH=/home/container/luanti; CONF=/home/container/luanti/luanti.conf;
+    mkdir -p luanti/worlds; touch "${CONF}";
+    for k in server_name server_description motd max_users default_password name server_announce enable_damage creative_mode; do
+    grep -q "^${k} *=" "${CONF}" || echo "${k} =" >> "${CONF}"; done;
+    perl -pi -e 's/^server_name *=.*/server_name = $ENV{SERVER_NAME}/; s/^server_description *=.*/server_description = $ENV{SERVER_DESC}/;
+    s/^motd *=.*/motd = $ENV{MOTD}/; s/^max_users *=.*/max_users = $ENV{MAX_PLAYERS}/;
+    s/^default_password *=.*/default_password = $ENV{SERVER_PASSWORD}/; s/^name *=.*/name = $ENV{ADMIN_NAME}/;
+    s/^server_announce *=.*/server_announce = $ENV{ANNOUNCE}/; s/^enable_damage *=.*/enable_damage = $ENV{DAMAGE}/;
+    s/^creative_mode *=.*/creative_mode = $ENV{CREATIVE}/' "${CONF}";
+    luantiserver --port {{SERVER_PORT}} --config "${CONF}" --gameid "${GAME_ID}"
+    --world "/home/container/luanti/worlds/${WORLD_NAME}" --logfile /home/container/luanti/debug.txt {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Server for gameid"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Luanti installation script: downloads the game from ContentDB into luanti/games/
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server itself is part of the image; worlds, mods and luanti.conf are kept on reinstall.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      API=https://content.luanti.org/api/packages
+      mkdir -p /mnt/server/luanti/games /mnt/server/luanti/mods /mnt/server/luanti/worlds
+      cd /mnt/server/luanti || fail "cannot enter /mnt/server/luanti"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## the game: newest release of the ContentDB package (author/name)
+      [[ "${GAME_PACKAGE}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_]+$ ]] || fail "Game Package must look like Author/name"
+      url=$(curl -fsSL --retry 3 "${API}/${GAME_PACKAGE}/releases/" | jq -r '.[0].url // empty')
+      [[ -n "${url}" ]] || fail "could not find a release of ${GAME_PACKAGE} on ContentDB"
+      echo "Downloading ${GAME_PACKAGE} from ContentDB..."
+      curl -fsSL --retry 3 -o "${WORK}/game.zip" "${url}" || fail "could not download ${GAME_PACKAGE}"
+      unzip -q -o "${WORK}/game.zip" -d "${WORK}/game" || fail "could not extract ${GAME_PACKAGE}"
+      conf=$(find "${WORK}/game" -maxdepth 2 -name game.conf | head -n 1)
+      [[ -n "${conf}" ]] || fail "${GAME_PACKAGE} is not a game (no game.conf)"
+      src=$(dirname "${conf}")
+      [[ "${src}" == "${WORK}/game" ]] && src_name="${GAME_PACKAGE#*/}" || src_name=$(basename "${src}")
+      rm -rf "games/${src_name}"
+      mv "${src}" "games/${src_name}" || fail "could not install ${GAME_PACKAGE}"
+      echo "Installed game ${src_name}: set Game ID to ${src_name}."
+
+      [[ -f luanti.conf ]] || cat > luanti.conf << 'EOF'
+      # Luanti server settings. The panel writes its settings into this file on every start.
+      # See https://docs.luanti.org/for-server-hosts/setup/ and the minetest.conf.example of the engine.
+      server_name =
+      server_description =
+      motd =
+      max_users =
+      default_password =
+      name =
+      server_announce =
+      enable_damage =
+      creative_mode =
+      EOF
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Game Package
+    description: >-
+      ContentDB package of the game to install, as Author/name (e.g. Luanti/minetest_game,
+      Wuzzy/mineclone2 for VoxeLibre, ryvnf/mineclonia). Reinstall to install another game.
+    order: 1
+    env_variable: GAME_PACKAGE
+    default_value: Luanti/minetest_game
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:128|regex:/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_]+$/'
+  - name: Game ID
+    description: Folder name of the game in luanti/games/ to run (shown by the installer), e.g. minetest_game.
+    order: 2
+    env_variable: GAME_ID
+    default_value: minetest_game
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9_]+$/'
+  - name: World Name
+    description: World folder in luanti/worlds/; a new world is created when it does not exist.
+    order: 3
+    env_variable: WORLD_NAME
+    default_value: world
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 4
+    env_variable: SERVER_NAME
+    default_value: Luanti Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Description
+    description: Description shown in the server list.
+    order: 5
+    env_variable: SERVER_DESC
+    default_value: A Luanti server
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Message of the Day
+    description: Message shown to players when they join.
+    order: 6
+    env_variable: MOTD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 7
+    env_variable: MAX_PLAYERS
+    default_value: "15"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Default Password
+    description: Password new players must use when they first join. Leave empty for none.
+    order: 8
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Admin Name
+    description: Player name that gets all privileges (the server owner).
+    order: 9
+    env_variable: ADMIN_NAME
+    default_value: admin
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:20|regex:/^[A-Za-z0-9_-]+$/'
+  - name: Announce
+    description: List the server in the public server list. (true / false)
+    order: 10
+    env_variable: ANNOUNCE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Damage
+    description: Players can take damage and die. (true / false)
+    order: 11
+    env_variable: DAMAGE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Creative Mode
+    description: Creative mode (unlimited items, when the game supports it). (true / false)
+    order: 12
+    env_variable: CREATIVE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Extra Arguments
+    description: Additional luantiserver arguments.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'

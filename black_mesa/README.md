@@ -36,7 +36,7 @@ Stopping sends `quit`; the server shuts down within seconds. The game keeps no w
 
 ## Requirements
 
-About 280 MB of memory for an empty, hibernating server; more with players. Plan for 1-2 GB. The installation takes about 33 GB (give the server at least 40 GB: it does not start while the disk limit is exceeded) of disk.
+About 280 MB of memory for an empty, hibernating server; more with players. Plan for 1-2 GB. The installation takes about 33 GB of disk, so give the server at least 40 GB: it does not start while the disk limit is exceeded.
 
 ## Sample ignore file for backups
 
