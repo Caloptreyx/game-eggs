@@ -1,0 +1,149 @@
+name: "BATTALION: Legacy"
+author: thexylo@pm.me
+description: >-
+  BATTALION: Legacy, the free WW2 first-person shooter in the spirit of classic Call of Duty:
+  fast infantry combat and competitive modes. Native Linux dedicated server (Steam app 805140).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server name, query port, playlist (queue) and admin password are launch arguments. The
+  # server logs to the console but reads no console input; the stop signal (SIGINT) shuts it down.
+  # The game's crash reporter (Sentry crashpad_handler) needs OpenSSL 1.1, which Debian 13 no longer
+  # has; the installer puts it into .libssl11/ (without it the server hangs at startup).
+  Default: >-
+    LD_LIBRARY_PATH=/home/container/.libssl11 ./Battalion/Binaries/Linux/BattalionServer-Linux-Shipping Battalion -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}}
+    -SteamServerName="${SERVER_NAME}" -Queue="${QUEUE}" -AdminPassword="${ADMIN_PASSWORD}" -log {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "OnCreateSessionComplete"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # BATTALION: Legacy dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Battalion/Binaries/Linux/BattalionServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## OpenSSL 1.1 for the Sentry crash reporter (Debian 11's package; Debian 13 only has OpenSSL 3)
+      SSL_DEB=libssl1.1_1.1.1w-0+deb11u1_amd64.deb
+      curl -fsSL --retry 3 -o /tmp/libssl11.deb "http://deb.debian.org/debian/pool/main/o/openssl/${SSL_DEB}" \
+          || fail "could not download ${SSL_DEB}"
+      rm -rf /tmp/libssl11 /mnt/server/.libssl11 && dpkg-deb -x /tmp/libssl11.deb /tmp/libssl11 || fail "could not extract ${SSL_DEB}"
+      mkdir -p /mnt/server/.libssl11
+      cp -a /tmp/libssl11/usr/lib/x86_64-linux-gnu/lib{ssl,crypto}.so.1.1 /mnt/server/.libssl11/ || fail "could not install OpenSSL 1.1"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: BATTALION Legacy Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Queue
+    description: Playlist the server runs, e.g. Wartide (the default playlist).
+    order: 2
+    env_variable: QUEUE
+    default_value: Wartide
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Admin Password
+    description: Password for the in-game admin login. No spaces or double quotes.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:6|max:64|regex:/^[^\s"]+$/'
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 5
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: "Steam app id of the BATTALION: Legacy dedicated server."
+    order: 7
+    env_variable: SRCDS_APPID
+    default_value: "805140"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:805140"
