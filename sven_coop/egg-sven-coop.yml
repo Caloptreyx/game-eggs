@@ -1,0 +1,190 @@
+name: Sven Co-op
+author: thexylo@pm.me
+description: >-
+  Sven Co-op, the cooperative first-person shooter on the GoldSource engine (Half-Life). Native
+  Linux dedicated server (Steam app 276060).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # svends_run is the server's own start script. ulimit keeps a crash from writing a core file into
+  # the server directory.
+  Default: >-
+    ulimit -c 0; ./svends_run -game svencoop -console
+    -port {{SERVER_PORT}} +ip 0.0.0.0 -strictportbind -norestart
+    +maxplayers {{MAX_PLAYERS}} +map "{{SRCDS_MAP}}"
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    svencoop/server.cfg:
+      parser: file
+      replace:
+        - match: "hostname "
+          replace_with: hostname "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "sv_password "
+          replace_with: sv_password "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "rcon_password "
+          replace_with: rcon_password "{{env.RCON_PASSWORD}}"
+          insert_new: true
+  startup:
+    done:
+      - gameserver Steam ID
+      - Connection to Steam servers successful
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Sven Co-op dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/svends_run
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server.cfg: the panel keeps hostname and passwords in sync on every start.
+      # Only created when missing or blank, so custom settings survive reinstalls (Sven Co-op ships a full one).
+      CFG=/mnt/server/svencoop/server.cfg
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // Sven Co-op server configuration.
+      // hostname, sv_password and rcon_password are set from the panel.
+      hostname "Sven Co-op Server"
+      sv_password ""
+      rcon_password ""
+
+      sv_region 255
+      sv_lan 0
+      sv_allowupload 0
+      sv_allowdownload 1
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned.cfg
+      exec listip.cfg
+      EOF
+      fi
+      touch /mnt/server/svencoop/banned.cfg /mnt/server/svencoop/listip.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: "Sven Co-op Server"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: Map to load on start, e.g. svencoop1, hl_c01_a1 (Half-Life campaign) or osprey.
+    order: 2
+    env_variable: SRCDS_MAP
+    default_value: svencoop1
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,100"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 5
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +mp_timelimit 30.
+    order: 6
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 7
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: "Steam app id of the Sven Co-op dedicated server."
+    order: 8
+    env_variable: SRCDS_APPID
+    default_value: "276060"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:276060"
