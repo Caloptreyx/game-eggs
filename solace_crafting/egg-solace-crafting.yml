@@ -1,0 +1,221 @@
+name: Solace Crafting
+author: thexylo@pm.me
+description: >-
+  Solace Crafting, the open-world survival crafting RPG: explore a procedurally generated fantasy
+  world, gather, craft, build and fight, together. Native Linux dedicated server (Steam app
+  1086950).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads .config/unity3d/Big Kitty Games/Solace Crafting/servercfg.dat (JSON, seeded by
+  # the installer); name, description, ports, visibility, password, player limit, admin and
+  # moderator passwords and the world save are written into it on every start. The server reads
+  # no console input; the stop signal (SIGINT) shuts it down.
+  Default: ./Solace\ Crafting.x86_64 -batchmode -nographics -logFile -
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    .config/unity3d/Big Kitty Games/Solace Crafting/servercfg.dat:
+      parser: json
+      create_new: false
+      replace:
+        - match: name
+          replace_with: '"{{env.SERVER_NAME}}"'
+        - match: description
+          replace_with: '"{{env.SERVER_DESCRIPTION}}"'
+        - match: port
+          replace_with: "{{server.build.default.port}}"
+        - match: steamQueryPort
+          replace_with: "{{env.QUERY_PORT}}"
+        - match: isPrivate
+          replace_with: "{{env.PRIVATE}}"
+        - match: password
+          replace_with: '"{{env.SERVER_PASSWORD}}"'
+        - match: maxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: allowAdmin
+          replace_with: "{{env.ALLOW_ADMIN}}"
+        - match: adminPassword
+          replace_with: '"{{env.ADMIN_PASSWORD}}"'
+        - match: worldSaveToUse
+          replace_with: '"{{env.WORLD_SAVE}}"'
+  startup:
+    done:
+      - "server started"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Solace Crafting dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY="/mnt/server/Solace Crafting.x86_64"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## servercfg.dat: seeded once with the server's settings so the panel can apply its values
+      CONFIG_DIR="/mnt/server/.config/unity3d/Big Kitty Games/Solace Crafting"
+      mkdir -p "${CONFIG_DIR}"
+      if [[ ! -f "${CONFIG_DIR}/servercfg.dat" ]]; then
+          cat > "${CONFIG_DIR}/servercfg.dat" << 'EOF'
+      {
+          "name": "Solace Crafting Server",
+          "description": "",
+          "port": 27015,
+          "steamQueryPort": 27016,
+          "isPrivate": false,
+          "password": "",
+          "requireSteamID": true,
+          "maxPlayers": 12,
+          "allowAdmin": false,
+          "adminPassword": "password",
+          "allowModerator": false,
+          "moderatorPassword": "password",
+          "worldSaveToUse": "MultiplayerWorld",
+          "autoRestart": 0
+      }
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Solace Crafting Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Server Description
+    description: Description shown in the server browser.
+    order: 2
+    env_variable: SERVER_DESCRIPTION
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\\\r\n]*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Private
+    description: Hide the server from the server browser. (true or false)
+    order: 5
+    env_variable: PRIVATE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Allow Admin
+    description: Let players become admin with the admin password. (true or false)
+    order: 6
+    env_variable: ALLOW_ADMIN
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Admin Password
+    description: Admin password (only used when Allow Admin is true).
+    order: 7
+    env_variable: ADMIN_PASSWORD
+    default_value: changeme
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^[^"\\\s]+$/'
+  - name: World Save
+    description: World save to use; a new name creates a new world.
+    order: 8
+    env_variable: WORLD_SAVE
+    default_value: MultiplayerWorld
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 9
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Solace Crafting dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "1086950"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1086950"
