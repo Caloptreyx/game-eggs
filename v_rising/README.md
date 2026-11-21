@@ -38,6 +38,18 @@ Worlds are stored in `save-data/Saves/v4/<Save Name>/`, as rotating autosaves (`
 
 About 3-3.3 GB of memory with a new world and no players; plan for 6-8 GB, more with many players and castles. The installation takes about 2.2 GB of disk.
 
+## BepInEx
+
+`egg-v-rising-bepinex.yml` is the same egg with the [BepInEx](https://github.com/BepInEx/BepInEx) mod loader for server-side plugins, from the [BepInExPack for V Rising](https://thunderstore.io/c/v-rising/p/BepInEx/BepInExPack_V_Rising/) on Thunderstore. Panel variables, ports, saves and stop work as above.
+
+- The installer downloads the BepInExPack (the latest version, or the one set as BepInEx Version) and copies it over the server files. Reinstall to update it; plugins and their configs in `BepInEx/` are kept.
+- The startup command makes Wine load the pack's `winhttp.dll` (Doorstop) before its own (`WINEDLLOVERRIDES=winhttp=n,b`), which starts BepInEx.
+- Put plugins (`.dll`) in `BepInEx/plugins/`; their settings appear in `BepInEx/config/` after the first start. The BepInEx log is `BepInEx/LogOutput.log` (e.g. `Loading [VampireCommandFramework 0.11.0]`).
+- On the first start, and after each game update, BepInEx generates its interop assemblies (`BepInEx/interop/`). This takes about a minute and **more than 8.6 GB of memory**: with an 8 GB limit the server is killed (out of memory) and restarted several times before it gets through. Give the server at least 12 GB; afterwards it uses about 3.6 GB with no players.
+- BepInEx and plugins must match the game version. A V Rising update can break them until new versions are released; set Auto Update to 0 to stay on a working game version.
+
+For backups, also keep `!BepInEx/plugins/` and `!BepInEx/config/` in the ignore file below.
+
 ## Sample ignore file for backups
 
 Saved as `.pteroignore` in the server root, this limits backups to the worlds and settings:
