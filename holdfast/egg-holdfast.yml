@@ -1,0 +1,198 @@
+name: "Holdfast: Nations At War"
+author: thexylo@pm.me
+description: >-
+  Holdfast: Nations At War, the multiplayer Napoleonic-era shooter: line battles, naval combat and
+  Frontlines offensives for up to 150 players. Native Linux dedicated server (Steam app 1424230).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads serverconfig_panel.txt (created once by the installer from the shipped
+  # example); name, region, passwords and ports are written into it on every start. The Unity log
+  # goes to the console (-logFile -); the other logs go to the logs_* folders. The server reads no
+  # console input (admins log in in game with the admin password); the stop signal (SIGINT) ends it.
+  Default: >-
+    "./Holdfast NaW" -startserver --serverheadless -batchmode -nographics -screen-width 640 -screen-height 480
+    -screen-quality "Fastest" -framerate {{FRAMERATE}} -serverConfigFilePath "serverconfig_panel.txt" -logFile -
+    -logArchivesDirectory "logs_archive/" -playersLogFilePath "logs_playerlogin/playerlogin.txt"
+    -adminCommandsLogFilePath "logs_adminactions/adminactions.txt" -chatLogFilePath "logs_chat/chatlog.txt"
+    -scoreboardLogFilePath "logs_score/scorelog.txt" -vacLogFilePath "logs_vac/vaclog.txt"
+    -bannedPlayersFilePath "bannedplayers.txt" -mutedChatPlayersFilePath "muteplayerschat.txt"
+    -mutedVoipPlayersFilePath "muteplayersvoip.txt" -micSpammersPlayersFilePath "micspammers.txt" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    serverconfig_panel.txt:
+      parser: file
+      create_new: false
+      replace:
+        - match: "server_name "
+          replace_with: "server_name {{env.SERVER_NAME}}"
+        - match: "server_region "
+          replace_with: "server_region {{env.REGION}}"
+        - match: "server_admin_password "
+          replace_with: "server_admin_password {{env.ADMIN_PASSWORD}}"
+        - match: "server_password "
+          replace_with: "server_password {{env.SERVER_PASSWORD}}"
+        - match: "server_port "
+          replace_with: "server_port {{server.build.default.port}}"
+        - match: "steam_query_port "
+          replace_with: "steam_query_port {{env.QUERY_PORT}}"
+        - match: "server_welcome_message "
+          replace_with: "server_welcome_message {{env.WELCOME_MESSAGE}}"
+  startup:
+    done:
+      - "Finished loading map"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Holdfast: Nations At War dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY="/mnt/server/Holdfast NaW"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## serverconfig_panel.txt: created once from the shipped example (password line uncommented);
+      ## the panel's values are written into it on every start, everything else stays yours
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      if [[ ! -f serverconfig_panel.txt ]]; then
+          [[ -f serverconfig_default.txt ]] || fail "the server has no serverconfig_default.txt"
+          sed 's/^#server_password .*/server_password /' serverconfig_default.txt > serverconfig_panel.txt
+      fi
+      touch bannedplayers.txt muteplayerschat.txt muteplayersvoip.txt micspammers.txt
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Holdfast Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n#]+$/'
+  - name: Region
+    description: Server region shown in the browser, e.g. europe, usa, australia, china, russia.
+    order: 2
+    env_variable: REGION
+    default_value: europe
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[a-z]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s#]*$/'
+  - name: Admin Password
+    description: Password for the in-game admin login (rc login <password>).
+    order: 4
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:6|max:64|regex:/^[^\s#]+$/'
+  - name: Welcome Message
+    description: Message shown to players when they join.
+    order: 5
+    env_variable: WELCOME_MESSAGE
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n#]*$/'
+  - name: Query Port
+    description: UDP port for Steam server queries (server browser). Needs its own allocation.
+    order: 6
+    env_variable: QUERY_PORT
+    default_value: "27000"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Frame Rate
+    description: Server tick limit (frames per second).
+    order: 7
+    env_variable: FRAMERATE
+    default_value: "120"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:30,240"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Holdfast dedicated server.
+    order: 10
+    env_variable: SRCDS_APPID
+    default_value: "1424230"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1424230"
