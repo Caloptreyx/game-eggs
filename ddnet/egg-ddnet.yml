@@ -1,0 +1,167 @@
+name: DDNet
+author: thexylo@pm.me
+description: >-
+  DDraceNetwork (DDNet), the cooperative 2D platformer based on Teeworlds: race through maps
+  together using hook, jump and teamwork. Official Linux server from ddnet.org.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server keeps its user data (ranks database, logs, downloaded maps, autoexec_server.cfg) in
+  # $XDG_DATA_HOME/ddnet, which is set to ddnet-data/ddnet/ in the server root. Every argument is run
+  # as a console command after autoexec_server.cfg, so the panel settings win over the file. The
+  # container has no IPv6, so the server registers with the master servers over IPv4 only. The
+  # server reads no console input (admins use the in-game remote console). Values are expanded
+  # inside quotes, never re-parsed by the shell. The stop signal (SIGINT) makes the server shut
+  # down cleanly.
+  Default: >-
+    export XDG_DATA_HOME=/home/container/ddnet-data;
+    ./DDNet-Server "sv_port {{SERVER_PORT}}" "sv_name \"${SERVER_NAME}\""
+    "password \"${SERVER_PASSWORD}\"" "sv_rcon_password \"${RCON_PASSWORD}\""
+    "sv_max_clients {{MAX_PLAYERS}}" "sv_register $( [ "${PUBLIC}" = "1" ] && echo ipv4 || echo 0 )"
+    "sv_map \"${SERVER_MAP}\"" ${EXTRA_ARGS:+"${EXTRA_ARGS}"}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "server: version "
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # DDNet server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; ddnet-data/ (settings, maps, ranks) is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the version: the newest release listed on ddnet.org/downloads, or a fixed version
+      if [[ -z "${DDNET_VERSION}" || "${DDNET_VERSION}" == "latest" ]]; then
+          version=$(curl -fsSL --retry 3 https://ddnet.org/downloads/ \
+              | grep -oE 'DDNet-[0-9][0-9.]*-linux_x86_64\.tar\.xz' | head -n 1 | sed -E 's/^DDNet-(.*)-linux_x86_64\.tar\.xz$/\1/')
+          [[ -n "${version}" ]] || fail "could not look up the latest DDNet version"
+      else
+          version="${DDNET_VERSION}"
+      fi
+
+      echo "Downloading DDNet ${version}..."
+      curl -fsSL --retry 3 -o "${WORK}/ddnet.tar.xz" "https://ddnet.org/downloads/DDNet-${version}-linux_x86_64.tar.xz" \
+          || fail "could not download DDNet ${version} (does the version exist?)"
+      rm -rf data DDNet DDNet-Server
+      tar -xJf "${WORK}/ddnet.tar.xz" --strip-components=1 || fail "could not extract DDNet ${version}"
+      [[ -x DDNet-Server ]] || fail "the DDNet ${version} archive has no server binary"
+      # The client and its Discord library are not needed on a server.
+      rm -f DDNet discord_game_sdk.so
+      echo "${version}" > .ddnet-version
+
+      ## user folder: the server reads autoexec_server.cfg and maps from here before its own data/
+      USERDIR=/mnt/server/ddnet-data/ddnet
+      mkdir -p "${USERDIR}/maps"
+      if [[ ! -f "${USERDIR}/autoexec_server.cfg" ]]; then
+          cat > "${USERDIR}/autoexec_server.cfg" << 'EOF'
+      # DDNet server settings, run on every start before the panel settings (which win).
+      # See https://ddnet.org/settingscommands/ for all settings.
+      sv_motd "Welcome!"
+      sv_max_clients_per_ip 4
+      sv_rescue 1
+      sv_rescue_delay 5
+      logfile "ddnet-server.log"
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "DDNet ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: DDNet Version
+    description: latest for the current release, or a version such as 20.2.1. Reinstall to update; your settings, maps and ranks are kept.
+    order: 1
+    env_variable: DDNET_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|\d+(\.\d+)*)$/'
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: DDNet Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Admin password for the in-game remote console (F2, then rcon auth). Leave empty to turn remote console logins off.
+    order: 4
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Map
+    description: Map to start with (a .map file in ddnet-data/ddnet/maps/ or the built-in data/maps/, without .map), e.g. Sunny Side Up, Tutorial or Gold Mine.
+    order: 5
+    env_variable: SERVER_MAP
+    default_value: Sunny Side Up
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n\/]+$/'
+  - name: Max Players
+    description: Maximum number of players (1-128).
+    order: 6
+    env_variable: MAX_PLAYERS
+    default_value: "64"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Public
+    description: Register the server in the DDNet server browser. (1 = listed, 0 = join by address only)
+    order: 7
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional console commands, separated by ; e.g. sv_vote_kick 1; sv_test_cmds 0
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
