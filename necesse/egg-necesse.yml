@@ -1,0 +1,179 @@
+name: Necesse
+author: thexylo@pm.me
+description: >-
+  Necesse is a top-down sandbox survival game: explore an endless procedurally generated world,
+  build a settlement, recruit settlers and fight bosses alone or with friends. Native Linux
+  dedicated server (Steam app 1169370) with its bundled Java runtime.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Launched like StartServer-nogui.sh (same bundled Java runtime and GC options), but with quoted
+  # arguments: the script passes $@ unquoted, which splits names with spaces. The heap may use 75% of
+  # the server's memory limit. -localdir keeps config, saves and logs in the server root. Launch
+  # options override server.cfg for this run only. The server reads console commands from stdin.
+  # Values are expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./jre/bin/java -XX:MaxRAMPercentage=75 -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC
+    -XX:+ExplicitGCInvokesConcurrent -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20
+    -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -jar Server.jar -nogui -localdir
+    -world "${WORLD_NAME}" -port {{SERVER_PORT}} -slots {{SLOTS}} -password "${SERVER_PASSWORD}"
+    -motd "${MOTD}" -pausewhenempty {{PAUSE_WHEN_EMPTY}} ${OWNER_NAME:+-owner "${OWNER_NAME}"}
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Type help for list of commands
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Necesse dedicated server installation script (native Linux build, bundled Java runtime)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Server.jar
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+      [[ -f /mnt/server/jre/bin/java ]] || fail "the bundled Java runtime (jre/bin/java) is missing from app ${SRCDS_APPID}"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x /mnt/server/jre/bin/java
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: World Name
+    description: >-
+      World to load, created on first start (saves/worlds/<World Name>.zip). Letters, digits,
+      spaces, _ and -.
+    order: 1
+    env_variable: WORLD_NAME
+    default_value: World
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+( [\w-]+)*$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for an open server.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s,]*$/'
+  - name: Slots
+    description: Maximum number of players (1-250).
+    order: 3
+    env_variable: SLOTS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,250"
+  - name: Owner Name
+    description: >-
+      Character name that gets owner permissions when it joins. Leave empty to grant permissions from
+      the console (permissions set <name> owner).
+    order: 4
+    env_variable: OWNER_NAME
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:32|regex:/^[^\r\n"]*$/'
+  - name: Message of the Day
+    description: Message shown to players when they join. Use \n for a new line.
+    order: 5
+    env_variable: MOTD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: Pause When Empty
+    description: Pause the world while no players are online. (1 = on, 0 = off)
+    order: 6
+    env_variable: PAUSE_WHEN_EMPTY
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -language de -zipsaves 0 -ignoreseasons
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install. Leave empty for the stable release. Reinstall after changing
+      it.
+    order: 9
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Necesse dedicated server.
+    order: 10
+    env_variable: SRCDS_APPID
+    default_value: "1169370"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1169370"
