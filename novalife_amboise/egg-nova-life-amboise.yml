@@ -1,0 +1,233 @@
+name: "Nova-Life: Amboise"
+author: thexylo@pm.me
+description: >-
+  Nova-Life: Amboise, the French roleplay life simulation in an open city: jobs, businesses,
+  vehicles, housing and an in-game economy. Native Linux dedicated server (Steam app 1665030).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server runs the server folder Servers/server/. Its list name, slots, ports, visibility,
+  # admin PIN, whitelist, autosave interval, map and frame rate are written to
+  # Servers/server/Config/server.json on every start (seeded by the installer). Players, vehicles
+  # and objects are kept in Servers/server/life.db. The stop signal (SIGINT) shuts it down.
+  Default: ./nova-life.x86_64 -batchmode -nographics -startServer "server"
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Servers/server/Config/server.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: serverListName
+          replace_with: '"{{env.SERVER_NAME}}"'
+        - match: serverSlot
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: serverPort
+          replace_with: "{{server.build.default.port}}"
+        - match: queryPort
+          replace_with: "{{env.QUERY_PORT}}"
+        - match: steamPort
+          replace_with: "{{env.STEAM_PORT}}"
+        - match: isPublicServer
+          replace_with: "{{env.PUBLIC}}"
+        - match: useAdminPinAuth
+          replace_with: "{{env.ADMIN_PIN_AUTH}}"
+        - match: isWhitelisted
+          replace_with: "{{env.WHITELISTED}}"
+        - match: autoSaveIntervalSeconds
+          replace_with: "{{env.AUTOSAVE_INTERVAL}}"
+        - match: mapId
+          replace_with: "{{env.MAP_ID}}"
+        - match: serverFramerate
+          replace_with: "{{env.FRAMERATE}}"
+  startup:
+    done:
+      - "Server launched in "
+      - "Server successfully logged on to the Steam master server"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Nova-Life: Amboise dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/nova-life.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## server.json: the server refuses to start without it; seeded once so the panel can apply
+      ## its values (the server creates its other config files on first start)
+      CONFIG_DIR=/mnt/server/Servers/server/Config
+      mkdir -p "${CONFIG_DIR}"
+      if [[ ! -f "${CONFIG_DIR}/server.json" ]]; then
+          cat > "${CONFIG_DIR}/server.json" << 'EOF'
+      {
+        "serverName": "server",
+        "serverListName": "Nova-Life Server",
+        "serverSlot": 25,
+        "serverPort": 7777,
+        "queryPort": 27015,
+        "steamPort": 27016,
+        "isPublicServer": true,
+        "useAdminPinAuth": false,
+        "tabletUrl": "",
+        "isWhitelisted": false,
+        "useWhitelistProtection": false,
+        "whitelist": {"intro": "", "questions": [], "date": ""},
+        "autoSaveIntervalSeconds": 1800,
+        "disconnectClientsBeforeStop": true,
+        "mapId": 0,
+        "serverFramerate": 60,
+        "hasShop": false
+      }
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Nova-Life Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Max Players
+    description: Number of player slots.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "25"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,200"
+  - name: Public
+    description: List the server in the public server list. (true or false)
+    order: 3
+    env_variable: PUBLIC
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Admin PIN Authentication
+    description: Admins must confirm with a PIN. (true or false)
+    order: 4
+    env_variable: ADMIN_PIN_AUTH
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Whitelisted
+    description: Only whitelisted players can join. (true or false)
+    order: 5
+    env_variable: WHITELISTED
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Autosave Interval
+    description: Seconds between autosaves.
+    order: 6
+    env_variable: AUTOSAVE_INTERVAL
+    default_value: "1800"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:60,86400"
+  - name: Map ID
+    description: Map to load (0 is Amboise).
+    order: 7
+    env_variable: MAP_ID
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,100"
+  - name: Frame Rate
+    description: Server frame rate.
+    order: 8
+    env_variable: FRAMERATE
+    default_value: "60"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:10,240"
+  - name: Query Port
+    description: UDP port for Steam server queries (A2S). Needs its own allocation.
+    order: 9
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Steam Port
+    description: UDP port of the Steam game server. Needs its own allocation.
+    order: 10
+    env_variable: STEAM_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 11
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Nova-Life dedicated server.
+    order: 12
+    env_variable: SRCDS_APPID
+    default_value: "1665030"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1665030"
