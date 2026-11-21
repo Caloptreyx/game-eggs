@@ -1,0 +1,133 @@
+name: Urban Terror
+author: thexylo@pm.me
+description: >-
+  Urban Terror, the free realism-flavoured team shooter on the Quake III engine: capture the flag,
+  bomb, team survivor and more. Official 4.3 dedicated server, installed with the Urban Terror
+  updater.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # q3ut4/server.cfg (the documented example shipped with Urban Terror, copied once) runs first;
+  # name, passwords, player limit and the start map are then passed as +set options, so they win
+  # over the file. The console takes server commands (status, map, kick, say, ...); stopping sends
+  # quit. Values are expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./Quake3-UrT-Ded.x86_64 +set fs_game q3ut4 +set fs_basepath /home/container +set fs_homepath /home/container
+    +set dedicated 2 +set net_port {{SERVER_PORT}} +set com_hunkmegs 256 +exec server.cfg
+    +set sv_hostname "${SERVER_NAME}" +set g_password "${SERVER_PASSWORD}" +set rconpassword "${RCON_PASSWORD}"
+    +set sv_maxclients {{MAX_PLAYERS}} +map "${MAP}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Sending heartbeat to"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Urban Terror server installation script (official Urban Terror updater)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The updater installs or updates the game files; q3ut4/server.cfg, mapcycle.txt and added maps
+      # are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the updater needs xmllint
+      apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends libxml2-utils >/dev/null \
+          || fail "could not install xmllint"
+
+      ## official updater (the website only offers it through an interactive page; GitHub hosts it)
+      curl -fsSL --retry 3 -o UrTUpdater-Ded.sh \
+          https://github.com/FrozenSand/UrTUpdater/releases/download/v4.0.3-RC1/UrTUpdater-v4.0.3-Ded.sh \
+          || fail "could not download the Urban Terror updater"
+      chmod +x UrTUpdater-Ded.sh
+
+      ## answers: accept the licence, latest version, first download server, first engine, do not
+      ## update automatically later, download now, do not play
+      echo "Installing Urban Terror with the updater (about 1.4 GB)..."
+      printf 'y\n1\n1\n1\nn\ny\nn\n' | bash ./UrTUpdater-Ded.sh || fail "the Urban Terror updater failed"
+      [[ -f Quake3-UrT-Ded.x86_64 && -d q3ut4 ]] || fail "the updater did not install the server"
+      chmod +x Quake3-UrT-Ded.x86_64
+
+      ## configs: the documented examples, copied once
+      [[ -f q3ut4/server.cfg ]] || cp q3ut4/server_example.cfg q3ut4/server.cfg || fail "could not create q3ut4/server.cfg"
+      [[ -f q3ut4/mapcycle.txt ]] || cp q3ut4/mapcycle_example.txt q3ut4/mapcycle.txt || fail "could not create q3ut4/mapcycle.txt"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Urban Terror Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to turn RCON off.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Map
+    description: Map to start with, e.g. ut4_turnpike, ut4_abbey, ut4_casa, ut4_algiers.
+    order: 5
+    env_variable: MAP
+    default_value: ut4_turnpike
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Extra Arguments
+    description: Additional +set options, e.g. +set g_gametype 7 (CTF).
+    order: 6
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
