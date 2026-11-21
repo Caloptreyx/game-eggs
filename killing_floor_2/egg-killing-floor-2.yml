@@ -1,0 +1,283 @@
+name: Killing Floor 2
+author: thexylo@pm.me
+description: >-
+  Co-op survival shooter: up to six players fight waves of Zeds. Native Linux dedicated server
+  (Steam app 232130) with WebAdmin.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server logs to stdout but reads no console input. Console lines are sent to the WebAdmin
+  # console page (chat page for "say ..."), logged in through WebAdmin's remember-me cookie (base64 of
+  # "Admin", newline, password), and the result is printed as text; this needs WebAdmin on and an
+  # Admin Password. Map, game mode, difficulty, length and player limit are URL options of the start
+  # map; name, passwords, WebAdmin and takeover are written to the config files the installer
+  # generated. The server keeps no world state, so it can stop on SIGINT right away. Values are
+  # expanded inside quotes, never re-parsed by the shell. Keep "} }" spaced: "}}" is a placeholder
+  # delimiter for the image.
+  Default: >-
+    wa() { local p=$1; shift; curl -s --max-time 30 -b "authcred=$(printf 'Admin\n%s' "${ADMIN_PASSWORD}" | base64 -w0)"
+    "http://127.0.0.1:${WEBADMIN_PORT}/ServerAdmin/${p}" "$@"; };
+    txt() { perl -0777 -ne 'if (/id="loginform"/) { print "WebAdmin refused the login, check the Admin Password.\n"; exit }
+    $_ = $1 if m{<div id="consoleResults"[^>]*>(.*?)</div>}s; s{<br\s*/?>}{\n}g; s{<[^>]+>}{}g;
+    s/&gt;/>/g; s/&lt;/</g; s/&quot;/"/g; s/&#39;/\x27/g; s/&#160;/ /g; s/&amp;/&/g; s/^\s+//mg; s/:\n/: /g; s/\s+\z//;
+    print "$_\n" if length'; };
+    (while read -r line; do if [ "${WEBADMIN}" != "true" ] || [ -z "${ADMIN_PASSWORD}" ]; then
+    echo "Console commands go through WebAdmin: turn WebAdmin on and set an Admin Password.";
+    elif [[ "${line}" =~ ^[Ss][Aa][Yy][[:space:]]+(.+)$ ]]; then
+    wa current/chat+data --data-urlencode ajax=1 --data-urlencode "message=${BASH_REMATCH[1]}" --data-urlencode teamsay=-1 | txt;
+    else wa console --data-urlencode "command=${line}" | txt; fi; done) <&0 &
+    ./Binaries/Win64/KFGameSteamServer.bin.x86_64
+    "${SERVER_MAP}?Game=${GAME_MODE}?Difficulty=${DIFFICULTY}?GameLength=${GAME_LENGTH}?MaxPlayers=${MAX_PLAYERS}"
+    -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    KFGame/Config/LinuxServer-KFGame.ini:
+      parser: ini
+      create_new: false
+      replace:
+        - match: "[Engine.GameReplicationInfo].ServerName"
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: "[Engine.AccessControl].GamePassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[Engine.AccessControl].AdminPassword"
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+    KFGame/Config/LinuxServer-KFEngine.ini:
+      parser: ini
+      create_new: false
+      replace:
+        - match: "[Engine.GameEngine].bUsedForTakeover"
+          replace_with: "{{env.TAKEOVER}}"
+    KFGame/Config/KFWeb.ini:
+      parser: ini
+      create_new: false
+      replace:
+        - match: "[IpDrv.WebServer].bEnabled"
+          replace_with: "{{env.WEBADMIN}}"
+        - match: "[IpDrv.WebServer].ListenPort"
+          replace_with: "{{env.WEBADMIN_PORT}}"
+  startup:
+    done:
+      - "Log: Initializing Game Engine Completed"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Killing Floor 2 dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Binaries/Win64/KFGameSteamServer.bin.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      # Linux servers do not create the Workshop cache folder themselves.
+      mkdir -p /mnt/server/KFGame/Cache
+
+      ## config files: the server writes them from the defaults on its first start. They are generated
+      # here so the panel settings apply from the first start on.
+      CONFIG=/mnt/server/KFGame/Config
+      if [[ ! -f "${CONFIG}/LinuxServer-KFGame.ini" || ! -f "${CONFIG}/LinuxServer-KFEngine.ini" || ! -f "${CONFIG}/KFWeb.ini" ]]; then
+          echo "Generating the config files (first server start)..."
+          cd /mnt/server || fail "cannot enter /mnt/server"
+          "${SERVER_BINARY}" kf-bioticslab > /tmp/first-start.log 2>&1 &
+          SRV=$!
+          for i in $(seq 1 180); do
+              [[ -f "${CONFIG}/LinuxServer-KFGame.ini" && -f "${CONFIG}/LinuxServer-KFEngine.ini" && -f "${CONFIG}/KFWeb.ini" ]] && break
+              kill -0 "${SRV}" 2>/dev/null || break
+              sleep 1
+          done
+          sleep 10
+          kill -INT "${SRV}" 2>/dev/null; sleep 10; kill -KILL "${SRV}" 2>/dev/null; wait "${SRV}" 2>/dev/null
+          [[ -f "${CONFIG}/LinuxServer-KFGame.ini" && -f "${CONFIG}/LinuxServer-KFEngine.ini" && -f "${CONFIG}/KFWeb.ini" ]] \
+              || { tail -n 30 /tmp/first-start.log; fail "the server did not generate its config files"; }
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Killing Floor 2 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Map
+    description: Map to start on, e.g. KF-BioticsLab, KF-BurningParis, KF-Outpost, KF-Prison.
+    order: 2
+    env_variable: SERVER_MAP
+    default_value: KF-BioticsLab
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Game Mode
+    description: >-
+      KFGameInfo_Survival (co-op, 6 players), KFGameInfo_VersusSurvival (players vs. player Zeds, 12
+      players), KFGameInfo_WeeklySurvival (Weekly Outbreak), KFGameInfo_Endless or
+      KFGameInfo_Objective, each prefixed with KFGameContent.
+    order: 3
+    env_variable: GAME_MODE
+    default_value: KFGameContent.KFGameInfo_Survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:KFGameContent.KFGameInfo_Survival,KFGameContent.KFGameInfo_VersusSurvival,KFGameContent.KFGameInfo_WeeklySurvival,KFGameContent.KFGameInfo_Endless,KFGameContent.KFGameInfo_Objective"
+  - name: Difficulty
+    description: 0 = Normal, 1 = Hard, 2 = Suicidal, 3 = Hell on Earth.
+    order: 4
+    env_variable: DIFFICULTY
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: Game Length
+    description: 0 = Short (4 waves), 1 = Medium (7 waves), 2 = Long (10 waves).
+    order: 5
+    env_variable: GAME_LENGTH
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2"
+  - name: Max Players
+    description: Maximum number of players. The game modes are made for 6 (Versus Survival 12).
+    order: 6
+    env_variable: MAX_PLAYERS
+    default_value: "6"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 7
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s]*$/'
+  - name: Admin Password
+    description: >-
+      Password for WebAdmin (user Admin) and for in-game admin login (console: AdminLogin
+      <password>). Without it nobody can log in as admin.
+    order: 8
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s]*$/'
+  - name: WebAdmin
+    description: Enable the WebAdmin web interface on the WebAdmin Port.
+    order: 9
+    env_variable: WEBADMIN
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: WebAdmin Port
+    description: TCP port of the WebAdmin web interface. Needs its own allocation.
+    order: 10
+    env_variable: WEBADMIN_PORT
+    default_value: "8080"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Query Port
+    description: UDP port for Steam server queries and the server browser. Needs its own allocation.
+    order: 11
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Allow Takeover
+    description: >-
+      Let matchmaking players take over the server while it is empty and play a private match with
+      their own settings (True = allowed, False = never).
+    order: 12
+    env_variable: TAKEOVER
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Extra Arguments
+    description: Additional launch switches, appended after the map URL.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
+    order: 15
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Killing Floor 2 dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "232130"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:232130"
