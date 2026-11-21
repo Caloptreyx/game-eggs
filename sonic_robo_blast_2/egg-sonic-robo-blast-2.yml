@@ -1,0 +1,176 @@
+name: Sonic Robo Blast 2
+author: thexylo@pm.me
+description: >-
+  Sonic Robo Blast 2, the free 3D Sonic fangame on the Doom engine: co-op, race, match, tag and
+  CTF netgames. The official Windows build runs as a dedicated server through Proton.
+features: []
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The dedicated server reads adedserv.cfg on start; name, password and player limit are written
+  # there on every start. Its own console is unusable under Proton, so its log file
+  # (latest-log.txt) is streamed to the panel; the server reads no console input. It gets a virtual
+  # display (Xvfb, in its own session so the stop signal does not take it away); PROTON_USE_XALIA=0
+  # stops Proton's accessibility helper from failing on it. Wine runs the server in its own
+  # process group, so the stop signal never reaches it: the shell forwards SIGINT to it and waits.
+  Default: >-
+    : > latest-log.txt; rm -f /tmp/.X99-lock;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp 2>/dev/null & XVFB=$!;
+    DISPLAY=:99 PROTON_USE_XALIA=0 proton run ./srb2win.exe -dedicated -port {{SERVER_PORT}}
+    $( [ "${ROOM}" != "0" ] && printf -- '-room %s' "${ROOM}" ) {{EXTRA_ARGS}} >/dev/null 2>&1 & SRV=$!;
+    trap 'pkill -INT -f "srb2win\.exe"' INT;
+    tail -n +1 -F latest-log.txt --pid=${SRV} 2>/dev/null &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done; kill ${XVFB} 2>/dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    adedserv.cfg:
+      parser: file
+      create_new: false
+      replace:
+        - match: "servername "
+          replace_with: servername "{{env.SERVER_NAME}}"
+        - match: "password "
+          replace_with: password "{{env.SERVER_PASSWORD}}"
+        - match: "maxplayers "
+          replace_with: "maxplayers {{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "Entering main game loop"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Sonic Robo Blast 2 dedicated server installation script (Windows build, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; adedserv.cfg and added add-ons are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed version such as 2.2.15
+      if [[ -z "${SRB2_VERSION}" || "${SRB2_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/STJr/SRB2/releases/latest
+      else
+          api="https://api.github.com/repos/STJr/SRB2/releases/tags/SRB2_release_${SRB2_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up SRB2 ${SRB2_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name | test("-Full\\.zip$")) | .browser_download_url' <<< "${release}" | head -n 1)
+      [[ -n "${tag}" && -n "${url}" ]] || fail "SRB2 ${SRB2_VERSION} has no full zip download"
+
+      echo "Downloading ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/srb2.zip" "${url}" || fail "could not download ${tag}"
+      unzip -qo "${WORK}/srb2.zip" -d "${WORK}/srb2" || fail "could not extract ${tag}"
+      [[ -f "${WORK}/srb2/srb2win.exe" ]] || fail "${tag} has no srb2win.exe"
+      [[ -f adedserv.cfg ]] && rm -f "${WORK}/srb2/adedserv.cfg"
+      cp -a "${WORK}/srb2"/. /mnt/server/ || fail "could not install ${tag}"
+      echo "${tag}" > .srb2-version
+
+      ## adedserv.cfg: run by the dedicated server on start; created once
+      if [[ ! -f adedserv.cfg ]]; then
+          cat > adedserv.cfg << 'EOF'
+      servername "SRB2 Server"
+      password ""
+      maxplayers 16
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the master server list. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: SRB2 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password for admin rights in game (login command). Leave empty for none. No spaces or double quotes.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
+  - name: Master Server Room
+    description: >-
+      Master server room to list the server in (33 = Standard, 28 = Casual), or 0 to stay unlisted.
+      Listing currently fails under Proton (TLS error in the Windows build's curl); players join by
+      address.
+    order: 4
+    env_variable: ROOM
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,1000"
+  - name: Extra Arguments
+    description: Additional parameters, e.g. -file addon.pk3 or +map MAP01.
+    order: 5
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: SRB2 Version
+    description: latest, or a version such as 2.2.15. Players need the same version. Reinstall to update.
+    order: 6
+    env_variable: SRB2_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|\d+(\.\d+)*)$/']
+  - name: Proton Prefix
+    description: >-
+      Name of the Proton prefix the image creates (the image's SRCDS_APPID). SRB2 is not on Steam,
+      so this is not a Steam app id and the image's SteamCMD update stays off (Auto Update 0).
+    order: 7
+    env_variable: SRCDS_APPID
+    default_value: srb2
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:srb2"
+  - name: Auto Update
+    description: Off; SRB2 updates by reinstalling with a newer SRB2 Version.
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "0"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:0"
