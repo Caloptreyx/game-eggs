@@ -2,7 +2,7 @@
 
 Rising World is an open-world sandbox and survival game. Players explore an endless procedural world, mine, craft, farm, hunt and tame animals, and build freely or block by block, alone or together.
 
-Native Calagopus egg for the dedicated server of the current (Unity) version of Rising World (Steam app `339010`), installed anonymously through SteamCMD. The Java Legacy version has its own egg, described at the end.
+Native Calagopus egg for the dedicated server of the current (Unity) version of Rising World (Steam app `339010`), installed anonymously through SteamCMD. The Java Legacy version has its own egg, described in "Java Legacy egg" below.
 
 ## Capabilities
 
