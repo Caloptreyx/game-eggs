@@ -1,0 +1,215 @@
+name: Zandronum
+author: thexylo@pm.me
+description: >-
+  Zandronum, the multiplayer Doom source port: deathmatch, cooperative, CTF, invasion and more,
+  with the free Freedoom IWADs (or your own WADs). Official Linux server build.
+features: []
+docker_images:
+  Zandronum: ghcr.io/caloptreyx/games:zandronum
+file_denylist: []
+startup_commands:
+  # server.cfg (created once by the installer: game mode, limits, map rotation) runs first; name,
+  # passwords, player limit and the start map are then passed as + commands, so they win over the
+  # file. Extra WADs (PWADs, space-separated file names in wads/) are loaded with -file. The console
+  # takes server commands (map, kick, say, addmap, ...); stopping sends quit. Values are expanded
+  # inside quotes, never re-parsed by the shell. Zandronum looks up its home directory (for
+  # ~/.config) through the passwd database and exits when the container user has no entry, so one
+  # is provided through nss_wrapper.
+  Default: >-
+    getent passwd "$(id -u)" >/dev/null || { printf "container:x:%s:%s::/home/container:/bin/bash\n" "$(id -u)" "$(id -g)" > /tmp/passwd;
+    export LD_PRELOAD=libnss_wrapper.so NSS_WRAPPER_PASSWD=/tmp/passwd NSS_WRAPPER_GROUP=/etc/group; };
+    ./zandronum-server -port {{SERVER_PORT}} -iwad "${IWAD}" -config zandronum.ini
+    $(for f in ${PWADS}; do printf ' -file wads/%s' "${f}"; done) +exec server.cfg
+    +sv_hostname "${SERVER_NAME}" +sv_password "${SERVER_PASSWORD}" +sv_forcepassword $( [ -n "${SERVER_PASSWORD}" ] && echo 1 || echo 0 )
+    +sv_rconpassword "${RCON_PASSWORD}" +sv_maxclients {{MAX_PLAYERS}} +sv_maxplayers {{MAX_PLAYERS}}
+    +sv_updatemaster {{PUBLIC}} +map "${MAP}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "UDP Initialized"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Zandronum server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server files are replaced; server.cfg, zandronum.ini and your WADs are kept. The Freedoom
+      # IWADs (freedoom1.wad, freedoom2.wad, freedm.wad) are downloaded once.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## Zandronum: the newest Linux x86_64 build listed on zandronum.com/downloads, or a fixed version.
+      ## (zandronum.com challenges browser user agents; curl's own user agent gets the files.)
+      if [[ -z "${ZANDRONUM_VERSION}" || "${ZANDRONUM_VERSION}" == "latest" ]]; then
+          page=$(curl -fsSL --retry 3 https://zandronum.com/downloads/) || fail "could not open zandronum.com/downloads"
+          file=$(grep -oE 'zandronum[0-9][0-9.]*-linux-x86_64\.tar\.(bz2|xz)' <<< "${page}" | sort -uV | tail -n 1)
+      else
+          file="zandronum${ZANDRONUM_VERSION}-linux-x86_64.tar.bz2"
+      fi
+      [[ -n "${file}" ]] || fail "could not find a Linux x86_64 build on zandronum.com/downloads"
+      echo "Downloading ${file}..."
+      curl -fsSL --retry 3 -o "${WORK}/${file}" "https://zandronum.com/downloads/${file}" || fail "could not download ${file}"
+      [[ "$(head -c 15 "${WORK}/${file}")" != "<!doctype html>" ]] || fail "zandronum.com returned a web page instead of ${file}"
+      mkdir -p "${WORK}/zan"
+      tar -xf "${WORK}/${file}" -C "${WORK}/zan" || fail "could not extract ${file}"
+      [[ -f "${WORK}/zan/zandronum-server" ]] || fail "${file} has no zandronum-server"
+      # The client is not needed on a server.
+      rm -f "${WORK}/zan/zandronum" "${WORK}/zan"/*.so
+      cp -a "${WORK}/zan"/. /mnt/server/ || fail "could not install ${file}"
+      chmod +x zandronum-server
+      echo "${file}" > .zandronum-version
+
+      ## Freedoom IWADs (free replacements for Doom, Doom II and a deathmatch IWAD), downloaded once
+      if [[ ! -s freedoom2.wad || ! -s freedm.wad ]]; then
+          release=$(curl -fsSL --retry 3 https://api.github.com/repos/freedoom/freedoom/releases/latest) \
+              || fail "could not look up the Freedoom release"
+          for name in freedoom freedm; do
+              url=$(jq -r --arg n "${name}-" '.assets[] | select((.name | startswith($n)) and (.name | endswith(".zip"))) | .browser_download_url' <<< "${release}" | head -n 1)
+              [[ -n "${url}" ]] || fail "the Freedoom release has no ${name} download"
+              echo "Downloading $(basename "${url}")..."
+              curl -fsSL --retry 3 -o "${WORK}/${name}.zip" "${url}" || fail "could not download ${name}"
+              unzip -qjo "${WORK}/${name}.zip" '*.wad' -d /mnt/server || fail "could not extract ${name}"
+          done
+      fi
+      mkdir -p wads
+
+      ## server.cfg: created once; the panel's name, passwords, player limit and map win over it
+      if [[ ! -f server.cfg ]]; then
+          cat > server.cfg << 'EOF'
+      // Zandronum server settings. The panel sets sv_hostname, sv_password, sv_rconpassword,
+      // sv_maxclients, sv_maxplayers, sv_updatemaster and the start map after this file runs.
+
+      // Game mode: set one of these to 1 (deathmatch, teamplay, ctf, cooperative, survival,
+      // invasion, duel, terminator, lastmanstanding, teamlms, possession, teampossession, ...)
+      set deathmatch 1
+      set fraglimit 30
+      set timelimit 15
+      set sv_motd "Welcome!"
+
+      // Map rotation (Freedoom: Phase 2 / FreeDM maps); add your own with addmap
+      set sv_maprotation 1
+      addmap MAP01
+      addmap MAP02
+      addmap MAP03
+      addmap MAP04
+      addmap MAP05
+      addmap MAP06
+      addmap MAP07
+      addmap MAP08
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Zandronum Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to turn RCON off.
+    order: 3
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: IWAD
+    description: >-
+      Base game WAD in the server root: freedm.wad (deathmatch), freedoom2.wad (Doom II
+      replacement), freedoom1.wad (Doom replacement), or your own (e.g. doom2.wad, uploaded).
+    order: 5
+    env_variable: IWAD
+    default_value: freedm.wad
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:64", 'regex:/^[\w.-]+\.(wad|WAD|pk3|ipk3)$/']
+  - name: PWADs
+    description: Extra WADs/PK3s to load, space-separated file names in the wads/ folder.
+    order: 6
+    env_variable: PWADS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[\w. -]*$/'
+  - name: Map
+    description: Map to start with, e.g. MAP01 (Doom II style IWADs) or E1M1 (freedoom1.wad).
+    order: 7
+    env_variable: MAP
+    default_value: MAP01
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^[\w-]+$/'
+  - name: Public
+    description: List the server on the Zandronum master server. (1 = on, 0 = off)
+    order: 8
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional parameters, e.g. +set skill 3 or -file wads/extra.pk3.
+    order: 9
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Zandronum Version
+    description: latest, or a version listed on zandronum.com/downloads such as 3.2.1. Reinstall to update.
+    order: 10
+    env_variable: ZANDRONUM_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
