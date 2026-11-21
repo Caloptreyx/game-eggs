@@ -41,5 +41,4 @@ Saved as `.pteroignore` in the server root, this limits backups to the worlds, p
 !Worlds/
 !Plugins/
 !server.properties
-!permissions/
 ```
