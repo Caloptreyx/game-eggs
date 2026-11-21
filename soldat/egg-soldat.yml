@@ -1,0 +1,145 @@
+name: Soldat
+author: thexylo@pm.me
+description: >-
+  Soldat, the fast 2D side-scrolling multiplayer shooter inspired by Liero, Worms and Counter-Strike.
+  Native Linux dedicated server (Steam app 638500).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Port, name, passwords and player limit are written to soldat.ini on every start. The server
+  # reads no console input (it is administered over TCP on the game port with the admin password);
+  # the stop signal (SIGINT) ends it. Map downloads use TCP on the game port + 10.
+  Default: ./soldatserver
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    soldat.ini:
+      parser: ini
+      replace:
+        - match: NETWORK.Port
+          replace_with: "{{server.build.default.port}}"
+        - match: NETWORK.Max_Players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: NETWORK.Game_Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: NETWORK.Admin_Password
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: NETWORK.Server_Name
+          replace_with: "{{env.SERVER_NAME}}"
+  startup:
+    done:
+      - "Connection for file server started"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Soldat dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/soldatserver
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      ls -la /mnt/server
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server lobby.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Soldat Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Admin Password
+    description: Password for the remote admin console (and /adminlog in game). Leave empty for none.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 5
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Soldat dedicated server.
+    order: 6
+    env_variable: SRCDS_APPID
+    default_value: "638500"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:638500"
