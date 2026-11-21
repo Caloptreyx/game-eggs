@@ -1,0 +1,269 @@
+name: Open Fortress
+author: thexylo@pm.me
+description: >-
+  Open Fortress, the free Source mod built on Team Fortress 2: deathmatch, mercenary class, arsenal
+  and more game modes, new weapons and maps. Native Source SDK Base 2013 Multiplayer dedicated server
+  (Steam app 244310) with the Team Fortress 2 dedicated server content and the mod from adastral.
+features:
+  - gsl_token
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The mod loads the Team Fortress 2 dedicated server (app 232250), which the installer puts into
+  # tf2/ and which is updated here on every start when Auto Update is on (the image only updates the
+  # Source SDK Base itself); the mod is updated by reinstalling. srcds aborts while shutting down
+  # after quit; ulimit keeps that from writing a core file of several hundred MB into the server
+  # directory on every stop.
+  Default: >-
+    if [ "${AUTO_UPDATE}" = "1" ]; then ./steamcmd/steamcmd.sh +force_install_dir /home/container/tf2 +login anonymous
+    +app_update 232250 +quit >/dev/null && echo "Team Fortress 2 dedicated server is up to date"; fi;
+    ulimit -c 0; ./srcds_run -game open_fortress -console -port {{SERVER_PORT}} +ip 0.0.0.0 -strictportbind -norestart
+    +maxplayers {{MAX_PLAYERS}} +map "{{SRCDS_MAP}}"
+    ${STEAM_TOKEN:+ +sv_setsteamaccount "${STEAM_TOKEN}"} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    open_fortress/cfg/server.cfg:
+      parser: file
+      replace:
+        - match: "hostname "
+          replace_with: hostname "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "sv_password "
+          replace_with: sv_password "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "rcon_password "
+          replace_with: rcon_password "{{env.RCON_PASSWORD}}"
+          insert_new: true
+  startup:
+    done:
+      - gameserver Steam ID
+      - Connection to Steam servers successful
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Open Fortress dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs the Source SDK Base 2013 Multiplayer dedicated server, the Team Fortress 2 dedicated
+      # server (tf2/) and the Open Fortress release from adastral (open_fortress/, about 7 GB). A
+      # reinstall updates all three; Open Fortress is only downloaded again when a new release is out.
+      # open_fortress/cfg/server.cfg and files that are not part of the release (custom/, maps) are kept.
+
+      SERVER_BINARY=/mnt/server/srcds_linux
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## Source SDK Base 2013 Multiplayer, branch previous2021: the current Open Fortress release is built
+      ## for that engine ("Failed to apply server patches!" and a crash on the February 2025 public build).
+      ## The first attempt often fails with "Missing configuration".
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update "${SRCDS_APPID}" -beta "${SRCDS_BETAID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## the Team Fortress 2 dedicated server, whose content the mod loads
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server/tf2 +login anonymous +app_update 232250 validate +quit \
+              && [[ -d /mnt/server/tf2/tf ]] && break
+          echo "SteamCMD attempt ${attempt} for the Team Fortress 2 dedicated server failed, retrying..."
+          sleep 5
+      done
+      [[ -d /mnt/server/tf2/tf ]] || fail "SteamCMD could not install the Team Fortress 2 dedicated server (app 232250); check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## the engine loads its modules without the _srv suffix the dedicated server files carry
+      ## (otherwise "Unable to load module soundemittersystem.so!")
+      cd /mnt/server/bin || fail "cannot enter /mnt/server/bin"
+      for lib in *_srv.so; do
+          [[ -e "${lib%_srv.so}.so" ]] || ln -s "${lib}" "${lib%_srv.so}.so" || fail "could not link bin/${lib%_srv.so}.so"
+      done
+
+      ## Open Fortress: the newest full release listed by adastral (the source of its launcher, beans)
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      versions=$(curl -fsSL --retry 3 https://of-proxy.kate.pet/versions.json) || fail "could not get the Open Fortress release list"
+      OF_RELEASE=$(jq -r '[.versions | to_entries[] | select(.value.file) | .key | tonumber] | max' <<< "${versions}")
+      OF_FILE=$(jq -r --arg v "${OF_RELEASE}" '.versions[$v].file // empty' <<< "${versions}")
+      [[ -n "${OF_FILE}" ]] || fail "the Open Fortress release list has no download"
+      if [[ "$(cat open_fortress/.of-release 2>/dev/null)" == "${OF_RELEASE}" && -f open_fortress/bin/server.so ]]; then
+          echo "Open Fortress release ${OF_RELEASE} is already installed"
+      else
+          echo "Installing Open Fortress release ${OF_RELEASE} (${OF_FILE}, about 3.3 GB download)..."
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends zstd > /dev/null || fail "could not install zstd"
+          [[ -f open_fortress/cfg/server.cfg ]] && cp -a open_fortress/cfg/server.cfg /mnt/server/.server.cfg.keep
+          # Streamed: the archive never touches the disk (the installer's /tmp is far too small).
+          set -o pipefail
+          curl -fsSL --retry 3 "https://of-proxy.kate.pet/${OF_FILE}" | zstd -dc | tar -x -C /mnt/server \
+              || fail "could not download and extract Open Fortress ${OF_FILE}"
+          set +o pipefail
+          [[ -f /mnt/server/.server.cfg.keep ]] && mv -f /mnt/server/.server.cfg.keep open_fortress/cfg/server.cfg
+          [[ -f open_fortress/bin/server.so ]] || fail "the Open Fortress release has no Linux server"
+          echo "${OF_RELEASE}" > open_fortress/.of-release
+      fi
+
+      ## gameinfo.txt mounts the Team Fortress 2 content from a Windows client install
+      ## (..\Team Fortress 2\...); point it at the dedicated server in tf2/ instead
+      sed -i -e '/|all_source_engine_paths|\.\.\\Team Fortress 2\\/{s#|all_source_engine_paths|\.\.\\Team Fortress 2\\#/home/container/tf2/#;s#\\#/#g;}' \
+          open_fortress/gameinfo.txt || fail "could not update open_fortress/gameinfo.txt"
+      grep -q '/home/container/tf2/tf' open_fortress/gameinfo.txt || fail "open_fortress/gameinfo.txt does not mount tf2/"
+
+      ## the dedicated engine loads the mod as bin/server_srv.so; without it srcds crashes right after
+      ## mounting the content
+      ln -sf server.so open_fortress/bin/server_srv.so || fail "could not link open_fortress/bin/server_srv.so"
+
+      ## server.cfg: the panel keeps hostname and passwords in sync on every start.
+      # Only created when missing or blank, so custom settings survive reinstalls.
+      CFG=/mnt/server/open_fortress/cfg/server.cfg
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // Open Fortress server configuration.
+      // hostname, sv_password and rcon_password are set from the panel.
+      hostname "Open Fortress Server"
+      sv_password ""
+      rcon_password ""
+
+      sv_region 255
+      sv_lan 0
+      sv_allowupload 0
+      sv_allowdownload 1
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned_user.cfg
+      exec banned_ip.cfg
+      EOF
+      fi
+      touch /mnt/server/open_fortress/cfg/banned_user.cfg /mnt/server/open_fortress/cfg/banned_ip.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Open Fortress Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: Map to load on start, e.g. dm_2fort, dm_lumberyard, ctf_2fort or cp_badlands.
+    order: 2
+    env_variable: SRCDS_MAP
+    default_value: dm_2fort
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "24"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,100"
+  - name: Game Server Login Token
+    description: >-
+      Steam game server token (steamcommunity.com/dev/managegameservers, app ID 243750). Optional; lets
+      the server keep a persistent Steam ID.
+    order: 4
+    env_variable: STEAM_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +mp_timelimit 20 +mp_fraglimit 30.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512'
+  - name: Auto Update
+    description: Update the server and the Team Fortress 2 content through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Source SDK Base 2013 Multiplayer dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "244310"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:244310"
+  - name: Steam Branch
+    description: Branch of the Source SDK Base 2013 dedicated server that Open Fortress runs on.
+    order: 10
+    env_variable: SRCDS_BETAID
+    default_value: previous2021
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:previous2021"
