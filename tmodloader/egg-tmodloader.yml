@@ -1,0 +1,179 @@
+name: "Terraria: tModLoader"
+author: thexylo@pm.me
+description: >-
+  tModLoader, the official mod loader for Terraria: thousands of content mods such as Calamity and
+  Thorium. Dedicated server from the tModLoader GitHub releases, with the .NET runtime it needs.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # tModLoader runs on the .NET runtime the installer puts into .dotnet/ (the version its
+  # runtimeconfig asks for), with the ICU libraries from .icu/. Worlds, mod configs and player data
+  # are kept in saves/ (-tmlsavedirectory), mods (.tmod files and enabled.json) in mods/. World,
+  # size, difficulty, players, password and the MOTD come from the panel: launch arguments, plus the
+  # difficulty in serverconfig.txt. A missing world is created on start. The console takes server
+  # commands (help, playing, save, kick, ban, say, ...); stopping sends exit, which saves the world.
+  Default: >-
+    export DOTNET_ROOT=/home/container/.dotnet LD_LIBRARY_PATH=/home/container/.icu DOTNET_CLI_TELEMETRY_OPTOUT=1;
+    mkdir -p saves/Worlds mods; ./.dotnet/dotnet tModLoader.dll -server -nosteam -config serverconfig.txt
+    -ip 0.0.0.0 -port {{SERVER_PORT}} -maxplayers {{MAX_PLAYERS}} -password "${SERVER_PASSWORD}" -motd "${MOTD}"
+    -world "/home/container/saves/Worlds/${WORLD_NAME}.wld" -autocreate {{WORLD_SIZE}} -worldname "${WORLD_NAME}"
+    -tmlsavedirectory /home/container/saves -modpath /home/container/mods
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    serverconfig.txt:
+      parser: file
+      create_new: false
+      replace:
+        - match: "difficulty="
+          replace_with: "difficulty={{env.DIFFICULTY}}"
+  startup:
+    done:
+      - "Server started"
+    strip_ansi: true
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # tModLoader dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The tModLoader files are replaced; saves/, mods/ and serverconfig.txt are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+      # The installer's /tmp is a small tmpfs, so downloads (also the .NET installer's) go here.
+      export TMPDIR="${WORK}"
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${TML_VERSION}" || "${TML_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/tModLoader/tModLoader/releases/latest
+      else
+          api="https://api.github.com/repos/tModLoader/tModLoader/releases/tags/${TML_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up tModLoader ${TML_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name == "tModLoader.zip") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "tModLoader ${TML_VERSION} has no tModLoader.zip"
+
+      echo "Downloading tModLoader ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/tml.zip" "${url}" || fail "could not download tModLoader ${tag}"
+      unzip -qo "${WORK}/tml.zip" -d "${WORK}/tml" || fail "could not extract tModLoader ${tag}"
+      [[ -f "${WORK}/tml/tModLoader.dll" ]] || fail "the tModLoader ${tag} archive has no tModLoader.dll"
+      # Previous program files (listed at the last install) are removed; saves, mods and config stay.
+      if [[ -f .tml-files ]]; then
+          while IFS= read -r f; do [[ -n "${f}" && "${f}" != serverconfig.txt ]] && rm -rf -- "./${f}"; done < .tml-files
+      fi
+      (cd "${WORK}/tml" && ls -A) > .tml-files
+      [[ -f serverconfig.txt ]] && rm -f "${WORK}/tml/serverconfig.txt"
+      cp -a "${WORK}/tml"/. /mnt/server/ || fail "could not install tModLoader ${tag}"
+      echo "${tag}" > .tml-version
+
+      ## .NET runtime: the version tModLoader's runtimeconfig asks for (latest patch of that channel)
+      dotnet_version=$(jq -r '.runtimeOptions.framework.version // empty' tModLoader.runtimeconfig.json)
+      dotnet_channel=$(cut -d. -f1,2 <<< "${dotnet_version}")
+      [[ "${dotnet_channel}" =~ ^[0-9]+\.[0-9]+$ ]] || fail "could not read the .NET version tModLoader needs"
+      echo "Installing the .NET ${dotnet_channel} runtime..."
+      curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh || fail "could not download the .NET install script"
+      rm -rf .dotnet
+      bash "${WORK}/dotnet-install.sh" --channel "${dotnet_channel}" --runtime dotnet --install-dir /mnt/server/.dotnet --no-path >/dev/null \
+          || fail "could not install the .NET ${dotnet_channel} runtime"
+
+      ## ICU (Terraria's localization needs it), taken from this Debian release, which matches the image
+      echo "Installing ICU into .icu/..."
+      apt-get update -qq || fail "apt-get update failed"
+      ICU_PACKAGE=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n 1)
+      [[ -n "${ICU_PACKAGE}" ]] || fail "no ICU package found"
+      apt-get install -y -qq --no-install-recommends "${ICU_PACKAGE}" > /dev/null || fail "could not install ${ICU_PACKAGE}"
+      rm -rf .icu && mkdir -p .icu
+      cp -a /usr/lib/x86_64-linux-gnu/libicu{uc,i18n,data}.so.* .icu/ || fail "could not copy ICU"
+
+      ## serverconfig.txt (the documented example): difficulty enabled so the panel can set it
+      sed -i 's/^#difficulty=/difficulty=/' serverconfig.txt
+      grep -q '^difficulty=' serverconfig.txt || echo "difficulty=0" >> serverconfig.txt
+      mkdir -p saves/Worlds mods
+
+      echo "-----------------------------------------"
+      echo "tModLoader ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: World Name
+    description: Name of the world file (saves/Worlds/<name>.wld). Created on start when missing.
+    order: 1
+    env_variable: WORLD_NAME
+    default_value: world
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: World Size
+    description: Size of a new world. (1 = small, 2 = medium, 3 = large)
+    order: 2
+    env_variable: WORLD_SIZE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:1,2,3"
+  - name: Difficulty
+    description: Difficulty of a new world. (0 = classic, 1 = expert, 2 = master, 3 = journey)
+    order: 3
+    env_variable: DIFFICULTY
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,255"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Message of the Day
+    description: Shown to players when they join. Cannot contain double quotes.
+    order: 6
+    env_variable: MOTD
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+  - name: tModLoader Version
+    description: latest, or a release tag such as v2026.09.3.1. Players need the same version. Reinstall to update.
+    order: 7
+    env_variable: TML_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|v[\d.]+)$/']
