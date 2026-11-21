@@ -1,0 +1,283 @@
+name: Voyagers of Nera
+author: thexylo@pm.me
+description: >-
+  Cooperative survival-crafting game on a magical ocean world brimming with lost spirits and
+  deadly monsters. The Windows-only dedicated server (Steam app 3937860) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server only writes its log to a file when -LoggingInShippingEnabled=true is set, so that
+  # file is streamed to the console. The server reads no console input. Without a display it hangs
+  # during startup, so it gets a virtual one (Xvfb, in its own session so the stop signal does not
+  # take it away mid-save); PROTON_USE_XALIA=0 stops Proton's accessibility helper from failing on
+  # it. Advertised IP is passed as the EOS_OVERRIDE_HOST_IP environment variable, the only way the
+  # server accepts it. The server runs in its own process group under Proton, so the stop signal never
+  # reaches it. It exits cleanly on SIGINT but does not save first, so the shell traps the stop
+  # signal, waits for the next autosave (SaveManifest.json is rewritten last; at most Autosave
+  # Interval + 30 s, or until the server is gone), then forwards SIGINT and waits for the exit.
+  Default: >-
+    mkdir -p BoatGame/Saved/Logs; : > BoatGame/Saved/Logs/BoatGame.log; rm -f /tmp/.X99-lock;
+    if [ -n "${ADVERTISED_IP}" ]; then export EOS_OVERRIDE_HOST_IP="${ADVERTISED_IP}"; fi;
+    setsid Xvfb :99 -screen 0 1024x768x24 -nolisten tcp 2>/dev/null & XVFB=$!;
+    DISPLAY=:99 PROTON_USE_XALIA=0 proton run ./BoatGame/Binaries/Win64/BoatGameServer-Win64-Shipping.exe -log
+    -LoggingInShippingEnabled=true -port={{SERVER_PORT}} {{EXTRA_ARGS}} >/dev/null 2>&1 & SRV=$!;
+    trap 'touch /tmp/stop-request; END=$((SECONDS + AUTOSAVE_SECONDS + 30));
+    echo "Stop requested: waiting for the next autosave (at most $((AUTOSAVE_SECONDS + 30)) seconds)...";
+    until [ -n "$(find BoatGame/Saved/PersistedData -name SaveManifest.json -newer /tmp/stop-request 2>/dev/null)" ]
+    || [ ${SECONDS} -ge ${END} ] || ! kill -0 ${SRV} 2>/dev/null; do sleep 1; done; sleep 2;
+    pkill -INT -f "BoatGameServer-Win64-Shipping\.exe"' INT;
+    tail -n +1 -F BoatGame/Saved/Logs/BoatGame.log --pid=${SRV} 2>/dev/null &
+    wait ${SRV}; wait ${SRV}; kill ${XVFB} 2>/dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    BoatGame/Saved/PersistedData/CustomConfig/CustomHostServerUserSettings.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/BoatGame.BGCustomHostServerSettings].HostServerDisplayName"
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: "[/Script/BoatGame.BGCustomHostServerSettings].HostServerPassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[/Script/BoatGame.BGCustomHostServerSettings].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: "[/Script/BoatGame.BGCustomHostServerSettings].AutosaveTimerSeconds"
+          replace_with: "{{env.AUTOSAVE_SECONDS}}"
+    BoatGame/Saved/PersistedData/CustomConfig/CustomGameUserSettings.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/BoatGame.BGCustomGameSettings].GatheringRateMultiplier"
+          replace_with: "{{env.GATHERING_RATE}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].EnemyDamageMultiplier"
+          replace_with: "{{env.ENEMY_DAMAGE}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].PlayerDamageMultiplier"
+          replace_with: "{{env.PLAYER_DAMAGE}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].DisableEquipmentDurability"
+          replace_with: "{{env.DISABLE_DURABILITY}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].DisableDropItemsOnDeath"
+          replace_with: "{{env.KEEP_ITEMS_ON_DEATH}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].DisableWeather"
+          replace_with: "{{env.DISABLE_WEATHER}}"
+        - match: "[/Script/BoatGame.BGCustomGameSettings].DisableFogOfWar"
+          replace_with: "{{env.DISABLE_FOG_OF_WAR}}"
+  startup:
+    done:
+      - "OnStartSessionComplete(SessionName: GameSession, bWasSuccessful: 1)"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Voyagers of Nera dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/BoatGame/Binaries/Win64/BoatGameServer-Win64-Shipping.exe
+      CONFIG_DIR=/mnt/server/BoatGame/Saved/PersistedData/CustomConfig
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the Windows server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server configuration
+      # The server only creates its settings files on its first start; they are created here so the
+      # panel settings apply from the first start on. Existing files are kept.
+      mkdir -p "${CONFIG_DIR}" /mnt/server/BoatGame/Saved/Logs
+      if [[ ! -f "${CONFIG_DIR}/CustomHostServerUserSettings.ini" ]]; then
+          cat > "${CONFIG_DIR}/CustomHostServerUserSettings.ini" << 'EOF'
+      [/Script/BoatGame.BGCustomHostServerSettings]
+      HostServerDisplayName=
+      HostServerPassword=
+      MaxPlayers=10
+      AutosaveTimerSeconds=300
+      EOF
+      fi
+      if [[ ! -f "${CONFIG_DIR}/CustomGameUserSettings.ini" ]]; then
+          cat > "${CONFIG_DIR}/CustomGameUserSettings.ini" << 'EOF'
+      [/Script/BoatGame.BGCustomGameSettings]
+      GatheringRateMultiplier=1.0
+      EnemyDamageMultiplier=1.0
+      PlayerDamageMultiplier=1.0
+      DisableEquipmentDurability=False
+      DisableDropItemsOnDeath=False
+      DisableWeather=False
+      DisableFogOfWar=False
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the dedicated server browser. Letters and digits only, up to 30.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: NeraServer
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|regex:/^[A-Za-z0-9]{1,30}$/'
+  - name: Server Password
+    description: Password players need to join. Letters and digits only. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,10"
+  - name: Autosave Interval
+    description: Seconds between autosaves.
+    order: 4
+    env_variable: AUTOSAVE_SECONDS
+    default_value: "300"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:10,900"
+  - name: Gathering Rate
+    description: Resource yield multiplier per gathering interaction (0.01 to 10).
+    order: 5
+    env_variable: GATHERING_RATE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.01,10"
+  - name: Enemy Damage
+    description: Enemy attack damage multiplier (0.01 to 10).
+    order: 6
+    env_variable: ENEMY_DAMAGE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.01,10"
+  - name: Player Damage
+    description: Player attack damage multiplier (0.01 to 10).
+    order: 7
+    env_variable: PLAYER_DAMAGE
+    default_value: "1.0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|numeric|between:0.01,10"
+  - name: Disable Equipment Durability
+    description: Equipment never breaks or loses durability.
+    order: 8
+    env_variable: DISABLE_DURABILITY
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Keep Items On Death
+    description: Players keep their inventory items when they die.
+    order: 9
+    env_variable: KEEP_ITEMS_ON_DEATH
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Disable Weather
+    description: Weather is locked to clear skies, with no weather cycle or weather events.
+    order: 10
+    env_variable: DISABLE_WEATHER
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Disable Fog of War
+    description: The map is fully revealed from the start.
+    order: 11
+    env_variable: DISABLE_FOG_OF_WAR
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Advertised IP
+    description: >-
+      IP address the server tells players to connect to. Leave empty to advertise the server's public
+      IP (the default); only needed when that address is not the one players can reach.
+    order: 12
+    env_variable: ADVERTISED_IP
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|ip"
+  - name: Extra Arguments
+    description: Additional server launch parameters.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Voyagers of Nera dedicated server.
+    order: 15
+    env_variable: SRCDS_APPID
+    default_value: "3937860"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:3937860"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 16
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
