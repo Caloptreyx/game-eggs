@@ -52,4 +52,37 @@ Saved as `.pteroignore` in the server root, this limits backups to the configura
 
 ## BetterCrewLink server
 
-The BetterCrewLink voice relay from the Pterodactyl collection is not ported yet.
+Native Calagopus egg (`egg-bettercrewlink-server.yml`) for the voice server of [BetterCrewLink](https://github.com/OhMyGuus/BetterCrewLink), the proximity voice chat mod for Among Us. The installer downloads the [server source](https://github.com/OhMyGuus/BetterCrewLink-server) (Git Branch, default `master`), installs Node.js (Node.js Version, default 22) into `.node/` and builds the server; it runs on the `ghcr.io/caloptreyx/steamcmd:debian` image.
+
+### Capabilities
+
+- Server name and port from the panel on every start; `http://<address>:<port>/health` shows them with the connection and lobby counts.
+- HTTPS switch: with HTTPS on, the server reads `privkey.pem` and `fullchain.pem` from the server root.
+- Reinstall to update the source or change the Node.js version; `config/peerConfig.yml` and the certificates are kept.
+- Failed installations are reported to Calagopus as failed, with the reason.
+
+The server reads no console input. The panel's stop sends SIGINT and the server exits at once; it keeps no state.
+
+### Server Ports
+
+| Port   | Default | Protocol | Required |
+|--------|---------|----------|----------|
+| Server | 9736    | TCP      | yes (primary allocation; players enter `http://<address>:<port>` as voice server in BetterCrewLink) |
+
+### Peer connections
+
+Voice runs peer to peer; by default clients use Google's STUN server. To relay voice (for players behind strict NAT), copy `config/peerConfig.example.yml` to `config/peerConfig.yml` and enable the built-in TURN relay or add your own TURN servers. The built-in relay listens on UDP 3478 and relays through UDP ports 49152-65535 unless changed there; those ports need allocations, so for a panel server set `listeningPort`, `minPort` and `maxPort` to allocated ports, and set the Public Address variable to the server's public IP or DNS name.
+
+### Requirements
+
+The panel measured about 27 MB of memory with no lobbies; plan for 256 MB. The installation takes about 290 MB of disk (Node.js, dependencies and the build).
+
+### Sample ignore file for backups
+
+```
+# Ignore all
+*
+# Except the relay configuration and the certificates
+!config/peerConfig.yml
+!*.pem
+```

@@ -1,0 +1,137 @@
+name: Among Us (BetterCrewLink Server)
+author: thexylo@pm.me
+description: >-
+  Voice server for BetterCrewLink, the proximity voice chat mod for Among Us. Built from the
+  OhMyGuus/BetterCrewLink-server repository with a Node.js runtime the installer provides.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The installer builds the server and puts Node.js into .node/. The panel port, server name and
+  # HTTPS switch are passed as the environment variables the server reads; HOSTNAME (the address
+  # the built-in TURN relay announces) is the Public Address variable, or the container's own
+  # hostname when it is empty. The server reads no
+  # console input; the stop signal (SIGINT) ends it.
+  Default: >-
+    if [ "${HTTPS_ENABLED}" = "1" ]; then export HTTPS=1; else unset HTTPS; fi;
+    if [ -n "${PUBLIC_ADDRESS}" ]; then export HOSTNAME="${PUBLIC_ADDRESS}"; fi;
+    PORT={{SERVER_PORT}} NAME="${SERVER_NAME}" exec ./.node/bin/node dist/index.js
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "BetterCrewLink Server started"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # BetterCrewLink server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The source is replaced and rebuilt on every install; config/peerConfig.yml and the HTTPS
+      # certificates (privkey.pem, fullchain.pem) are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      REPO=OhMyGuus/BetterCrewLink-server
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+      # The installer's /tmp is a small tmpfs, so downloads and the npm cache go here.
+      export TMPDIR="${WORK}" npm_config_cache="${WORK}/npm-cache" npm_config_update_notifier=false
+
+      ## Node.js: the latest release of the chosen major version
+      node_version=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json \
+          | jq -r --arg m "v${NODE_VERSION}." '[.[] | select(.version | startswith($m))][0].version // empty') \
+          || fail "could not look up Node.js releases"
+      [[ -n "${node_version}" ]] || fail "there is no Node.js ${NODE_VERSION} release"
+      echo "Installing Node.js ${node_version}..."
+      curl -fsSL --retry 3 -o "${WORK}/node.tar.gz" "https://nodejs.org/dist/${node_version}/node-${node_version}-linux-x64.tar.gz" \
+          || fail "could not download Node.js ${node_version}"
+      rm -rf .node && mkdir -p .node
+      tar -xzf "${WORK}/node.tar.gz" -C .node --strip-components=1 || fail "could not extract Node.js ${node_version}"
+      export PATH="/mnt/server/.node/bin:${PATH}"
+
+      ## source of the chosen branch
+      echo "Downloading ${REPO} (${BRANCH})..."
+      curl -fsSL --retry 3 -o "${WORK}/source.tar.gz" "https://codeload.github.com/${REPO}/tar.gz/refs/heads/${BRANCH}" \
+          || fail "could not download ${REPO} branch ${BRANCH}"
+      mkdir -p "${WORK}/source"
+      tar -xzf "${WORK}/source.tar.gz" -C "${WORK}/source" --strip-components=1 || fail "could not extract the source"
+      [[ -f "${WORK}/source/package.json" ]] || fail "branch ${BRANCH} has no package.json"
+      rm -rf src dist node_modules public views types
+      cp -a "${WORK}/source"/. /mnt/server/ || fail "could not install the source"
+
+      ## dependencies and build
+      npm install --no-audit --no-fund || fail "npm install failed"
+      npx tsc || fail "the TypeScript build failed"
+      [[ -f dist/index.js ]] || fail "the build produced no dist/index.js"
+
+      echo "-----------------------------------------"
+      echo "BetterCrewLink server installed (Node.js ${node_version})."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name the server reports to BetterCrewLink clients.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: BetterCrewLink Server
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: HTTPS
+    description: >-
+      Serve HTTPS. Needs privkey.pem and fullchain.pem in the server root. (1 = on, 0 = off)
+    order: 2
+    env_variable: HTTPS_ENABLED
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Public Address
+    description: >-
+      Public IP or DNS name of the server, announced by the built-in TURN relay (only used when the
+      relay is enabled in config/peerConfig.yml).
+    order: 3
+    env_variable: PUBLIC_ADDRESS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:253|regex:/^[A-Za-z0-9.:-]*$/'
+  - name: Git Branch
+    description: Branch of OhMyGuus/BetterCrewLink-server to build. Reinstall to update.
+    order: 4
+    env_variable: BRANCH
+    default_value: master
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._\/-]+$/'
+  - name: Node.js Version
+    description: Major Node.js version installed with the server. Reinstall to change.
+    order: 5
+    env_variable: NODE_VERSION
+    default_value: "22"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:18,30"
