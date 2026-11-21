@@ -100,7 +100,6 @@ scripts:
       if [[ ! -f server.cfg ]]; then
           cp config_sample/server_with_lists.cfg server.cfg || fail "the server has no config_sample/server_with_lists.cfg"
       fi
-      grep -nE '^\s*(name|password|maxPlayerCount|hostPort|queryPort|steamPort|enableHttpApi|httpApiPort) ' server.cfg
 
       echo "-----------------------------------------"
       echo "Installation completed..."
