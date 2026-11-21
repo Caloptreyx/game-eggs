@@ -1,0 +1,167 @@
+name: Space Station 14
+author: thexylo@pm.me
+description: >-
+  Space Station 14, the multiplayer space station roleplay simulator (remake of Space Station 13).
+  Official server builds from the Space Wizards CDN, on the .NET runtime they require.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a .NET program; the installer puts the runtime version the build needs into
+  # .dotnet/, and the ICU libraries it needs for localization (which the image lacks) into .icu/.
+  # ulimit keeps a crash from writing a core file into the server directory. The panel
+  # settings are passed as --cvar options, which take precedence over server_config.toml. The game
+  # port is used over UDP (game) and TCP (status API the launcher and hub query). The console takes
+  # server commands (status, restartround, ban, ...); stopping sends shutdown.
+  Default: >-
+    ulimit -c 0; export DOTNET_ROOT=/home/container/.dotnet LD_LIBRARY_PATH=/home/container/.icu DOTNET_CLI_TELEMETRY_OPTOUT=1;
+    ./Robust.Server --data-dir /home/container/data
+    --cvar net.port={{SERVER_PORT}} --cvar status.bind="*:{{SERVER_PORT}}"
+    --cvar game.hostname="${SERVER_NAME}" --cvar game.desc="${SERVER_DESC}"
+    --cvar game.soft_max_players={{MAX_PLAYERS}} --cvar hub.advertise={{ADVERTISE}}
+    ${SERVER_URL:+--cvar status.connectaddress="${SERVER_URL}"} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Server Version"
+    strip_ansi: true
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Space Station 14 server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server build and the .NET runtime are replaced; server_config.toml and data/ are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+      # The installer's /tmp is a small tmpfs, so downloads (also the .NET installer's) go here.
+      export TMPDIR="${WORK}"
+
+      ## the newest build of the fork from its manifest
+      manifest=$(curl -fsSL --retry 3 "${FORK_MANIFEST}") || fail "could not download the build manifest ${FORK_MANIFEST}"
+      read -r version url < <(jq -r '.builds | to_entries | sort_by(.value.time) | last
+          | "\(.key) \(.value.server["linux-x64"].url // empty)"' <<< "${manifest}")
+      [[ -n "${url}" ]] || fail "the manifest has no Linux server build"
+
+      echo "Downloading server build ${version}..."
+      curl -fsSL --retry 3 -o "${WORK}/server.zip" "${url}" || fail "could not download the server build"
+      unzip -q -o "${WORK}/server.zip" -d "${WORK}/server" || fail "could not extract the server build"
+      [[ -f "${WORK}/server/Robust.Server" ]] || fail "the build has no server"
+      # The build replaces everything but the settings file (kept once it exists) and data/.
+      find /mnt/server -mindepth 1 -maxdepth 1 ! -name data ! -name server_config.toml ! -name .install-tmp \
+          ! -name .dotnet -exec rm -rf {} +
+      [[ -f server_config.toml ]] && rm -f "${WORK}/server/server_config.toml"
+      cp -a "${WORK}"/server/. /mnt/server/ || fail "could not install the server build"
+      chmod +x Robust.Server
+      echo "${version}" > .ss14-version
+
+      ## .NET runtime: the version the build was made for
+      dotnet_channel=$(jq -r '.runtimeOptions.framework.version' Robust.Server.runtimeconfig.json | cut -d. -f1,2)
+      [[ "${dotnet_channel}" =~ ^[0-9]+\.[0-9]+$ ]] || fail "could not read the .NET version the server needs"
+      echo "Installing the .NET ${dotnet_channel} runtime..."
+      rm -rf .dotnet
+      curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh \
+          || fail "could not download the .NET install script"
+      bash "${WORK}/dotnet-install.sh" --channel "${dotnet_channel}" --runtime dotnet --install-dir /mnt/server/.dotnet --no-path \
+          || fail "could not install the .NET ${dotnet_channel} runtime"
+      mkdir -p data
+
+      ## ICU (localization), taken from this Debian release, which matches the runtime image
+      echo "Installing ICU into .icu/..."
+      apt-get update -qq || fail "apt-get update failed"
+      ICU_PACKAGE=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n 1)
+      [[ -n "${ICU_PACKAGE}" ]] || fail "no ICU package found"
+      apt-get install -y -qq --no-install-recommends "${ICU_PACKAGE}" > /dev/null || fail "could not install ${ICU_PACKAGE}"
+      rm -rf .icu && mkdir -p .icu
+      cp -a /usr/lib/x86_64-linux-gnu/libicu{uc,i18n,data}.so.* .icu/ || fail "could not copy ICU"
+
+      echo "-----------------------------------------"
+      echo "Space Station 14 build ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Build Manifest
+    description: >-
+      Build manifest of the server fork to install. The default is the official Space Wizards build
+      (Wizard's Den). Reinstall to update.
+    order: 1
+    env_variable: FORK_MANIFEST
+    default_value: https://wizards.cdn.spacestation14.com/fork/wizards/manifest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|url|max:256'
+  - name: Server Name
+    description: Name shown in the server hub and lobby.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Space Station 14 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Description
+    description: Description shown in the server hub.
+    order: 3
+    env_variable: SERVER_DESC
+    default_value: A Space Station 14 server
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+  - name: Max Players
+    description: Player limit shown in the server hub (admins excluded).
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "30"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,256"
+  - name: Advertise
+    description: List the server in the public server hub. (true / false; hub rules apply to listed servers)
+    order: 5
+    env_variable: ADVERTISE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Connect Address
+    description: >-
+      Address players should connect to, e.g. ss14://play.example.com:1212. Leave empty to use the
+      server's IP and port.
+    order: 6
+    env_variable: SERVER_URL
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^ss14s?:\/\/[^\s"]+$/'
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. --cvar game.lobbyduration=60.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
