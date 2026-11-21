@@ -1,0 +1,157 @@
+name: AssaultCube
+author: thexylo@pm.me
+description: >-
+  AssaultCube, the free and open source multiplayer first-person shooter based on the Cube engine:
+  fast, small and realistic-looking team and deathmatch modes. Official Linux release from GitHub.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # config/servercmdline.txt (the documented example shipped with AssaultCube, with a private server
+  # key the installer generates) is read first; port, name, player limit, passwords and master
+  # server come from the panel and are given after it. The map rotation is config/maprot.cfg. The
+  # server reads no console input; the stop signal (SIGINT) ends it.
+  Default: >-
+    ./bin_unix/linux_64_server -Cconfig/servercmdline.txt -f{{SERVER_PORT}} -n"${SERVER_NAME}" -o"${SERVER_MOTD}"
+    -c{{MAX_PLAYERS}} -m"${MASTER_SERVER}"
+    $( [ -n "${SERVER_PASSWORD}" ] && printf %s "-p${SERVER_PASSWORD}" )
+    $( [ -n "${ADMIN_PASSWORD}" ] && printf %s "-x${ADMIN_PASSWORD}" )
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "dedicated server started, waiting for clients"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # AssaultCube server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; the config/ folder, added maps and the server key are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${AC_VERSION}" || "${AC_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/assaultcube/AC/releases/latest
+      else
+          api="https://api.github.com/repos/assaultcube/AC/releases/tags/${AC_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up AssaultCube ${AC_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name | test("\\.tar\\.bz2$")) | .browser_download_url' <<< "${release}" | head -n 1)
+      [[ -n "${tag}" && -n "${url}" ]] || fail "AssaultCube ${AC_VERSION} has no Linux download"
+
+      echo "Downloading AssaultCube ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/ac.tar.bz2" "${url}" || fail "could not download AssaultCube ${tag}"
+      mkdir -p "${WORK}/ac"
+      tar -xjf "${WORK}/ac.tar.bz2" -C "${WORK}/ac" || fail "could not extract AssaultCube ${tag}"
+      src=$(dirname "$(dirname "$(find "${WORK}/ac" -path '*/bin_unix/linux_64_server' | head -n 1)")")
+      [[ -f "${src}/bin_unix/linux_64_server" ]] || fail "AssaultCube ${tag} has no Linux server"
+      # The client, Windows files and sources are not needed on a server.
+      rm -rf "${src}"/bin_win32 "${src}"/source "${src}"/bin_unix/linux_64_client "${src}"/*.bat
+      # config/ keeps your changes; everything else is replaced.
+      if [[ -d config ]]; then
+          cp -an "${src}"/config/. config/ && rm -rf "${src}"/config
+      fi
+      cp -a "${src}"/. /mnt/server/ || fail "could not install AssaultCube ${tag}"
+      chmod +x bin_unix/linux_64_server
+      mkdir -p logs # the server log files (the server does not create the folder)
+      echo "${tag}" > .assaultcube-version
+
+      ## private server key (the shipped example uses a public placeholder)
+      if grep -q 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' config/servercmdline.txt; then
+          key=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+          [[ ${#key} -eq 64 ]] || fail "could not generate a server key"
+          perl -pi -e "s/A{64}/${key}/" config/servercmdline.txt || fail "could not write the server key"
+          echo "Generated a private server key in config/servercmdline.txt"
+      fi
+
+      echo "-----------------------------------------"
+      echo "AssaultCube ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Description shown in the server list. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: AssaultCube Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Message of the Day
+    description: Shown to players when they join. Cannot contain double quotes.
+    order: 2
+    env_variable: SERVER_MOTD
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players. The master server only lists servers with 16 or fewer.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,16"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+  - name: Admin Password
+    description: Password for /setadmin 1 <password> in game. Leave empty for none (config/serverpwd.cfg also works).
+    order: 5
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+  - name: Master Server
+    description: Master server to register with; localhost hides the server from the public list.
+    order: 6
+    env_variable: MASTER_SERVER
+    default_value: ms.cubers.net
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:253|regex:/^[A-Za-z0-9.-]+$/'
+  - name: AssaultCube Version
+    description: latest, or a release tag such as v1.3.0.2. Reinstall to update.
+    order: 7
+    env_variable: AC_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|v?[\w.-]+)$/'
