@@ -1,0 +1,285 @@
+name: Vintage Story
+author: thexylo@pm.me
+description: >-
+  An uncompromising wilderness survival sandbox game inspired by eldritch horror themes. Official
+  Vintage Story dedicated server for Linux, run on the .NET runtime it requires.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a .NET application; the install script puts the runtime it needs into .dotnet/,
+  # which DOTNET_ROOT points the launcher to. The image has no ICU library, so .NET runs in
+  # invariant globalization mode. All server data (config, saves, mods, logs) lives in data/.
+  Default: >-
+    export DOTNET_ROOT=/home/container/.dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1;
+    exec ./VintagestoryServer --dataPath /home/container/data {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    data/serverconfig.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: Port
+          replace_with: "{{server.build.default.port}}"
+        - match: ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: ServerDescription
+          replace_with: "{{env.SERVER_DESC}}"
+        - match: WelcomeMessage
+          replace_with: "{{env.WELCOME_MESSAGE}}"
+        - match: Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: MaxClients
+          replace_with: "{{env.MAX_CLIENTS}}"
+        - match: AdvertiseServer
+          replace_with: "{{env.ADVERTISE}}"
+        - match: WhitelistMode
+          replace_with: "{{env.WHITELIST_MODE}}"
+        - match: AllowPvP
+          replace_with: "{{env.ALLOW_PVP}}"
+        - match: WorldConfig.SaveFileLocation
+          replace_with: "/home/container/data/Saves/{{env.SAVE_NAME}}.vcdbs"
+        - match: WorldConfig.WorldName
+          replace_with: "{{env.WORLD_NAME}}"
+        - match: WorldConfig.Seed
+          replace_with: "{{env.WORLD_SEED}}"
+        - match: WorldConfig.PlayStyle
+          replace_with: "{{env.PLAY_STYLE}}"
+  startup:
+    done:
+      - Dedicated Server now running on Port
+    strip_ansi: false
+  stop:
+    type: command
+    value: /stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Vintage Story dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Game files and the .NET runtime are replaced; data/ (config, saves, mods) is kept on reinstall.
+
+      API="https://api.vintagestory.at"
+      CDN="https://cdn.vintagestory.at/gamefiles"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      # The installer's /tmp is a small tmpfs, so downloads go next to the server files instead.
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}"
+      mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      export TMPDIR="${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the version: the API lists every release of a channel, the newest flagged "latest"
+      requested="${VS_VERSION,,}"
+      case "${requested:-latest}" in
+          latest|stable|unstable)
+              channel=stable
+              [[ "${requested}" == "unstable" ]] && channel=unstable
+              url=$(curl -fsSL --retry 3 "${API}/${channel}.json" | jq -r '
+                  [to_entries[] | select(.value.linuxserver != null)]
+                  | (map(select(.value.linuxserver.latest == 1)) + .)[0].value.linuxserver.urls.cdn // empty')
+              [[ -n "${url}" ]] || fail "could not look up the ${channel} Vintage Story version"
+              ;;
+          *)
+              # A fixed version can be a stable release, a release candidate or a pre-release.
+              url=""
+              for channel in stable unstable pre; do
+                  candidate="${CDN}/${channel}/vs_server_linux-x64_${requested}.tar.gz"
+                  if curl -fsSIL --retry 3 -o /dev/null "${candidate}"; then
+                      url="${candidate}"
+                      break
+                  fi
+              done
+              [[ -n "${url}" ]] || fail "Vintage Story ${requested} does not exist (no Linux server download found)"
+              ;;
+      esac
+      version="${url##*/vs_server_linux-x64_}"
+      version="${version%.tar.gz}"
+
+      echo "Downloading the Vintage Story ${version} server..."
+      if ! curl -fsSL --retry 3 -o "${WORK}/vs_server.tar.gz" "${url}"; then
+          fail "could not download Vintage Story ${version}"
+      fi
+      # Old assets and built-in mods must go, or files removed by the new version would still load.
+      # User mods live in data/Mods, which is kept.
+      rm -rf assets Lib Mods VintagestoryServer VintagestoryServer.* VintagestoryAPI.* VintagestoryLib.* server.sh credits.txt
+      tar -xzf "${WORK}/vs_server.tar.gz" || fail "could not extract Vintage Story ${version}"
+      rm -f "${WORK}/vs_server.tar.gz" server.sh
+      [[ -f VintagestoryServer.runtimeconfig.json ]] || fail "the Vintage Story ${version} archive has no server"
+      chmod +x VintagestoryServer
+      echo "${version}" > .vs-version
+
+      ## .NET runtime: the version the game was built for (e.g. 8.0 for 1.21, 10.0 for 1.22)
+      dotnet_channel=$(jq -r '.runtimeOptions.framework.version' VintagestoryServer.runtimeconfig.json | cut -d. -f1,2)
+      [[ "${dotnet_channel}" =~ ^[0-9]+\.[0-9]+$ ]] || fail "could not read the .NET version Vintage Story ${version} needs"
+      echo "Installing the .NET ${dotnet_channel} runtime..."
+      rm -rf .dotnet
+      curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh \
+          || fail "could not download the .NET install script"
+      bash "${WORK}/dotnet-install.sh" --channel "${dotnet_channel}" --runtime dotnet --install-dir /mnt/server/.dotnet --no-path \
+          || fail "could not install the .NET ${dotnet_channel} runtime"
+
+      ## server config: generated once by the server itself, so it matches the game version. The paths
+      ## it writes must be the runtime ones, so /home/container points to the server files meanwhile.
+      mkdir -p data
+      if [[ ! -f data/serverconfig.json ]]; then
+          echo "Generating data/serverconfig.json..."
+          if [[ ! -e /home/container ]]; then
+              mkdir -p /home
+              ln -s /mnt/server /home/container
+          fi
+          DOTNET_ROOT=/mnt/server/.dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+              /home/container/VintagestoryServer --dataPath /home/container/data --genconfig \
+              || fail "the server could not generate its config"
+          [[ -f data/serverconfig.json ]] || fail "the server did not generate data/serverconfig.json"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Vintage Story ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Vintage Story Version
+    description: >-
+      latest for the current stable release, unstable for the newest release candidate, or a version
+      such as 1.22.7 or 1.22.0-rc.10. Players need the same version. Reinstall to change versions;
+      data/ is kept.
+    order: 1
+    env_variable: VS_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|stable|unstable|\d+\.\d+\.\d+(-(rc|pre)\.\d+)?)$/']
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Vintage Story Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Server Description
+    description: Description shown in the public server list.
+    order: 3
+    env_variable: SERVER_DESC
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Welcome Message
+    description: Message shown to players when they join; {0} is replaced with the player name.
+    order: 4
+    env_variable: WELCOME_MESSAGE
+    default_value: Welcome {0}, may you survive well and prosper
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of players connected at the same time.
+    order: 6
+    env_variable: MAX_CLIENTS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,256"
+  - name: Public
+    description: List the server in the public server list. (true = listed, false = join by IP only)
+    order: 7
+    env_variable: ADVERTISE
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Whitelist Mode
+    description: >-
+      Who may join: Default (dedicated servers: whitelisted players only), On (whitelisted players
+      only) or Off (everyone). Add players with /player <name> whitelist on in the console.
+    order: 8
+    env_variable: WHITELIST_MODE
+    default_value: Default
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Default,On,Off"
+  - name: Allow PvP
+    description: Allow players to hurt each other.
+    order: 9
+    env_variable: ALLOW_PVP
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Save Name
+    description: >-
+      Save file in data/Saves/ to load (without .vcdbs); a new world is created when it does not
+      exist. Letters, digits, _ and - only.
+    order: 10
+    env_variable: SAVE_NAME
+    default_value: default
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: World Name
+    description: Name of a new world, shown in the server list. Has no effect on existing worlds.
+    order: 11
+    env_variable: WORLD_NAME
+    default_value: A new world
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: World Seed
+    description: Seed for a new world. Leave empty for a random seed. Has no effect on existing worlds.
+    order: 12
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:64"
+  - name: Play Style
+    description: >-
+      Game mode preset for a new world: surviveandbuild (standard survival), exploration (no
+      hunger, no monsters), wildernesssurvival (harder survival) or creativebuilding (creative,
+      superflat). Has no effect on existing worlds.
+    order: 13
+    env_variable: PLAY_STYLE
+    default_value: surviveandbuild
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:surviveandbuild,exploration,wildernesssurvival,creativebuilding"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. --reducedthreads or --archiveLogFileCount 10.
+    order: 14
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
