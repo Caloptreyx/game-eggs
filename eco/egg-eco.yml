@@ -1,0 +1,212 @@
+name: Eco
+author: thexylo@pm.me
+description: >-
+  Eco is a community-based game where players develop laws, government and an economy, and must
+  build a civilization without destroying the ecosystem it depends on. Native Linux dedicated
+  server (Steam app 739590).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Folded into a single line. Name, password, visibility and the game port are written into
+  # Configs/Network.eco by the panel; the web, RCON and Steam ports are fixed offsets from the game
+  # port (+1, +2, +3) and are written here. The server ignores console input but would swallow
+  # it, so its stdin is /dev/null: console lines go to a loop that sends them to the server's RCON
+  # interface, which prints the reply. The server authenticates with Strange Loop Games using the
+  # server token, or runs in offline mode without one. ICU and libgdiplus, which the server needs
+  # and the image lacks, are installed into .eco-libs by the install script. The stop signal makes
+  # the server save the world before it exits. Values are expanded inside quotes, never re-parsed
+  # by the shell. Keep "} }" spaced: "}}" is a placeholder delimiter for the image.
+  Default: >-
+    perl -pi -e 's/("WebServerPort":\s*)\d+/$1.($ENV{SERVER_PORT}+1)/e;
+    s/("RconServerPort":\s*)\d+/$1.($ENV{SERVER_PORT}+2)/e;
+    s/("SteamServerPort":\s*)\d+/$1.($ENV{SERVER_PORT}+3)/e' Configs/Network.eco;
+    ( while IFS= read -r CMD; do [ -n "${CMD}" ] &&
+    rcon -a 127.0.0.1:$(( {{SERVER_PORT}} + 2 )) -p "${RCON_PASSWORD}" "${CMD}"; done ) <&0 &
+    LD_LIBRARY_PATH=/home/container/.eco-libs exec ./EcoServer
+    $( [ -n "${SLG_TOKEN}" ] && printf %s "-userToken=${SLG_TOKEN}" || printf %s -offline ) < /dev/null
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Configs/Network.eco:
+      parser: json
+      replace:
+        - match: GameServerPort
+          replace_with: "{{server.build.default.port}}"
+        - match: Name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: Password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: PublicServer
+          replace_with: "{{env.PUBLIC_SERVER}}"
+        - match: RconPassword
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: UPnPEnabled
+          replace_with: "false"
+  startup:
+    done:
+      - "Web Server now listening on:"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Eco dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/EcoServer
+      LIB_DIR=/mnt/server/.eco-libs
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## libraries the server needs that the runtime image does not have
+      # ICU (globalization) and libgdiplus (map rendering) with the libraries libgdiplus links
+      # against, taken from this Debian release. Base libraries the runtime image has are skipped.
+      echo "Installing ICU and libgdiplus into ${LIB_DIR}..."
+      apt-get update -qq || fail "apt-get update failed"
+      ICU_PACKAGE=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n 1)
+      [[ -n "${ICU_PACKAGE}" ]] || fail "no ICU package found"
+      apt-get install -y -qq --no-install-recommends libgdiplus "${ICU_PACKAGE}" > /dev/null \
+          || fail "could not install libgdiplus and ${ICU_PACKAGE}"
+      rm -rf "${LIB_DIR}" && mkdir -p "${LIB_DIR}"
+      cp -a /usr/lib/x86_64-linux-gnu/libicu{uc,i18n,data}.so.* "${LIB_DIR}/" || fail "could not copy ICU"
+      cp -a /usr/lib/libgdiplus.so* "${LIB_DIR}/" || fail "could not copy libgdiplus"
+      ldd /usr/lib/libgdiplus.so.0 | awk '/=> \// {print $3}' \
+          | grep -vE '/(libc|libm|libdl|librt|libpthread|ld-linux-x86-64|libstdc\+\+|libgcc_s|libatomic)\.so' \
+          | xargs -r cp -L -t "${LIB_DIR}/" || fail "could not copy the libgdiplus dependencies"
+
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      chmod +x "${SERVER_BINARY}"
+
+      ## network configuration; the panel keeps the managed values in sync on every start
+      if [[ ! -f Configs/Network.eco ]]; then
+          cp Configs/Network.eco.template Configs/Network.eco || fail "Configs/Network.eco.template is missing"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: >-
+      Name shown in the server browser. Eco text markup such as <color=green>...</color> can be
+      used.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Eco Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Public Server
+    description: >-
+      List the server in the in-game server browser. Needs a Server Token. (true = listed, false =
+      join by address only)
+    order: 3
+    env_variable: PUBLIC_SERVER
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|in:true,false"
+  - name: Server Token
+    description: >-
+      Server authentication token from your account page on https://play.eco (Server
+      Authentication, Generate Token); needs an account that owns Eco. Leave empty to run in
+      offline mode, without registration in the server browser or updated user data.
+    order: 4
+    env_variable: SLG_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:256|regex:/^\S*$/'
+  - name: RCON Password
+    description: >-
+      Password of the RCON interface (game port + 2). The console uses it to pass commands to the
+      server; remote RCON tools need the port as an allocation. No spaces.
+    order: 5
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:8|max:64|regex:/^\S+$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: >-
+      Steam beta branch to install. Leave empty for the stable release. Reinstall after changing
+      it.
+    order: 7
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Eco dedicated server.
+    order: 8
+    env_variable: SRCDS_APPID
+    default_value: "739590"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:739590"
