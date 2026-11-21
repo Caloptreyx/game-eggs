@@ -1,0 +1,176 @@
+name: Frozen Flame
+author: thexylo@pm.me
+description: >-
+  Frozen Flame, the open-world survival RPG: explore a frozen fantasy world, fight monsters and
+  bosses, build bases and level up your character, together. Native Linux dedicated server (Steam
+  app 1348640).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, ports and the RCON password are launch arguments; player limit and password are written
+  # to FrozenFlame/Saved/Config/LinuxServer/Game.ini on every start (seeded by the installer), the
+  # gameplay balance settings in it stay yours. The server reads no console input. It only saves
+  # periodically and a signal stops it without saving, so the server runs in its own session and
+  # the shell catches the stop signal (SIGINT): it sends Admin_SaveAll over RCON (Source RCON
+  # packets through bash's /dev/tcp, password "admin:<RCON password>"), waits, then stops the
+  # server with SIGINT. Without an RCON password a random one is used for the session.
+  Default: >-
+    RCON_PW="${RCON_PASSWORD:-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')}";
+    rcon_pkt() { local len=$((10 + ${#3})); printf "\\x$(printf %02x $((len & 255)))\\x$(printf %02x $((len >> 8)))\\x00\\x00\\x$(printf %02x $1)\\x00\\x00\\x00\\x$(printf %02x $2)\\x00\\x00\\x00%s\\x00\\x00" "$3" >&4; };
+    rcon() { exec 4<>/dev/tcp/127.0.0.1/{{RCON_PORT}} || return 1; rcon_pkt 1 3 "admin:${RCON_PW}"; sleep 1; rcon_pkt 2 2 "$1"; sleep 1; exec 4<&- 4>&-; };
+    setsid ./FrozenFlame/Binaries/Linux/FrozenFlameServer-Linux-Shipping -log
+    -MetaGameServerName="${SERVER_NAME}" -port={{SERVER_PORT}} -queryPort={{QUERY_PORT}}
+    -RconPort={{RCON_PORT}} -RconPassword="${RCON_PW}" & SRV=$!;
+    trap 'echo "Saving the world before stopping..."; rcon Admin_SaveAll; sleep 8; kill -INT ${SRV}' INT TERM;
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    FrozenFlame/Saved/Config/LinuxServer/Game.ini:
+      parser: file
+      replace:
+        - match: "MaxPlayers="
+          replace_with: "MaxPlayers={{env.MAX_PLAYERS}}"
+        - match: "ServerPassword="
+          replace_with: 'ServerPassword="{{env.SERVER_PASSWORD}}"'
+  startup:
+    done:
+      - "Bringing up level for play took"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Frozen Flame dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/FrozenFlame/Binaries/Linux/FrozenFlameServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## Game.ini: created once from the developer's template (MaxPlayers, ServerPassword and the
+      ## gameplay balance settings with comments)
+      CONFIG_DIR=/mnt/server/FrozenFlame/Saved/Config/LinuxServer
+      mkdir -p "${CONFIG_DIR}"
+      if [[ ! -f "${CONFIG_DIR}/Game.ini" ]]; then
+          curl -fsSL -o "${CONFIG_DIR}/Game.ini" https://raw.githubusercontent.com/DreamsideInteractive/FrozenFlameServer/main/Game.ini \
+              || fail "could not download the Game.ini template"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the in-game server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Frozen Flame Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Query Port
+    description: UDP query port. Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "25575"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: TCP port for RCON. Needs its own allocation.
+    order: 5
+    env_variable: RCON_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: Password for RCON. Leave empty to disable RCON logins.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 7
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Frozen Flame dedicated server.
+    order: 8
+    env_variable: SRCDS_APPID
+    default_value: "1348640"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1348640"
