@@ -1,0 +1,158 @@
+name: Colony Survival
+author: thexylo@pm.me
+description: >-
+  Colony Survival, the voxel colony builder and tower defense game: grow a colony, automate jobs
+  and defend against monsters at night. Native Linux dedicated server (Steam app 748090).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # World, name, player limit, ports and network type are passed on every start. The Unity log goes
+  # to the console. The console takes server commands; the stop signal (SIGINT) saves the world
+  # and shuts the server down.
+  Default: >-
+    ./colonyserver.x86_64 -batchmode -nographics -logFile - +server.world "${WORLD_NAME}"
+    +server.networktype {{NETWORK_TYPE}} +server.name "${SERVER_NAME}" +server.maxplayers {{MAX_PLAYERS}}
+    +server.gameport {{SERVER_PORT}} +server.ip 0.0.0.0 +server.steamport {{STEAM_PORT}}
+    $( [ -n "${SERVER_PASSWORD}" ] && printf '+server.password %s' "${SERVER_PASSWORD}" ) {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Starting networking type"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Colony Survival dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/colonyserver.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Colony Survival Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: World Name
+    description: Name of the world (savegames/<name>). Created on start when missing.
+    order: 2
+    env_variable: WORLD_NAME
+    default_value: world
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. No spaces.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Network Type
+    description: SteamOnline (listed, Steam networking), SteamLAN or LAN.
+    order: 5
+    env_variable: NETWORK_TYPE
+    default_value: SteamOnline
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:SteamOnline,SteamLAN,LAN"
+  - name: Steam Port
+    description: UDP port for Steam (server list). Needs its own allocation.
+    order: 6
+    env_variable: STEAM_PORT
+    default_value: "27005"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional +server.* settings.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Colony Survival dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "748090"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:748090"
