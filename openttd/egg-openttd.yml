@@ -157,7 +157,7 @@ variables:
     default_value: stable
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^(stable|testing|\d+\.\d+(-(beta|RC)\d+)?)$/'
+    rules: [required, string, "max:32", 'regex:/^(stable|testing|\d+\.\d+(-(beta|RC)\d+)?)$/']
   - name: Server Name
     description: Name shown in the server list.
     order: 2

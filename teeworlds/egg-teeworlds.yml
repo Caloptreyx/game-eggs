@@ -102,7 +102,7 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^(latest|\d+(\.\d+)*)$/'
+    rules: [required, string, "max:32", 'regex:/^(latest|\d+(\.\d+)*)$/']
   - name: Server Name
     description: Name shown in the server browser.
     order: 2

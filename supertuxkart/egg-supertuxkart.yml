@@ -125,4 +125,4 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^(latest|[\w.-]+)$/'
+    rules: [required, string, "max:32", 'regex:/^(latest|[\w.-]+)$/']

@@ -113,7 +113,7 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^(latest|v?\d+(\.\d+)*([.-][\w.]+)?)$/'
+    rules: [required, string, "max:32", 'regex:/^(latest|v?\d+(\.\d+)*([.-][\w.]+)?)$/']
   - name: Public IP
     description: >-
       IP address or host name players use to reach the server. Leave empty to use the allocation's
