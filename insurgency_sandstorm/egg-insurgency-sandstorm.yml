@@ -1,0 +1,194 @@
+name: "Insurgency: Sandstorm"
+author: thexylo@pm.me
+description: >-
+  Insurgency: Sandstorm, the team-based tactical FPS, in versus or co-op. Native Linux dedicated
+  server (Steam app 581330), installed anonymously.
+features:
+  - gsl_token
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The first map and its options are an Unreal travel URL (Map?Scenario=..?MaxPlayers=..); the
+  # password is only added when set. The token and the stats token are only passed when set:
+  # without a token the server is not listed online. The stop signal (SIGINT) makes the server
+  # shut down cleanly. Values are expanded inside quotes, never re-parsed by the shell. The URL is
+  # built first because "}}" (a nested expansion ending) is a placeholder delimiter for the image.
+  Default: >-
+    URL="${MAP_NAME}?Scenario=${SCENARIO}?MaxPlayers=${MAX_PLAYERS}";
+    [ -n "${SERVER_PASSWORD}" ] && URL="${URL}?Password=${SERVER_PASSWORD}";
+    ./Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping "${URL}"
+    -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -log -hostname="${SERVER_NAME}"
+    -AdminList=Admins -MapCycle=MapCycle
+    ${STEAM_TOKEN:+-GSLTToken="${STEAM_TOKEN}"} ${GAMESTATS_TOKEN:+-GameStats -GameStatsToken="${GAMESTATS_TOKEN}"}
+    {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Match State Changed from LoadingAssets to WaitingToStart
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Insurgency: Sandstorm dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/Insurgency/Saved/Config/LinuxServer /mnt/server/Insurgency/Config/Server
+      touch /mnt/server/Insurgency/Saved/Config/LinuxServer/Game.ini
+      # Admins.txt: one SteamID64 per line; MapCycle.txt: one scenario per line.
+      [[ -f /mnt/server/Insurgency/Config/Server/Admins.txt ]] || : > /mnt/server/Insurgency/Config/Server/Admins.txt
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Insurgency Sandstorm Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Map
+    description: First map, e.g. Canyon (Crossing), Town (Hideout), Farmhouse, Mountain (Summit), Oilfield (Refinery).
+    order: 2
+    env_variable: MAP_NAME
+    default_value: Canyon
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^\w+$/'
+  - name: Scenario
+    description: >-
+      Scenario on that map; it picks the game mode and side, e.g.
+      Scenario_Crossing_Checkpoint_Security, Scenario_Crossing_Push_Insurgents,
+      Scenario_Hideout_Firefight_East. Must belong to the Map.
+    order: 3
+    env_variable: SCENARIO
+    default_value: Scenario_Crossing_Checkpoint_Security
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:96|regex:/^Scenario_\w+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "28"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Letters and digits only.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+  - name: Game Server Login Token
+    description: >-
+      Steam game server token (steamcommunity.com/dev/managegameservers, app ID 581320). Required
+      for the server to be listed in the online server browser.
+    order: 6
+    env_variable: STEAM_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+  - name: Game Stats Token
+    description: >-
+      Game stats token from gamestats.sandstorm.game (lets players earn XP on the server). Leave
+      empty to turn stats off.
+    order: 7
+    env_variable: GAMESTATS_TOKEN
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+  - name: Query Port
+    description: UDP port for Steam server queries (server browser). Needs its own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27131"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -ruleset=CompetitiveFirefight -Mods.
+    order: 9
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Insurgency Sandstorm dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "581330"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:581330"
