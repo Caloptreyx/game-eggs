@@ -1,0 +1,193 @@
+name: Rising World
+author: thexylo@pm.me
+description: >-
+  Rising World, the open-world sandbox and survival game: explore an endless procedural world,
+  mine, craft, farm, tame animals and build anything block by block or freely, together. Native
+  Linux dedicated server of the current (Unity) version (Steam app 339010).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, password, player limit, world name, game mode, seed and the console settings are written
+  # to server.properties on every start; everything else in it stays yours. The server reads its
+  # console like a terminal: it needs a sized pseudo-terminal (script, stty) and only acts on an
+  # Enter once more input follows, so every console line is forwarded through .console.fifo with a
+  # CR and a trailing empty Enter. The stop signal (SIGINT) is caught by the shell, which sends
+  # "shutdown" until the server has saved and exited.
+  Default: >-
+    stty -echo 2>/dev/null; rm -f .console.fifo; mkfifo .console.fifo; exec 3<>.console.fifo;
+    export LD_LIBRARY_PATH="/home/container/steamcmd/linux64:${LD_LIBRARY_PATH}";
+    setsid script -qfec "stty raw -echo cols 200 rows 50; exec ./RisingWorldServer.x64 +Server_Port={{SERVER_PORT}}" /dev/null <&3 & SRV=$!;
+    trap 'for i in 1 2 3 4 5 6 7 8 9 10; do printf "shutdown\r" >&3; sleep 0.5; printf "\r" >&3; sleep 3; kill -0 ${SRV} 2>/dev/null || break; done' INT TERM;
+    while IFS= read -r line; do printf "%s\r" "${line}" >&3; sleep 0.5; printf "\r" >&3; done <&0 &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: file
+      replace:
+        - match: "Server_Name="
+          replace_with: "Server_Name={{env.SERVER_NAME}}"
+        - match: "Server_Password="
+          replace_with: "Server_Password={{env.SERVER_PASSWORD}}"
+        - match: "Server_Port="
+          replace_with: "Server_Port={{server.build.default.port}}"
+        - match: "Server_Visible="
+          replace_with: "Server_Visible={{env.VISIBLE}}"
+        - match: "Settings_MaxPlayers="
+          replace_with: "Settings_MaxPlayers={{env.MAX_PLAYERS}}"
+        - match: "World_Name="
+          replace_with: "World_Name={{env.WORLD_NAME}}"
+        - match: "World_GameMode="
+          replace_with: "World_GameMode={{env.GAME_MODE}}"
+        - match: "World_Seed="
+          replace_with: "World_Seed={{env.WORLD_SEED}}"
+        - match: "Server_Input="
+          replace_with: "Server_Input=True"
+        - match: "Server_ClearConsole="
+          replace_with: "Server_ClearConsole=False"
+  startup:
+    done:
+      - "Dedicated server is ready"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Rising World dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/RisingWorldServer.x64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## server.properties: created once from the shipped example
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      if [[ ! -f server.properties ]]; then
+          cp -v server.example.properties server.properties || fail "the server has no server.example.properties"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Rising World Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "64"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,256"
+  - name: World Name
+    description: World to load; a new name creates a new world.
+    order: 4
+    env_variable: WORLD_NAME
+    default_value: New World
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w .-]+$/'
+  - name: Game Mode
+    description: Game mode of a new world (Survival or Creative).
+    order: 5
+    env_variable: GAME_MODE
+    default_value: Survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:Survival,Creative"
+  - name: World Seed
+    description: Seed of a new world. Leave empty for a random seed.
+    order: 6
+    env_variable: WORLD_SEED
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:32|regex:/^-?\d*$/'
+  - name: Visible
+    description: List the server in the server browser. (True or False)
+    order: 7
+    env_variable: VISIBLE
+    default_value: "True"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Rising World dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "339010"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:339010"
