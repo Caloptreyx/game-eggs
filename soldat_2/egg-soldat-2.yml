@@ -1,0 +1,166 @@
+name: Soldat 2
+author: thexylo@pm.me
+description: >-
+  Soldat 2, the sequel to the 2D side-scrolling multiplayer shooter: jets, ragdolls, bots, custom
+  levels and game modes. Free Linux dedicated server from Transhuman Design (dl.thd.vg).
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Settings live in autoconfig.ini (seeded by the installer; the server adds every other setting
+  # on its first start). Name, passwords, player limit, greeting and the WebSocket RCON port are
+  # written into it on every start; the game port is passed on the command line. The server reads
+  # no console input: it is administered over WebSocket RCON (ws://<address>:<RCON port>/rcon,
+  # first message the RCON password). The stop signal (SIGINT) ends it.
+  Default: ./soldat2 Port={{SERVER_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    autoconfig.ini:
+      parser: ini
+      replace:
+        - match: GameServerConfig.Name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: GameServerConfig.Port
+          replace_with: "{{server.build.default.port}}"
+        - match: GameServerConfig.WebSocketsRconPort
+          replace_with: "{{env.RCON_PORT}}"
+        - match: GameServerConfig.RconPassword
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: GameServerConfig.MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: GameServerConfig.ServerPassword
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: GameServerConfig.GreetMessage
+          replace_with: "{{env.GREET_MESSAGE}}"
+  startup:
+    done:
+      - "ALL RULES SCRIPTS INITIALIZED"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Soldat 2 dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server files are replaced; autoconfig.ini and custom levels and configs are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      [[ "${SERVER_BRANCH}" == "test" ]] || SERVER_BRANCH=release
+      echo "Downloading the Soldat 2 server (${SERVER_BRANCH})..."
+      curl -fsSL --retry 3 -o "${WORK}/soldat2.tar.gz" "https://dl.thd.vg/soldat2-linuxserver-${SERVER_BRANCH}.tar.gz" \
+          || fail "could not download the Soldat 2 server"
+      tar -xzf "${WORK}/soldat2.tar.gz" -C "${WORK}" || fail "could not extract the Soldat 2 server"
+      src="${WORK}/soldat2-linuxserver-${SERVER_BRANCH}"
+      [[ -f "${src}/soldat2" ]] || fail "the Soldat 2 archive has no server"
+      rm -f "${src}"/*.debug
+      rm -rf soldat2_Data UnityPlayer.so
+      cp -a "${src}"/. /mnt/server/ || fail "could not install the Soldat 2 server"
+      chmod +x soldat2
+
+      ## autoconfig.ini: seeded once with the settings the panel manages; the server adds the rest.
+      ## Without a config version the server replaces the whole file with its defaults on the first
+      ## start, so the seed carries the version the server writes (it migrates from there).
+      if [[ ! -f autoconfig.ini ]]; then
+          cat > autoconfig.ini << 'EOF'
+      [GameServerConfig]
+      Name = Soldat 2 Server
+      Port = 33073
+      WebSocketsRconPort = 0
+      RconPassword = 
+      MaxPlayers = 12
+      GreetMessage = Welcome!
+      ServerPassword = 
+
+      [ConfigUpdater]
+      Version = 36
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the games list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Soldat 2 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,32"
+  - name: Greeting
+    description: Message shown to players when they join.
+    order: 4
+    env_variable: GREET_MESSAGE
+    default_value: Welcome! Be friendly and have fun!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+  - name: RCON Port
+    description: TCP port for WebSocket RCON. Needs its own allocation; 0 turns RCON off.
+    order: 5
+    env_variable: RCON_PORT
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,65535"
+  - name: RCON Password
+    description: Password for WebSocket RCON (sent as the first message). RCON is off without one.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Server Branch
+    description: release, or test for the test server builds. Reinstall to change or update.
+    order: 7
+    env_variable: SERVER_BRANCH
+    default_value: release
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:release,test"
