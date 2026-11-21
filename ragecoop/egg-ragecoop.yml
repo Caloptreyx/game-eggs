@@ -9,9 +9,9 @@ docker_images:
 file_denylist: []
 startup_commands:
   # The server reads Settings.xml (seeded by the installer); name, description, port, player limit,
-  # welcome message and master server listing are written into it on every start. Typed console
-  # lines are sent as chat messages, or run as commands when they start with /; the stop signal
-  # (SIGINT) shuts it down. The image has no ICU library, so .NET runs in globalization-invariant
+  # welcome message and master server listing are written into it on every start. The server takes
+  # console input (chat messages and commands); the stop signal (SIGINT), its documented way to
+  # stop, shuts it down. The image has no ICU library, so .NET runs in globalization-invariant
   # mode.
   Default: ulimit -c 0; DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 exec ./RageCoop.Server
 force_outgoing_ip: false
