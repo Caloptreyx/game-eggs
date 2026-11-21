@@ -1,0 +1,215 @@
+name: Nuclear Option
+author: thexylo@pm.me
+description: >-
+  Nuclear Option, the near-future air combat game with realistic flight physics: fight over land
+  and sea, up to tactical and strategic nuclear weapons. Native Linux dedicated server (Steam app
+  3930080).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads DedicatedServerConfig.json from the server root (seeded by the installer);
+  # name, password, player limit, ports and the mission folder are written into it on every start,
+  # the mission rotation and other settings stay yours. It loads Steam from linux64/. The Unity log
+  # goes to the console (-logFile -). The server reads no console input; the stop signal (SIGINT)
+  # shuts it down.
+  Default: >-
+    export LD_LIBRARY_PATH="/home/container/linux64:${LD_LIBRARY_PATH}"; mkdir -p NuclearOption-Missions;
+    ./NuclearOptionServer.x86_64 -logFile - -limitframerate {{FRAMERATE}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    DedicatedServerConfig.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: ServerName
+          replace_with: '"{{env.SERVER_NAME}}"'
+        - match: Password
+          replace_with: '"{{env.SERVER_PASSWORD}}"'
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: Hidden
+          replace_with: "{{env.HIDDEN}}"
+        - match: Port.IsOverride
+          replace_with: "true"
+        - match: Port.Value
+          replace_with: "{{server.build.default.port}}"
+        - match: QueryPort.IsOverride
+          replace_with: "true"
+        - match: QueryPort.Value
+          replace_with: "{{env.QUERY_PORT}}"
+        - match: MissionDirectory
+          replace_with: '"/home/container/NuclearOption-Missions"'
+  startup:
+    done:
+      - "Waiting for Players"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Nuclear Option dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/NuclearOptionServer.x86_64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/NuclearOption-Missions
+
+      ## DedicatedServerConfig.json: seeded once (the server's defaults, with the panel's ports
+      ## overriding) so the panel can apply its values on the first start
+      if [[ ! -f /mnt/server/DedicatedServerConfig.json ]]; then
+          cat > /mnt/server/DedicatedServerConfig.json << 'EOF'
+      {
+        "MissionDirectory": "/home/container/NuclearOption-Missions",
+        "ModdedServer": false,
+        "Hidden": false,
+        "ServerName": "Nuclear Option Server",
+        "Port": {"IsOverride": true, "Value": 7777},
+        "QueryPort": {"IsOverride": true, "Value": 27015},
+        "Password": "",
+        "MaxPlayers": 16,
+        "BanListPaths": ["ban_list.txt"],
+        "DisableErrorKick": false,
+        "ErrorKickImmuneListPaths": [],
+        "NoPlayerStopTime": 30.0,
+        "PostMissionDelay": 30.0,
+        "RotationType": 0,
+        "MissionRotation": [
+          {"Key": {"Group": "BuiltIn", "Name": "Escalation"}, "MaxTime": 7200.0},
+          {"Key": {"Group": "BuiltIn", "Name": "Terminal Control"}, "MaxTime": 7200.0}
+        ],
+        "VoteKick": {
+          "Enabled": true, "PassRatio": 0.6, "MinVotes": 3, "AutoBanThreshold": 3, "VoteDuration": 45.0,
+          "ResolutionDisplayTime": 20.0, "NewVoteLockout": 10.0, "RequesterCooldown": 300.0
+        }
+      }
+      EOF
+      fi
+      touch /mnt/server/ban_list.txt
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Nuclear Option Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Hidden
+    description: Hide the server from the server browser. (true / false)
+    order: 4
+    env_variable: HIDDEN
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 5
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Frame Rate
+    description: Server frame rate limit.
+    order: 6
+    env_variable: FRAMERATE
+    default_value: "60"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:20,240"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 7
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
+    order: 8
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Nuclear Option dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "3930080"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:3930080"
