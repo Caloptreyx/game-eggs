@@ -10,6 +10,7 @@ Native Calagopus egg for the SCP: Secret Laboratory dedicated server (Steam app 
 - Server name and max players are written to the server's gameplay config on every start.
 - Console commands go to LocalAdmin and the game, e.g. `list`, `help`, `ban`, `kick`, `rnr` (restart next round), `forcestart`. Stopping the server sends `exit`.
 - Failed installations are reported to Calagopus as failed, with the reason.
+- Optional [EXILED](https://github.com/ExMod-Team/EXILED) plugin framework (EXILED Version), installed on top of the game's LabAPI.
 
 The server only starts after the owner accepts Northwood's [EULA](https://link.scpslgame.com/eula) by setting Accept EULA to 1.
 
@@ -30,6 +31,10 @@ The configs are in `.config/SCP Secret Laboratory/config/<port>/` (the game port
 ## Admins
 
 Give players Remote Admin roles in `config_remoteadmin.txt`; see the [SCP:SL tech wiki](https://techwiki.scpslgame.com/) for the format.
+
+## EXILED
+
+Set EXILED Version to `latest` (or a tag such as `v9.15.3`) and reinstall to install EXILED; reinstall again to update it. EXILED's loader goes into `.config/SCP Secret Laboratory/LabAPI/plugins/global/`, its own plugins and settings into `.config/EXILED/` (`Plugins/` for EXILED plugins, `Configs/` for their settings). Plugins you add there are kept on reinstall. Each EXILED release supports specific game versions, and the game updates itself on start (Auto Update): after a game update, wait for the matching EXILED release and reinstall, or turn Auto Update off. Setting EXILED Version back to `none` does not remove an installed EXILED; delete `.config/EXILED/` and `.config/SCP Secret Laboratory/LabAPI/plugins/global/Exiled.Loader.dll` for that.
 
 ## Saves
 
