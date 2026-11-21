@@ -1,0 +1,134 @@
+name: Among Us (Impostor)
+author: thexylo@pm.me
+description: >-
+  Impostor, the open source private server for Among Us: host your own lobbies, independent of
+  Innersloth's servers. Official Linux release from the Impostor GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Impostor is a .NET program; the installer puts the ASP.NET Core runtime it needs into .dotnet/
+  # (the image has no ICU library, so .NET runs in globalization-invariant mode). It reads
+  # config.json; the panel values are passed as IMPOSTOR_* environment variables,
+  # which override the file. The game (UDP) and the HTTP matchmaker (TCP) share the panel port.
+  # Players are sent to the Public IP: when it is empty, the allocation's IP is used, or the
+  # server's public address as seen from the internet when the allocation listens on 0.0.0.0. The
+  # server reads no console input; the stop signal (SIGINT) ends it.
+  Default: >-
+    IP="${PUBLIC_IP}";
+    if [ -z "${IP}" ]; then IP="${SERVER_IP}"; fi;
+    if [ -z "${IP}" ] || [ "${IP}" = "0.0.0.0" ]; then IP=$(curl -fsS --max-time 10 https://api.ipify.org || echo 127.0.0.1); fi;
+    export DOTNET_ROOT=/home/container/.dotnet DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
+    IMPOSTOR_Server__PublicIp="${IP}" IMPOSTOR_Server__PublicPort={{SERVER_PORT}}
+    IMPOSTOR_Server__ListenIp=0.0.0.0 IMPOSTOR_Server__ListenPort={{SERVER_PORT}}
+    IMPOSTOR_HttpServer__Enabled=true IMPOSTOR_HttpServer__ListenIp=0.0.0.0 IMPOSTOR_HttpServer__ListenPort={{SERVER_PORT}}
+    IMPOSTOR_AntiCheat__Enabled={{ANTI_CHEAT}};
+    echo "Players connect to ${IP}:{{SERVER_PORT}}";
+    exec ./Impostor.Server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Application started"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Impostor (Among Us private server) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server files are replaced; config.json and plugins/ are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+      # The installer's /tmp is a small tmpfs, so downloads (also the .NET installer's) go here.
+      export TMPDIR="${WORK}"
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${IMPOSTOR_VERSION}" || "${IMPOSTOR_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/Impostor/Impostor/releases/latest
+      else
+          api="https://api.github.com/repos/Impostor/Impostor/releases/tags/${IMPOSTOR_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up Impostor ${IMPOSTOR_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name | test("_linux-x64\\.tar\\.gz$")) | .browser_download_url' <<< "${release}" | head -n 1)
+      [[ -n "${tag}" && -n "${url}" ]] || fail "Impostor ${IMPOSTOR_VERSION} has no Linux x64 download"
+
+      echo "Downloading Impostor ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/impostor.tar.gz" "${url}" || fail "could not download Impostor ${tag}"
+      tar -xzf "${WORK}/impostor.tar.gz" -C "${WORK}" || fail "could not extract Impostor ${tag}"
+      [[ -f "${WORK}/Impostor.Server" ]] || fail "the Impostor ${tag} archive has no server"
+      [[ -f config.json ]] && rm -f "${WORK}/config.json"
+      rm -f "${WORK}/impostor.tar.gz"
+      cp -a "${WORK}"/. /mnt/server/ || fail "could not install Impostor ${tag}"
+      chmod +x Impostor.Server
+      mkdir -p plugins libraries
+      echo "${tag}" > .impostor-version
+
+      ## ASP.NET Core runtime: the version the server was built for (read from its bundled runtime config)
+      dotnet_channel=$(grep -aoE '"name": "Microsoft.AspNetCore.App",[[:space:]]*"version": "[0-9]+\.[0-9]+' Impostor.Server \
+          | grep -oE '[0-9]+\.[0-9]+$' | head -n 1)
+      [[ -n "${dotnet_channel}" ]] || dotnet_channel=$(grep -aoE '"version": "[0-9]+\.[0-9]+' Impostor.Server | grep -oE '[0-9]+\.[0-9]+$' | head -n 1)
+      [[ "${dotnet_channel}" =~ ^[0-9]+\.[0-9]+$ ]] || fail "could not read the .NET version Impostor needs"
+      echo "Installing the ASP.NET Core ${dotnet_channel} runtime..."
+      rm -rf .dotnet
+      curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh \
+          || fail "could not download the .NET install script"
+      bash "${WORK}/dotnet-install.sh" --channel "${dotnet_channel}" --runtime aspnetcore --install-dir /mnt/server/.dotnet --no-path \
+          || fail "could not install the ASP.NET Core ${dotnet_channel} runtime"
+
+      echo "-----------------------------------------"
+      echo "Impostor ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Impostor Version
+    description: latest for the current release, or a release tag such as v1.10.10. Players need a game version the server supports. Reinstall to update.
+    order: 1
+    env_variable: IMPOSTOR_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|v?\d+(\.\d+)*([.-][\w.]+)?)$/'
+  - name: Public IP
+    description: >-
+      IP address or host name players use to reach the server. Leave empty to use the allocation's
+      IP, or the server's public IP when the allocation listens on all addresses.
+    order: 2
+    env_variable: PUBLIC_IP
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:253|regex:/^[A-Za-z0-9.:-]*$/'
+  - name: Anti-Cheat
+    description: Impostor's anti-cheat checks. (true / false)
+    order: 3
+    env_variable: ANTI_CHEAT
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
