@@ -1,0 +1,222 @@
+name: Squad
+author: thexylo@pm.me
+description: >-
+  Large-scale tactical combined-arms shooter for up to 100 players. Native Linux dedicated server
+  (Steam app 403240) with an RCON console.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server logs to stdout but reads no console input; console lines are sent to it over RCON
+  # (local only), which is up once the server has started. Ports and the player cap are launch
+  # arguments; name, RCON and slots are written to the config files on every start. Ctrl+C (SIGINT)
+  # is the documented way to stop it.
+  Default: >-
+    (while read -r line; do rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    ./SquadGameServer.sh Port={{SERVER_PORT}} QueryPort={{QUERY_PORT}} beaconport={{BEACON_PORT}}
+    FIXEDMAXPLAYERS={{MAX_PLAYERS}} RANDOM={{RANDOM_ROTATION}} -log {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    SquadGame/ServerConfig/Server.cfg:
+      parser: file
+      create_new: false
+      replace:
+        - match: "ServerName="
+          replace_with: ServerName="{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "MaxPlayers="
+          replace_with: MaxPlayers={{env.MAX_PLAYERS}}
+          insert_new: true
+        - match: "NumReservedSlots="
+          replace_with: NumReservedSlots={{env.RESERVED_SLOTS}}
+          insert_new: true
+        - match: "ShouldAdvertise="
+          replace_with: ShouldAdvertise={{env.ADVERTISE}}
+          insert_new: true
+    SquadGame/ServerConfig/Rcon.cfg:
+      parser: file
+      create_new: false
+      replace:
+        - match: "Port="
+          replace_with: Port={{env.RCON_PORT}}
+          insert_new: true
+        - match: "Password="
+          replace_with: Password={{env.RCON_PASSWORD}}
+          insert_new: true
+  startup:
+    done:
+      - "CreateODKSession: created session"
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Squad dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/SquadGame/Binaries/Linux/SquadGameServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}" /mnt/server/SquadGameServer.sh
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Squad Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:80|regex:/^[^"\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players (FIXEDMAXPLAYERS and MaxPlayers in Server.cfg), up to 100.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "80"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,100"
+  - name: Reserved Slots
+    description: Slots kept free for admins and members with the reserve permission (Admins.cfg).
+    order: 3
+    env_variable: RESERVED_SLOTS
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,100"
+  - name: Advertise
+    description: List the server in the server browser (true), or keep it hidden (false).
+    order: 4
+    env_variable: ADVERTISE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Random Rotation
+    description: >-
+      Randomize the map rotation: NONE (in order), FIRST (random first layer, then in order) or
+      ALWAYS.
+    order: 5
+    env_variable: RANDOM_ROTATION
+    default_value: NONE
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:NONE,FIRST,ALWAYS"
+  - name: RCON Password
+    description: RCON password, also used by the panel console. No spaces.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:6|max:64|regex:/^\S+$/'
+  - name: Query Port
+    description: >-
+      UDP port for Steam server queries. Needs its own allocation.
+    order: 7
+    env_variable: QUERY_PORT
+    default_value: "27165"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Beacon Port
+    description: UDP port of the server beacon. Needs its own allocation.
+    order: 8
+    env_variable: BEACON_PORT
+    default_value: "15000"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 9
+    env_variable: RCON_PORT
+    default_value: "21114"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. FIXEDMAXTICKRATE=50.
+    order: 10
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 11
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
+    order: 12
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Squad dedicated server.
+    order: 13
+    env_variable: SRCDS_APPID
+    default_value: "403240"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:403240"
