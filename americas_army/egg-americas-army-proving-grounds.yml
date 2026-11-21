@@ -1,0 +1,165 @@
+name: "America's Army: Proving Grounds"
+author: thexylo@pm.me
+description: >-
+  America's Army: Proving Grounds, the free tactical team shooter of the U.S. Army on Unreal Engine
+  3: small-unit combat with realistic weapons and roles. Native Linux dedicated server (Steam app
+  203300).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Ports and the server name are launch arguments; the engine splits arguments at spaces, so the
+  # name is passed in literal quotes. Game and admin passwords and the server name are written to
+  # AAGame/Config/DefaultGame.ini on every start; the engine rebuilds its generated
+  # PCServerLinux-AAGame.ini from it. The server binary links libGL, which the installer puts into
+  # .gl/. The stop signal (SIGINT) shuts the server down.
+  Default: >-
+    export LD_LIBRARY_PATH="/home/container/.gl:${LD_LIBRARY_PATH}"; cd Binaries/Linux &&
+    ./AAPG -port={{SERVER_PORT}} -SQP={{QUERY_PORT}} -SAP={{AUTH_PORT}} -log=Server.log
+    -servername=\"${SERVER_NAME}\" -aauregion=1
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    AAGame/Config/DefaultGame.ini:
+      parser: ini
+      replace:
+        - match: "[Engine.AccessControl].AdminPassword"
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: "[Engine.AccessControl].GamePassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: "[Engine.GameReplicationInfo].ServerName"
+          replace_with: '"{{env.SERVER_NAME}}"'
+  startup:
+    done:
+      - "Finished loading level"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # America's Army: Proving Grounds dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Binaries/Linux/AAPG
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## libGL: the server binary links it although it renders nothing (Debian's glvnd libraries)
+      rm -rf /tmp/gl /mnt/server/.gl && mkdir -p /tmp/gl /mnt/server/.gl
+      cd /tmp/gl || fail "cannot enter /tmp/gl"
+      apt-get update -qq > /dev/null 2>&1
+      apt-get download libgl1 libglvnd0 libglx0 > /dev/null 2>&1 || fail "could not download the libGL packages"
+      for deb in ./*.deb; do
+          dpkg-deb -x "${deb}" /tmp/gl/root || fail "could not extract ${deb}"
+      done
+      cp -a /tmp/gl/root/usr/lib/x86_64-linux-gnu/lib{GL,GLX,GLdispatch}.so* /mnt/server/.gl/ \
+          || fail "could not install libGL"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: America's Army Proving Grounds Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+  - name: Admin Password
+    description: Password for the in-game admin login. Leave empty to disable admin logins.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auth Port
+    description: UDP port for Steam authentication. Needs its own allocation.
+    order: 5
+    env_variable: AUTH_PORT
+    default_value: "8778"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the America's Army Proving Grounds dedicated server.
+    order: 7
+    env_variable: SRCDS_APPID
+    default_value: "203300"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:203300"
