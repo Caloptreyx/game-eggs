@@ -1,0 +1,147 @@
+name: Xonotic
+author: thexylo@pm.me
+description: >-
+  Xonotic, the free and fast-paced arena first-person shooter. Official Linux dedicated server
+  from xonotic.org.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads server.cfg from its user folder, .xonotic/data/ in the server root. The panel
+  # settings are passed as +commands, which run after server.cfg, so they win over the file. The
+  # server reads console commands from the console (status, kick, ban, gotomap, say, ...). Values
+  # are expanded inside quotes, never re-parsed by the shell.
+  Default: >-
+    ./xonotic-linux64-dedicated -userdir /home/container/.xonotic +serverconfig server.cfg
+    +port {{SERVER_PORT}} +hostname "${SERVER_NAME}" +maxplayers {{MAX_PLAYERS}}
+    +rcon_password "${RCON_PASSWORD}" +sv_public $( [ "${PUBLIC}" = "1" ] && echo 1 || echo -1 )
+    +log_file server.log +gametype {{GAME_TYPE}} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Switching to map"
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Xonotic dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; .xonotic/ (server.cfg, maps, logs) is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the version: the newest release zip listed on dl.xonotic.org, or a fixed version
+      if [[ -z "${XONOTIC_VERSION}" || "${XONOTIC_VERSION}" == "latest" ]]; then
+          version=$(curl -fsSL --retry 3 https://dl.xonotic.org/ | grep -oE 'xonotic-[0-9]+(\.[0-9]+)+\.zip' \
+              | sed -E 's/^xonotic-(.*)\.zip$/\1/' | sort -uV | tail -n 1)
+          [[ -n "${version}" ]] || fail "could not look up the latest Xonotic version"
+      else
+          version="${XONOTIC_VERSION}"
+      fi
+
+      echo "Downloading Xonotic ${version} (about 1.2 GB)..."
+      curl -fsSL --retry 3 -o "${WORK}/xonotic.zip" "https://dl.xonotic.org/xonotic-${version}.zip" \
+          || fail "could not download Xonotic ${version} (does the version exist?)"
+      rm -rf data xonotic-linux64-dedicated server
+      # Only the 64-bit Linux dedicated server, its game data and the sample server config are needed.
+      unzip -q -o "${WORK}/xonotic.zip" 'Xonotic/data/*' 'Xonotic/xonotic-linux64-dedicated' 'Xonotic/server/*' \
+          -d "${WORK}" || fail "could not extract Xonotic ${version}"
+      mv "${WORK}/Xonotic/data" "${WORK}/Xonotic/xonotic-linux64-dedicated" "${WORK}/Xonotic/server" . \
+          || fail "the Xonotic ${version} archive has an unexpected layout"
+      chmod +x xonotic-linux64-dedicated
+      echo "${version}" > .xonotic-version
+
+      ## server.cfg in the user folder: the documented sample config, once
+      mkdir -p .xonotic/data
+      if [[ ! -f .xonotic/data/server.cfg ]]; then
+          cp server/server.cfg .xonotic/data/server.cfg || fail "the sample server.cfg is missing"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Xonotic ${version} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Xonotic Version
+    description: latest for the current release, or a version such as 0.8.6. Reinstall to update; .xonotic/ is kept.
+    order: 1
+    env_variable: XONOTIC_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|\d+(\.\d+)+)$/'
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Xonotic Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Game Type
+    description: Game type, e.g. dm (deathmatch), tdm, ctf, ca (clan arena), duel, ft (freeze tag), kh, ons.
+    order: 4
+    env_variable: GAME_TYPE
+    default_value: dm
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:dm,tdm,ctf,ca,duel,ft,kh,ons,dom,lms,ka,nb,as,inv,race,cts"
+  - name: RCON Password
+    description: Remote console password. Leave empty to turn rcon off.
+    order: 5
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Public
+    description: List the server in the public server browser. (1 = listed, 0 = join by address only)
+    order: 6
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Extra Arguments
+    description: Additional +commands without quotes, e.g. +timelimit_override 15 +fraglimit_override 30. Put anything else in .xonotic/data/server.cfg.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
