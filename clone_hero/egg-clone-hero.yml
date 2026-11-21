@@ -1,0 +1,113 @@
+name: Clone Hero
+author: thexylo@pm.me
+description: >-
+  Clone Hero, the free rhythm game playable with guitar controllers and keyboards: play charts
+  together online. Official standalone Linux server from the Clone Hero GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, port and password are passed on every start; settings.ini (written by the server on its
+  # first start) holds the lobby settings and stays yours. The server reads no console input; the
+  # stop signal (SIGINT) shuts it down.
+  Default: >-
+    ./Server -l {{LOG_LEVEL}} -n "${SERVER_NAME}" -p {{SERVER_PORT}} -a 0.0.0.0
+    $( [ -n "${SERVER_PASSWORD}" ] && printf -- '-ps %s' "${SERVER_PASSWORD}" || printf -- '-np' )
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Server running..."
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Clone Hero standalone server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server program is replaced; settings.ini and banlist.txt are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${CH_VERSION}" || "${CH_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/clonehero-game/releases/releases/latest
+      else
+          api="https://api.github.com/repos/clonehero-game/releases/releases/tags/${CH_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up Clone Hero ${CH_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name | test("StandaloneServer.*\\.zip$"; "i")) | .browser_download_url' <<< "${release}" | head -n 1)
+      [[ -n "${tag}" && -n "${url}" ]] || fail "Clone Hero ${CH_VERSION} has no standalone server download"
+
+      echo "Downloading the Clone Hero server ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/server.zip" "${url}" || fail "could not download the Clone Hero server ${tag}"
+      unzip -qo "${WORK}/server.zip" -d "${WORK}/server" || fail "could not extract the Clone Hero server ${tag}"
+      bin=$(find "${WORK}/server" -path '*/linux-x64/Server' | head -n 1)
+      [[ -n "${bin}" ]] || fail "the Clone Hero server ${tag} archive has no Linux x64 server"
+      cp -f "${bin}" /mnt/server/Server || fail "could not install the Clone Hero server ${tag}"
+      chmod +x /mnt/server/Server
+      echo "${tag}" > .clonehero-version
+
+      echo "-----------------------------------------"
+      echo "Clone Hero server ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Clone Hero Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. No spaces.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Log Level
+    description: Server log detail, 0 (least) to 4 (most).
+    order: 3
+    env_variable: LOG_LEVEL
+    default_value: "4"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3,4"
+  - name: Clone Hero Version
+    description: latest, or a release tag such as v1.1.0.6161-final. Players need the same version. Reinstall to update.
+    order: 4
+    env_variable: CH_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:48", 'regex:/^(latest|v[\w.-]+)$/']
