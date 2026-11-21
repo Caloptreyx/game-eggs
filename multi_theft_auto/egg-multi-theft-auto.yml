@@ -1,0 +1,151 @@
+name: Multi Theft Auto
+author: thexylo@pm.me
+description: >-
+  Multi Theft Auto: San Andreas, the multiplayer mod for GTA: San Andreas. Official MTA:SA Linux
+  server with the default resources (race, freeroam, play, ...). Players need their own copy of GTA:
+  San Andreas; the server does not.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server's own HTTP server (resource downloads for players) shares the game port number over
+  # TCP, so one allocation is enough; the All-Seeing Eye query port is the game port + 123. Name,
+  # password, player limit, ports and public listing are written to mtaserver.conf on every start.
+  # -n turns the ncurses console off, -u flushes output at once. The console takes server commands
+  # (start/stop/restart <resource>, refresh, kick, ban, say, ...); stopping sends shutdown.
+  Default: >-
+    ./mta-server64 -n -u --port {{SERVER_PORT}} --httpport {{SERVER_PORT}} --maxplayers {{MAX_PLAYERS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    mods/deathmatch/mtaserver.conf:
+      parser: xml
+      create_new: false
+      replace:
+        - match: servername
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: serverport
+          replace_with: "{{server.build.default.port}}"
+        - match: httpport
+          replace_with: "{{server.build.default.port}}"
+        - match: maxplayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: ase
+          replace_with: "{{env.PUBLIC}}"
+        - match: owner_email_address
+          replace_with: "{{env.OWNER_EMAIL}}"
+  startup:
+    done:
+      - "Server started and is ready to accept connections"
+    strip_ansi: true
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Multi Theft Auto: San Andreas server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server binaries are replaced on every install; mtaserver.conf, acl.xml, the resources and
+      # the server databases are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      echo "Downloading the MTA:SA server..."
+      curl -fsSL --retry 3 -o "${WORK}/mta.tar.gz" https://linux.multitheftauto.com/dl/multitheftauto_linux_x64.tar.gz \
+          || fail "could not download the MTA:SA server"
+      tar -xzf "${WORK}/mta.tar.gz" -C "${WORK}" || fail "could not extract the MTA:SA server"
+      rm -rf x64 mta-server64
+      cp -a "${WORK}"/multitheftauto_linux_x64/. /mnt/server/ || fail "could not install the MTA:SA server"
+      [[ -x mta-server64 ]] || fail "the MTA:SA archive has no server binary"
+
+      ## default config (once): mtaserver.conf, acl.xml, vehiclecolors.conf
+      if [[ ! -f mods/deathmatch/mtaserver.conf ]]; then
+          echo "Installing the default server config..."
+          curl -fsSL --retry 3 -o "${WORK}/baseconfig.tar.gz" https://linux.multitheftauto.com/dl/baseconfig.tar.gz \
+              || fail "could not download the MTA:SA base config"
+          tar -xzf "${WORK}/baseconfig.tar.gz" -C "${WORK}" || fail "could not extract the MTA:SA base config"
+          mkdir -p mods/deathmatch
+          cp -a "${WORK}"/baseconfig/. mods/deathmatch/ || fail "could not install the MTA:SA base config"
+      fi
+
+      ## default resources (once): race, freeroam, play, admin, ...
+      if [[ ! -d mods/deathmatch/resources ]] || [[ -z "$(ls -A mods/deathmatch/resources)" ]]; then
+          echo "Installing the default resources..."
+          curl -fsSL --retry 3 -o "${WORK}/resources.zip" https://mirror.multitheftauto.com/mtasa/resources/mtasa-resources-latest.zip \
+              || fail "could not download the MTA:SA default resources"
+          mkdir -p mods/deathmatch/resources
+          unzip -q -o "${WORK}/resources.zip" -d mods/deathmatch/resources || fail "could not extract the MTA:SA default resources"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: MTA:SA Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:96|regex:/^[^<>&\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:32|regex:/^[^<>&\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,4096"
+  - name: Public
+    description: >-
+      List the server in the in-game server browser (All-Seeing Eye). Needs the game port + 123 (UDP)
+      as an additional allocation. (1 = listed, 0 = join by address only)
+    order: 4
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Owner Email
+    description: Contact address of the server owner (used by the MTA team for important notices). Optional.
+    order: 5
+    env_variable: OWNER_EMAIL
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|email|max:128'
