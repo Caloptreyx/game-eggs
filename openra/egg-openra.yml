@@ -1,0 +1,161 @@
+name: OpenRA
+author: thexylo@pm.me
+description: >-
+  OpenRA, the open source engine that recreates and modernizes the classic Command & Conquer
+  real-time strategy games: Red Alert, Tiberian Dawn and Dune 2000. Official Linux release, run as
+  a dedicated server for the chosen mod.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The installer extracts the official AppImage of the chosen mod into openra/; its server
+  # launcher runs the bundled .NET program. OpenRA keeps settings, maps and logs in support/
+  # (Engine.SupportDir). Name, password, port and the online listing are passed on every start. The
+  # mods load culture-specific translations, which need the ICU libraries the image lacks; the
+  # installer puts them into .icu/.
+  # The server reads no console input; the stop signal (SIGINT) ends it.
+  Default: >-
+    mkdir -p support; export HOME=/home/container LD_LIBRARY_PATH=/home/container/.icu; ulimit -c 0;
+    ./openra/AppRun --server Engine.SupportDir=/home/container/support
+    Server.Name="${SERVER_NAME}" Server.ListenPort={{SERVER_PORT}} Server.Password="${SERVER_PASSWORD}"
+    Server.AdvertiseOnline={{PUBLIC}} Server.RequireAuthentication={{REQUIRE_AUTH}} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Starting dedicated server for mod"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # OpenRA dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # openra/ (the extracted AppImage) is replaced; support/ (settings, maps, logs) is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      case "${OPENRA_MOD}" in
+          ra) appimage=Red-Alert ;;
+          cnc) appimage=Tiberian-Dawn ;;
+          d2k) appimage=Dune-2000 ;;
+          *) fail "unknown mod ${OPENRA_MOD} (ra, cnc or d2k)" ;;
+      esac
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the current one, or a fixed tag
+      if [[ -z "${OPENRA_VERSION}" || "${OPENRA_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/OpenRA/OpenRA/releases/latest
+      else
+          api="https://api.github.com/repos/OpenRA/OpenRA/releases/tags/${OPENRA_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up OpenRA ${OPENRA_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r --arg n "OpenRA-${appimage}-x86_64.AppImage" '.assets[] | select(.name == $n) | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "OpenRA ${OPENRA_VERSION} has no ${appimage} AppImage"
+
+      echo "Downloading OpenRA ${tag} (${appimage})..."
+      curl -fsSL --retry 3 -o "${WORK}/openra.AppImage" "${url}" || fail "could not download the ${appimage} AppImage"
+      chmod +x "${WORK}/openra.AppImage"
+      (cd "${WORK}" && ./openra.AppImage --appimage-extract >/dev/null) || fail "could not extract the ${appimage} AppImage"
+      [[ -x "${WORK}/squashfs-root/AppRun" ]] || fail "the ${appimage} AppImage has no AppRun"
+      rm -rf openra
+      mv "${WORK}/squashfs-root" openra || fail "could not install OpenRA ${tag}"
+      mkdir -p support
+      echo "${tag} ${OPENRA_MOD}" > .openra-version
+
+      ## ICU (the mods' translations need it), taken from this Debian release, which matches the image
+      echo "Installing ICU into .icu/..."
+      apt-get update -qq || fail "apt-get update failed"
+      ICU_PACKAGE=$(apt-cache search --names-only '^libicu[0-9]+$' | awk '{print $1}' | sort -V | tail -n 1)
+      [[ -n "${ICU_PACKAGE}" ]] || fail "no ICU package found"
+      apt-get install -y -qq --no-install-recommends "${ICU_PACKAGE}" > /dev/null || fail "could not install ${ICU_PACKAGE}"
+      rm -rf .icu && mkdir -p .icu
+      cp -a /usr/lib/x86_64-linux-gnu/libicu{uc,i18n,data}.so.* .icu/ || fail "could not copy ICU"
+
+      echo "-----------------------------------------"
+      echo "OpenRA ${tag} (${appimage}) installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Mod
+    description: >-
+      Game to host: ra (Red Alert), cnc (Tiberian Dawn) or d2k (Dune 2000). Reinstall after changing.
+    order: 1
+    env_variable: OPENRA_MOD
+    default_value: ra
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:ra,cnc,d2k"
+  - name: Server Name
+    description: Name shown in the multiplayer server list. Cannot contain double quotes.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: OpenRA Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Public
+    description: List the server on the OpenRA master server. (True / False)
+    order: 4
+    env_variable: PUBLIC
+    default_value: "True"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Require Authentication
+    description: Only allow players signed in with an OpenRA forum account. (True / False)
+    order: 5
+    env_variable: REQUIRE_AUTH
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Extra Arguments
+    description: Additional settings, e.g. Server.Map=<map uid> Server.EnableSingleplayer=True Server.ShareAnonymizedIPs=False.
+    order: 6
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: OpenRA Version
+    description: latest, or a release tag such as release-20250330. Players need the same version. Reinstall to update.
+    order: 7
+    env_variable: OPENRA_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|(release|playtest)-\d{8})$/']
