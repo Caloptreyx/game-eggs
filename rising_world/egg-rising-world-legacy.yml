@@ -1,0 +1,162 @@
+name: Rising World (Java Legacy)
+author: thexylo@pm.me
+description: >-
+  Rising World Java Legacy, the original Java version of the open-world sandbox: explore, mine,
+  craft and build in an endless world. Java dedicated server from the "java" (Legacy Version) branch of Steam app
+  339010. Use the Rising World egg for the current (Unity) version.
+features:
+  - steam_disk_space
+docker_images:
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Port, player limit, server name and RCON port are launch arguments; game and RCON passwords and
+  # the world are written to server.properties on every start. The server uses the game port and the
+  # three ports after it (TCP and UDP; Steam queries on the game port) and loads steamclient.so through
+  # LD_LIBRARY_PATH. The java branch has not changed since 2021, so there is no update on start.
+  # Console commands work in the panel console; "shutdown" saves the world and stops.
+  Default: >-
+    export LD_LIBRARY_PATH="/home/container/.steam/sdk64:${LD_LIBRARY_PATH}";
+    java -Xms256M -XX:MaxRAMPercentage=85.0 -jar server.jar +maxplayer={{MAX_PLAYERS}}
+    +serverport={{SERVER_PORT}} +servername="${SERVER_NAME}" +rconport={{RCON_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server_password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: rcon_enabled
+          replace_with: "{{env.RCON_ENABLED}}"
+        - match: rcon_password
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: server_world_name
+          replace_with: "{{env.WORLD_NAME}}"
+  startup:
+    done:
+      - "RISING WORLD SERVER STARTED"
+    strip_ansi: true
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Rising World Java Legacy dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_JAR=/mnt/server/server.jar
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the "java" (Legacy Version) branch; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update 339010 -beta java validate +quit && [[ -f "${SERVER_JAR}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_JAR}" ]] || fail "SteamCMD could not install the java branch of app 339010; check the install log and free disk space"
+      ## steamclient libraries (the server's Steamworks wrapper loads them from ~/.steam)
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+      rm -rf /mnt/server/steamcmd /mnt/server/Steam
+
+      ## server.properties: the server writes all settings on its first start; seeded here with the
+      ## keys the panel manages so they apply on the first start already
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      if [[ ! -f server.properties ]]; then
+          printf 'server_password=\nrcon_enabled=false\nrcon_password=\nserver_world_name=World\n' > server.properties
+      fi
+      ls
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Rising World Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: World Name
+    description: World to load; a new name creates a new world.
+    order: 4
+    env_variable: WORLD_NAME
+    default_value: World
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w -]+$/'
+  - name: RCON Enabled
+    description: Enable RCON. (true or false)
+    order: 5
+    env_variable: RCON_ENABLED
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: RCON Port
+    description: TCP port for RCON. Needs its own allocation when RCON is enabled.
+    order: 6
+    env_variable: RCON_PORT
+    default_value: "4253"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: Password for RCON (at least 6 characters).
+    order: 7
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'

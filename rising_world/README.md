@@ -2,7 +2,7 @@
 
 Rising World is an open-world sandbox and survival game. Players explore an endless procedural world, mine, craft, farm, hunt and tame animals, and build freely or block by block, alone or together.
 
-Native Calagopus egg for the dedicated server of the current (Unity) version of Rising World (Steam app `339010`), installed anonymously through SteamCMD. The Java "legacy" version is not covered.
+Native Calagopus egg for the dedicated server of the current (Unity) version of Rising World (Steam app `339010`), installed anonymously through SteamCMD. The Java Legacy version has its own egg, described at the end.
 
 ## Capabilities
 
@@ -25,6 +25,17 @@ Rising World derives the Steam query port from the game port, so the server need
 | Game  | 4255    | UDP      | primary allocation |
 | Query | 4254    | UDP/TCP  | game port - 1; Steam server browser (A2S) and the server's web server |
 | RCON  | 4253    | TCP      | only with `RCON_Enabled=True` in `server.properties`; needs its own allocation |
+
+## Java Legacy egg
+
+`egg-rising-world-legacy.yml` runs the original Java version from the `java` ("Legacy Version") branch of app 339010 on the `ghcr.io/caloptreyx/java:8` image. That branch has not changed since 2021, so the egg installs it once (no update on start).
+
+- Server name, player limit, game port and RCON port are launch arguments; game password, RCON settings and the world name are written to `server.properties` on every start (the server adds all other settings on its first start). Worlds are saved in `Worlds/<World Name>/`.
+- The server uses the game port and the three ports after it (TCP and UDP), so give it four consecutive allocations with the lowest as the primary; Steam queries (A2S) answer on the game port. RCON needs a further allocation.
+- Its Steamworks wrapper loads `steamclient.so`, which the installer puts into `.steam/sdk64` and the startup adds to `LD_LIBRARY_PATH`.
+- Console commands work in the panel console; the panel's stop sends `shutdown`, which saves the world and stops the server.
+
+It needs about 350 MB of memory with a new world and no players and about 2.7 GB of disk.
 
 ## Requirements
 
