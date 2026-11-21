@@ -1,0 +1,224 @@
+name: Mordhau
+author: thexylo@pm.me
+description: >-
+  Mordhau, the medieval first-person melee slasher for up to 64 players. Native Linux dedicated
+  server (Steam app 629800), installed anonymously.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server logs to stdout with -log and reads no console input (admins use the in-game
+  # console). With an empty Map it starts on the first map of the MapRotation in Game.ini. The stop
+  # signal (SIGINT) shuts it down cleanly. Values are expanded inside quotes, never re-parsed by the
+  # shell.
+  Default: >-
+    ./Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping ${MAP:+"${MAP}"} -log -Port={{SERVER_PORT}}
+    -QueryPort={{QUERY_PORT}} -BeaconPort={{BEACON_PORT}} {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Mordhau/Saved/Config/LinuxServer/Game.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/Mordhau.MordhauGameSession].ServerName"
+          replace_with: "{{env.SERVER_NAME}}"
+          insert_new: true
+        - match: "[/Script/Mordhau.MordhauGameSession].ServerPassword"
+          replace_with: "{{env.SERVER_PASSWORD}}"
+          insert_new: true
+        - match: "[/Script/Mordhau.MordhauGameSession].AdminPassword"
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+          insert_new: true
+        - match: "[/Script/Mordhau.MordhauGameSession].MaxSlots"
+          replace_with: "{{env.MAX_PLAYERS}}"
+          insert_new: true
+  startup:
+    done:
+      - Session GameSession successfully created
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Mordhau dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; large downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      ## Game.ini: the panel writes its settings into it on every start; created once so the
+      # rest of the file (map rotation, admins, bans) stays the owner's.
+      CFG_DIR=/mnt/server/Mordhau/Saved/Config/LinuxServer
+      mkdir -p "${CFG_DIR}"
+      if [[ ! -s "${CFG_DIR}/Game.ini" ]]; then
+          cat > "${CFG_DIR}/Game.ini" << 'EOF'
+      [/Script/Mordhau.MordhauGameMode]
+      PlayerRespawnTime=5.000000
+      BallistaRespawnTime=30.000000
+      CatapultRespawnTime=30.000000
+      HorseRespawnTime=30.000000
+      DamageFactor=1.000000
+      TeamDamageFactor=0.500000
+      MapRotation=FFA_Contraband
+      MapRotation=FFA_Camp
+      MapRotation=FFA_Taiga
+      MapRotation=SKM_Grad
+      MapRotation=FL_Grad
+      MapRotation=FL_Taiga
+
+      [/Script/Mordhau.MordhauGameSession]
+      bIsLANServer=False
+      MaxSlots=48
+      ServerName=Mordhau Server
+      ServerPassword=
+      AdminPassword=
+      Admins=
+      BannedPlayers=
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Mordhau Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Admin Password
+    description: >-
+      Password for the in-game admin login (adminlogin <password> in the console). Leave empty to
+      allow only the SteamIDs listed as Admins in Game.ini.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "48"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Map
+    description: >-
+      Map to start on, e.g. FFA_Contraband, SKM_Grad, FL_Taiga, BR_Grad. Leave empty to start on the
+      first map of the MapRotation in Game.ini.
+    order: 5
+    env_variable: MAP
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w\/]*$/'
+  - name: Query Port
+    description: UDP port for Steam server queries (server browser). Needs its own allocation.
+    order: 6
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Beacon Port
+    description: UDP port for the server beacon (join requests). Needs its own allocation.
+    order: 7
+    env_variable: BEACON_PORT
+    default_value: "15000"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
+    order: 10
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Mordhau dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "629800"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:629800"
