@@ -1,0 +1,128 @@
+name: SuperTuxKart
+author: thexylo@pm.me
+description: >-
+  SuperTuxKart, the free and open source 3D kart racer: online races, battles, soccer and capture
+  the flag with Tux and friends. Official Linux release from GitHub, run as a headless server.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The official release runs as a headless server with its bundled libraries. Settings live in
+  # server_config.xml (created on the first start); name, password, player limit, port and message
+  # of the day are passed on the command line, which also writes them into that file. The server
+  # runs as a LAN server: players connect with "Enter server address" (it is not listed on the
+  # online server list, which needs an stk-addons account). The network console takes commands
+  # (listpeers, kick, kickban, ...); stopping sends quit. Values are expanded inside quotes, never
+  # re-parsed by the shell.
+  Default: >-
+    LD_LIBRARY_PATH=/home/container/lib SUPERTUXKART_DATADIR=/home/container
+    SUPERTUXKART_ASSETS_DIR=/home/container/data/ ./bin/supertuxkart
+    --server-config=/home/container/server_config.xml --lan-server="${SERVER_NAME}" --network-console
+    --port={{SERVER_PORT}} --max-players={{MAX_PLAYERS}} --server-password="${SERVER_PASSWORD}" --motd="${MOTD}"
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "STKHost: Listening has been started"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # SuperTuxKart server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; server_config.xml and the player/ban database are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${STK_VERSION}" || "${STK_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/supertuxkart/stk-code/releases/latest
+      else
+          api="https://api.github.com/repos/supertuxkart/stk-code/releases/tags/${STK_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up SuperTuxKart ${STK_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name | test("-linux-x86_64\\.tar\\.(gz|xz)$")) | .browser_download_url' <<< "${release}" | head -n 1)
+      [[ -n "${tag}" && -n "${url}" ]] || fail "SuperTuxKart ${STK_VERSION} has no Linux x86_64 download"
+
+      echo "Downloading SuperTuxKart ${tag} (about 750 MB)..."
+      curl -fsSL --retry 3 -o "${WORK}/stk.tar" "${url}" || fail "could not download SuperTuxKart ${tag}"
+      mkdir -p "${WORK}/stk"
+      tar -xf "${WORK}/stk.tar" -C "${WORK}/stk" --strip-components=1 || fail "could not extract SuperTuxKart ${tag}"
+      rm -f "${WORK}/stk.tar"
+      [[ -x "${WORK}/stk/bin/supertuxkart" ]] || fail "the SuperTuxKart ${tag} archive has no game binary"
+      rm -rf bin lib data run_game.sh
+      cp -a "${WORK}/stk"/. /mnt/server/ || fail "could not install SuperTuxKart ${tag}"
+      echo "${tag}" > .stk-version
+
+      echo "-----------------------------------------"
+      echo "SuperTuxKart ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name players see in the lobby. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: SuperTuxKart Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+  - name: Max Players
+    description: Maximum number of players (more than 8 can hurt performance).
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,32"
+  - name: Message of the Day
+    description: Shown in the lobby. Cannot contain double quotes.
+    order: 4
+    env_variable: MOTD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+  - name: SuperTuxKart Version
+    description: latest, or a release tag such as 1.5. Players need the same major version. Reinstall to update.
+    order: 5
+    env_variable: STK_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|[\w.-]+)$/'
