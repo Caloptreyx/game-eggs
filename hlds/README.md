@@ -35,6 +35,10 @@ App 90 only installs a game's files completely after a first SteamCMD pass with 
 
 Mods and plugins (Metamod, AMX Mod X, ...) go into the game folder (not installed by the egg).
 
+## ReHLDS
+
+`egg-hlds-rehlds.yml` runs the same games on [ReHLDS](https://github.com/rehlds/ReHLDS), the reverse-engineered GoldSource engine, installed from its newest upstream release. The released ReHLDS only runs on the pre-25th-anniversary engine files, so this egg installs and updates the `steam_legacy` branch of app 90. The ReHLDS engine is kept in `.rehlds/` and copied over the Steam files on every start, so an HLDS update never brings back the stock engine; reinstall to update ReHLDS. `version` in the console shows the ReHLDS build. For Counter-Strike with ReGameDLL_CS, Metamod-R, AMX Mod X and ReAPI preinstalled, use the Counter-Strike 1.6 ReHLDS egg.
+
 ## Requirements
 
 About 85 MB of memory with no players; plan for 256 MB. The installation takes about 1.6 GB of disk (all GoldSource games share app 90's files).
