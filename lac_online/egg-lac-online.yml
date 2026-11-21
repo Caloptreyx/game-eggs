@@ -1,0 +1,200 @@
+name: LAC - Los Angeles Crimes Online
+author: thexylo@pm.me
+description: >-
+  Los Angeles Crimes (LAC) Online, the free open-world sandbox shooter: drive, fight, roleplay and
+  build maps together in a city, on a ragdoll party map or in zombie survival. Linux dedicated
+  server from lacrimesonline.com.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The installed version is recorded in .lac-version (the executable is named after it). Player
+  # limit, port, map, password, admin code and the server list setting are written to
+  # .config/unity3d/MA/LAC/ServerConfig.txt on every start (seeded by the installer); the other
+  # settings stay yours. The server reads no console input and ignores SIGINT; the stop signal
+  # (SIGTERM) shuts it down.
+  Default: ./LAC_Linux_v$(cat .lac-version).x86_64 -batchmode -nographics
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    .config/unity3d/MA/LAC/ServerConfig.txt:
+      parser: file
+      replace:
+        - match: "max players="
+          replace_with: "max players={{env.MAX_PLAYERS}}"
+        - match: "starting port="
+          replace_with: "starting port={{server.build.default.port}}"
+        - match: "map name="
+          replace_with: "map name={{env.MAP}}"
+        - match: "server password="
+          replace_with: "server password={{env.SERVER_PASSWORD}}"
+        - match: "admin code="
+          replace_with: "admin code={{env.ADMIN_CODE}}"
+        - match: "share to community="
+          replace_with: "share to community={{env.SHARE}}"
+        - match: "server language="
+          replace_with: "server language={{env.LANGUAGE}}"
+  startup:
+    done:
+      - "[NetworkManager] Server Started."
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGTERM
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # LAC Online dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      BUILDS_URL=https://lacrimesonline.com/builds/
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## version: the newest Linux build listed on the builds page, or the one set in Version
+      if [[ -z "${VERSION}" || "${VERSION}" == "latest" ]]; then
+          VERSION=$(curl -fsSL "${BUILDS_URL}" | grep -oE 'LAC_Linux_v[0-9.]+[0-9]\.zip' | sed -E 's/LAC_Linux_v(.*)\.zip/\1/' | sort -uV | tail -1)
+          [[ -n "${VERSION}" ]] || fail "could not find a Linux build on ${BUILDS_URL}"
+      fi
+      echo "Installing LAC ${VERSION}"
+
+      # The build (about 150 MB) does not fit the installer's /tmp; it is unpacked on the server disk.
+      curl -fsSL -o .lac-build.zip "${BUILDS_URL}LAC_Linux_v${VERSION}.zip" \
+          || fail "could not download LAC_Linux_v${VERSION}.zip from ${BUILDS_URL}"
+      OLD=$(cat .lac-version 2>/dev/null)
+      if [[ -n "${OLD}" && "${OLD}" != "${VERSION}" ]]; then
+          rm -rf "LAC_Linux_v${OLD}.x86_64" "LAC_Linux_v${OLD}_Data"
+      fi
+      rm -rf "LAC_Linux_v${VERSION}_Data"
+      unzip -q -o .lac-build.zip || fail "could not extract LAC_Linux_v${VERSION}.zip"
+      rm -f .lac-build.zip
+      [[ -f "LAC_Linux_v${VERSION}.x86_64" ]] || fail "the build has no LAC_Linux_v${VERSION}.x86_64"
+      chmod +x "LAC_Linux_v${VERSION}.x86_64"
+      echo "${VERSION}" > .lac-version
+
+      ## ServerConfig.txt: seeded once with the server's defaults so the panel can apply its values
+      ## on the first start (the server writes the same file on its first run)
+      CONFIG=.config/unity3d/MA/LAC/ServerConfig.txt
+      mkdir -p "$(dirname "${CONFIG}")"
+      if [[ ! -f "${CONFIG}" ]]; then
+          cat > "${CONFIG}" << 'CFG'
+      #place maps in   /home/container/.config/unity3d/MA/LAC/editor/myMap.txt
+      #Maps (City, Garage, RagdollParty, TrainFacility)
+      #Maps (ZombieSurvival, NewTerrainRamps, Island, CarSoccer)
+      #Editor Maps (editor:myMap)
+
+      #make map rotation with ","
+      #players can get admin by typing "/YOUR-NUM-CODE" in the chat
+      #lock down will avoids changes in: server option, editor obj sync
+      #rp password set to 0 generates new on start
+      #inactive days is for inactive RP accounts after X days
+      #banned players get removed after X ban days
+      #real world time: the day follows the server's clock (6:00 sunrise, 18:00 sunset)
+
+      (Moderator)
+      admin code=YOUR-NUM-CODE
+      lock down=true
+      real world time=false
+
+      (Basic)
+      restart timer=never
+      max players=16
+      map name=TrainFacility
+      starting port=7777
+
+      (Server List)
+      share to community=true
+      server language=English
+      server password=none
+
+      (Roleplay)
+      username=HOST
+      password=0
+      delete inactive days=90
+
+      (Anti-Cheat)
+      anti-cheat=enabled
+      ban days=90
+      CFG
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Version
+    description: Build to install (for example 1.9.8), or latest. Applied on reinstall.
+    order: 1
+    env_variable: VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^(latest|[0-9.]+)$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Map
+    description: Map, or a rotation separated by commas (City, Garage, RagdollParty, TrainFacility, ZombieSurvival, NewTerrainRamps, Island, CarSoccer, editor:<map>).
+    order: 3
+    env_variable: MAP
+    default_value: TrainFacility
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:256|regex:/^[\w:,-]+$/'
+  - name: Server Password
+    description: Password players need to join, or none.
+    order: 4
+    env_variable: SERVER_PASSWORD
+    default_value: none
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^\S+$/'
+  - name: Admin Code
+    description: Players become admin by typing /<code> in the chat. Use a number nobody can guess.
+    order: 5
+    env_variable: ADMIN_CODE
+    default_value: YOUR-NUM-CODE
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Share To Community
+    description: List the server in the community server list. (true or false)
+    order: 6
+    env_variable: SHARE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Server Language
+    description: Language shown in the server list.
+    order: 7
+    env_variable: LANGUAGE
+    default_value: English
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[A-Za-z ]+$/'
