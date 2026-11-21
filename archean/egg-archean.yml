@@ -1,0 +1,229 @@
+name: Archean
+author: thexylo@pm.me
+description: >-
+  Archean, the engineering sandbox on a primordial Earth and its Moon: design and build vehicles,
+  bases, rockets and space stations from modular blocks, wire and program them, alone or together.
+  Native Linux dedicated server (Steam app 3557220).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Name, listing, player limit, password, port, world, spawn and the autosave and tick settings
+  # are written to Archean-data/server/server.ini on every start (seeded by the installer, so the
+  # server skips its interactive first-run questions). Admins are kept in
+  # Archean-data/server/admins.txt. The stop signal (SIGINT) shuts the server down.
+  Default: cd /home/container/Archean-game && ./Archean_server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Archean-data/server/server.ini:
+      parser: ini
+      replace:
+        - match: server.server_online
+          replace_with: "{{env.ONLINE}}"
+        - match: server.server_public_name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: server.accept_remote_connections
+          replace_with: "yes"
+        - match: server.max_simultaneous_players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: server.password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: game.world
+          replace_with: "{{env.WORLD_NAME}}"
+        - match: game.spawn
+          replace_with: "{{env.SPAWN}}"
+        - match: networking.listen_port
+          replace_with: "{{server.build.default.port}}"
+        - match: performance.auto_save_interval_seconds
+          replace_with: "{{env.AUTOSAVE_INTERVAL}}"
+        - match: performance.updates_per_second
+          replace_with: "{{env.UPDATES_PER_SECOND}}"
+        - match: performance.physics_steps_per_update
+          replace_with: "{{env.PHYSICS_STEPS}}"
+  startup:
+    done:
+      - "Server started"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Archean dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/Archean-game/Archean_server
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      ## server.ini: seeded once with every documented setting; a non-empty server_public_name
+      ## makes the server skip its interactive first-run questions
+      mkdir -p /mnt/server/Archean-data/server
+      if [[ ! -f /mnt/server/Archean-data/server/server.ini ]]; then
+          cat > /mnt/server/Archean-data/server/server.ini << 'EOF'
+      [server]
+      server_online = no
+      server_public_name = Archean Server
+      accept_remote_connections = yes
+      max_simultaneous_players = 16
+      password =
+      external_mods_dir =
+
+      [game]
+      world = world
+      spawn = earth
+
+      [networking]
+      listen_port = 8881
+      listen_new_connection_timeout_ms = 500
+      automatic_blacklist = no
+
+      [performance]
+      updates_per_second = 25
+      physics_steps_per_update = 8
+      auto_save_interval_seconds = 30
+      screens_compression_level = 2
+      server_loop_thread_cpu_affinity = -1
+      EOF
+      fi
+      touch /mnt/server/Archean-data/server/admins.txt
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the Archean server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Archean Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Listed Online
+    description: List the server in the public server list. (yes or no)
+    order: 2
+    env_variable: ONLINE
+    default_value: "no"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:yes,no"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^\S*$/'
+  - name: Max Players
+    description: Maximum number of concurrent players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: World Name
+    description: World save in Archean-data/server/worlds; a new name creates a new world.
+    order: 5
+    env_variable: WORLD_NAME
+    default_value: world
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Spawn
+    description: Celestial body players spawn on (earth or moon).
+    order: 6
+    env_variable: SPAWN
+    default_value: earth
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:earth,moon"
+  - name: Autosave Interval
+    description: Seconds between automatic world saves.
+    order: 7
+    env_variable: AUTOSAVE_INTERVAL
+    default_value: "30"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:5,86400"
+  - name: Updates Per Second
+    description: Server tick rate. Only change this if you know why.
+    order: 8
+    env_variable: UPDATES_PER_SECOND
+    default_value: "25"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Physics Steps Per Update
+    description: Physics simulation steps per tick. Only change this if you know why.
+    order: 9
+    env_variable: PHYSICS_STEPS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,64"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 10
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Archean dedicated server.
+    order: 11
+    env_variable: SRCDS_APPID
+    default_value: "3557220"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:3557220"
