@@ -1,0 +1,201 @@
+name: PixARK
+author: thexylo@pm.me
+description: >-
+  PixARK, the voxel survival sandbox in the ARK universe: tame dinosaurs, gather, craft and build in
+  a procedurally generated cube world, together. The Windows-only dedicated server (Steam app
+  824360) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # All settings are map URL options and launch arguments built from the panel variables. The
+  # server needs a display (Xvfb) and the game's Steam app id (593600) to register with Steam. Its
+  # log is streamed from ShooterGame/Saved/Logs/ShooterGame.log; it reads no console input. A signal
+  # kills it without saving, so the server runs in its own session and the shell catches the stop
+  # signal (SIGINT): it sends "saveworld" and "DoExit" over RCON (Source RCON packets through bash's
+  # /dev/tcp, with the admin password; a random one is used when Admin Password is empty).
+  Default: >-
+    echo 593600 > ShooterGame/Binaries/Win64/steam_appid.txt; export SteamAppId=593600 SteamGameId=593600;
+    ADMIN_PW="${ADMIN_PASSWORD:-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')}";
+    rcon_pkt() { local len=$((10 + ${#3})); printf "\\x$(printf %02x $((len & 255)))\\x$(printf %02x $((len >> 8)))\\x00\\x00\\x$(printf %02x $1)\\x00\\x00\\x00\\x$(printf %02x $2)\\x00\\x00\\x00%s\\x00\\x00" "$3" >&4; };
+    rcon() { exec 4<>/dev/tcp/127.0.0.1/{{RCON_PORT}} || return 1; rcon_pkt 1 3 "${ADMIN_PW}"; sleep 1; for c in "$@"; do rcon_pkt 2 2 "$c"; sleep 5; done; exec 4<&- 4>&-; };
+    LOG=ShooterGame/Saved/Logs/ShooterGame.log; mkdir -p ShooterGame/Saved/Logs; rm -f "${LOG}"; touch "${LOG}";
+    setsid xvfb-run -a proton run ./ShooterGame/Binaries/Win64/PixARKServer.exe
+    "CubeWorld_Light?listen?DelayRegisterServer=True?bRawSockets=True?SessionName=${SERVER_NAME}?AltSaveDirectoryName=Saves?ServerPassword=${SERVER_PASSWORD}?ServerAdminPassword=${ADMIN_PW}?MaxPlayers={{MAX_PLAYERS}}?RCONEnabled=True?RCONPort={{RCON_PORT}}"
+    -Seed={{SEED}} -OreSeed={{ORE_SEED}} -ConfigsUseAltDir -server -gameplaylogging -log -CULTUREFORCOOKING=en
+    -NoBattlEye -QueryPort={{QUERY_PORT}} -Port={{SERVER_PORT}} -CubePort={{CUBE_PORT}} -cubeworld={{WORLD_NAME}}
+    -NoHangDetection >/dev/null 2>&1 & SRV=$!;
+    trap 'echo "Saving the world and stopping..."; rcon saveworld DoExit' INT TERM;
+    tail -n +1 -F "${LOG}" --pid=${SRV} 2>/dev/null &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Full Startup:"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # PixARK dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/ShooterGame/Binaries/Win64/PixARKServer.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: PixARK Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"?\\\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]*$/'
+  - name: Admin Password
+    description: Admin and RCON password. Leave empty for a random one per start (the panel's stop still works).
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,70"
+  - name: World Name
+    description: Cube world to load (folder in ShooterGame/Saved/CubeServers/CubeWorld_Light/); a new name creates a new world.
+    order: 5
+    env_variable: WORLD_NAME
+    default_value: PixARKWorld
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: Seed
+    description: Terrain seed of a new world.
+    order: 6
+    env_variable: SEED
+    default_value: "12345"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,2147483647"
+  - name: Ore Seed
+    description: Ore seed of a new world.
+    order: 7
+    env_variable: ORE_SEED
+    default_value: "1234"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,2147483647"
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Cube Port
+    description: Port of the cube world server. Needs its own allocation.
+    order: 9
+    env_variable: CUBE_PORT
+    default_value: "15000"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: TCP port for RCON (also used by the panel's stop). Needs its own allocation.
+    order: 10
+    env_variable: RCON_PORT
+    default_value: "27020"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 11
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Windows Install
+    description: Download the Windows build through SteamCMD.
+    order: 12
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
+  - name: Steam App ID
+    description: Steam app id of the PixARK dedicated server.
+    order: 13
+    env_variable: SRCDS_APPID
+    default_value: "824360"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:824360"
