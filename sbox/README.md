@@ -43,7 +43,7 @@ About 1.3-1.7 GB of memory running Sandbox on Flatgrass with no players; plan fo
 
 ## Sample ignore file for backups
 
-Saved as `.pteroignore` in the server root, this leaves out the largest folders, which SteamCMD installs again and the server downloads again on start (together about 6.5 GB):
+Saved as `.pteroignore` in the server root, this leaves out the largest folders, which SteamCMD installs again and the server downloads again on start:
 
 ```
 # Server files and package downloads
