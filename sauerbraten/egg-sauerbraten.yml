@@ -1,0 +1,135 @@
+name: "Cube 2: Sauerbraten"
+author: thexylo@pm.me
+description: >-
+  Cube 2: Sauerbraten, the free and open source arena shooter with in-game cooperative map editing:
+  fast deathmatch, instagib, capture and CTF modes. Official Linux server (2020 Edition).
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads server-init.cfg (the documented example shipped with Sauerbraten, copied once)
+  # after its command line, so name, passwords and player limit are written into that file on every
+  # start; the port is passed on the command line. The server reads no console input; the stop
+  # signal (SIGINT) ends it.
+  Default: ./bin_unix/linux_64_server -j{{SERVER_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server-init.cfg:
+      parser: file
+      create_new: false
+      replace:
+        - match: "maxclients "
+          replace_with: "maxclients {{env.MAX_PLAYERS}}"
+        - match: "serverdesc "
+          replace_with: "serverdesc \"{{env.SERVER_NAME}}\""
+        - match: "serverpass "
+          replace_with: "serverpass \"{{env.SERVER_PASSWORD}}\""
+        - match: "adminpass "
+          replace_with: "adminpass \"{{env.ADMIN_PASSWORD}}\""
+        - match: "updatemaster "
+          replace_with: "updatemaster {{env.PUBLIC}}"
+  startup:
+    done:
+      - "dedicated server started, waiting for clients"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Cube 2: Sauerbraten server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Only the server and its documented config are taken from the 2020 Edition release (about
+      # 1 GB to download; maps and media are not needed on a server). server-init.cfg is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      RELEASE=sauerbraten_2020_12_29_linux.tar.bz2
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      echo "Downloading ${RELEASE} (about 1 GB)..."
+      curl -fsSL --retry 3 -o "${WORK}/sauerbraten.tar.bz2" \
+          "https://sourceforge.net/projects/sauerbraten/files/sauerbraten/2020_11_29/${RELEASE}/download" \
+          || fail "could not download ${RELEASE}"
+      tar -xjf "${WORK}/sauerbraten.tar.bz2" -C "${WORK}" sauerbraten/bin_unix/linux_64_server sauerbraten/server-init.cfg \
+          sauerbraten/README.html sauerbraten/docs || fail "could not extract the server from ${RELEASE}"
+      mkdir -p bin_unix
+      cp -a "${WORK}/sauerbraten/bin_unix/linux_64_server" bin_unix/ || fail "could not install the server"
+      chmod +x bin_unix/linux_64_server
+      rm -rf docs && cp -a "${WORK}/sauerbraten/docs" docs
+      cp -a "${WORK}/sauerbraten/README.html" README.html
+
+      ## server-init.cfg: created once; the password lines are uncommented so the panel can set them
+      if [[ ! -f server-init.cfg ]]; then
+          cp "${WORK}/sauerbraten/server-init.cfg" server-init.cfg || fail "could not install server-init.cfg"
+          perl -pi -e 's|^//\s*(serverpass\|adminpass) |$1 |' server-init.cfg
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Description shown in the server browser. Cannot contain double quotes or ^.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Sauerbraten Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"^\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"^]*$/'
+  - name: Admin Password
+    description: Password for /setmaster <password> in game (admin rights). Leave empty for none.
+    order: 4
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^\s"^]*$/'
+  - name: Public
+    description: Register with the master server (sauerbraten.org) so the server is listed. (1 = on, 0 = off)
+    order: 5
+    env_variable: PUBLIC
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
