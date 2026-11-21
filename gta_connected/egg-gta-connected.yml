@@ -1,0 +1,155 @@
+name: Grand Theft Auto Connected
+author: thexylo@pm.me
+description: >-
+  GTA Connected, the multiplayer mod for Grand Theft Auto III, Vice City, San Andreas and IV with
+  JavaScript, Lua and Squirrel scripting. Official Linux server from gtaconnected.com.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads server.xml; name, game, player limit, password, port and server browser listing
+  # are written into it on every start (the HTTP server for resource downloads shares the game port,
+  # over TCP). The console takes server commands; stopping sends quit.
+  Default: ./Server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.xml:
+      parser: xml
+      create_new: false
+      replace:
+        - match: servername
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: game
+          replace_with: "{{env.GAME}}"
+        - match: gamemode
+          replace_with: "{{env.GAMEMODE}}"
+        - match: maxplayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: password
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: port
+          replace_with: "{{server.build.default.port}}"
+        - match: httpport
+          replace_with: "{{server.build.default.port}}"
+        - match: serverbrowser
+          replace_with: "{{env.SERVER_BROWSER}}"
+  startup:
+    done:
+      - "Resources loaded"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # GTA Connected server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server program is replaced; server.xml and resources/ are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## the newest Linux x86_64 server listed on gtaconnected.com/downloads, or a fixed version
+      if [[ -z "${GTAC_VERSION}" || "${GTAC_VERSION}" == "latest" ]]; then
+          page=$(curl -fsSL --retry 3 https://gtaconnected.com/downloads) || fail "could not open gtaconnected.com/downloads"
+          file=$(grep -oE 'GTAC-Server-Linux-[0-9][0-9.]*\.tar\.gz' <<< "${page}" | sort -uV | tail -n 1)
+      else
+          file="GTAC-Server-Linux-${GTAC_VERSION}.tar.gz"
+      fi
+      [[ -n "${file}" ]] || fail "could not find the Linux server on gtaconnected.com/downloads"
+      echo "Downloading ${file}..."
+      curl -fsSL --retry 3 -o "${WORK}/gtac.tar.gz" "https://gtaconnected.com/downloads/server/${file}" || fail "could not download ${file}"
+      mkdir -p "${WORK}/gtac"
+      tar -xzf "${WORK}/gtac.tar.gz" -C "${WORK}/gtac" || fail "could not extract ${file}"
+      [[ -f "${WORK}/gtac/Server" ]] || fail "${file} has no server"
+      [[ -f server.xml ]] && rm -f "${WORK}/gtac/server.xml"
+      [[ -d resources ]] && rm -rf "${WORK}/gtac/resources"
+      cp -a "${WORK}/gtac"/. /mnt/server/ || fail "could not install ${file}"
+      chmod +x Server
+      mkdir -p logs
+      echo "${file}" > .gtac-version
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: GTA Connected Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+  - name: Game
+    description: "Game the server hosts: gta:iii, gta:vc (Vice City), gta:sa (San Andreas) or gta:iv."
+    order: 2
+    env_variable: GAME
+    default_value: "gta:iii"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:gta:iii,gta:vc,gta:sa,gta:iv"
+  - name: Game Mode
+    description: Game mode name shown in the server browser.
+    order: 3
+    env_variable: GAMEMODE
+    default_value: Free Roam
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "32"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+  - name: Server Browser
+    description: List the server in the GTA Connected server browser. (true / false)
+    order: 6
+    env_variable: SERVER_BROWSER
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: GTA Connected Version
+    description: latest, or a version listed on gtaconnected.com/downloads such as 1.7.3. Reinstall to update.
+    order: 7
+    env_variable: GTAC_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
