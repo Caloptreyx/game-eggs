@@ -1,0 +1,178 @@
+name: ClassiCube (MCGalaxy)
+author: thexylo@pm.me
+description: >-
+  MCGalaxy, the most used server software for ClassiCube (Minecraft Classic): building and
+  survival worlds, ranks, plugins and the classicube.net server list. Built from the tagged release
+  for .NET, which the installer provides.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The installer builds MCGalaxy for .NET and puts the runtime into .dotnet/ (the image has no ICU
+  # library, so .NET runs in globalization-invariant mode; MCGalaxy's newest .NET project targets an
+  # older .NET, so it rolls forward to the installed runtime). Port, name, MOTD, player limit and public
+  # listing are written to properties/server.properties on every start. The console takes server
+  # commands (e.g. /help, /kick, /rank, /save all; the slash is optional); the stop signal (SIGINT)
+  # saves the worlds and shuts the server down.
+  Default: >-
+    DOTNET_ROOT=/home/container/.dotnet DOTNET_ROLL_FORWARD=Major DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
+    exec ./.dotnet/dotnet MCGalaxyCLI.dll
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    properties/server.properties:
+      parser: properties
+      replace:
+        - match: port
+          replace_with: "{{server.build.default.port}}"
+        - match: server-name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: motd
+          replace_with: "{{env.MOTD}}"
+        - match: max-players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: public
+          replace_with: "{{env.PUBLIC}}"
+  startup:
+    done:
+      - "Finished setting up server"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # MCGalaxy (ClassiCube server) installation script: builds the tagged release for .NET
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The program files are replaced; worlds (levels/), properties/, ranks, plugins and the
+      # database are kept.
+
+      DOTNET_CHANNEL=10.0
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+      # The installer's /tmp is a small tmpfs, so the SDK, the build and the NuGet cache go here.
+      export TMPDIR="${WORK}" HOME="${WORK}" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 \
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 NUGET_PACKAGES="${WORK}/nuget"
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${MCG_VERSION}" || "${MCG_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/ClassiCube/MCGalaxy/releases/latest
+      else
+          api="https://api.github.com/repos/ClassiCube/MCGalaxy/releases/tags/${MCG_VERSION}"
+      fi
+      tag=$(curl -fsSL --retry 3 "${api}" | jq -r '.tag_name // empty') || fail "could not look up MCGalaxy ${MCG_VERSION}"
+      [[ -n "${tag}" ]] || fail "MCGalaxy has no release ${MCG_VERSION}"
+
+      echo "Downloading MCGalaxy ${tag} source..."
+      curl -fsSL --retry 3 -o "${WORK}/src.tar.gz" "https://codeload.github.com/ClassiCube/MCGalaxy/tar.gz/refs/tags/${tag}" \
+          || fail "could not download MCGalaxy ${tag}"
+      mkdir -p "${WORK}/src"
+      tar -xzf "${WORK}/src.tar.gz" -C "${WORK}/src" --strip-components=1 || fail "could not extract MCGalaxy ${tag}"
+      project=$(ls "${WORK}"/src/CLI/MCGalaxyCLI_dotnet*.csproj 2>/dev/null | sort -V | tail -n 1)
+      [[ -n "${project}" ]] || fail "MCGalaxy ${tag} has no .NET CLI project"
+
+      ## .NET SDK (build only) and runtime (kept in .dotnet/)
+      curl -fsSL --retry 3 -o "${WORK}/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh || fail "could not download the .NET install script"
+      echo "Installing the .NET ${DOTNET_CHANNEL} SDK for the build..."
+      bash "${WORK}/dotnet-install.sh" --channel "${DOTNET_CHANNEL}" --install-dir "${WORK}/sdk" --no-path >/dev/null \
+          || fail "could not install the .NET ${DOTNET_CHANNEL} SDK"
+
+      echo "Building $(basename "${project}")..."
+      "${WORK}/sdk/dotnet" publish "${project}" -c Release \
+          -p:PublishSingleFile=false -p:SelfContained=false -o "${WORK}/out" \
+          || fail "the MCGalaxy build failed"
+      [[ -f "${WORK}/out/MCGalaxyCLI.dll" ]] || fail "the build produced no MCGalaxyCLI.dll"
+
+      echo "Installing the .NET ${DOTNET_CHANNEL} runtime..."
+      rm -rf .dotnet
+      bash "${WORK}/dotnet-install.sh" --channel "${DOTNET_CHANNEL}" --runtime dotnet --install-dir /mnt/server/.dotnet --no-path >/dev/null \
+          || fail "could not install the .NET ${DOTNET_CHANNEL} runtime"
+      cp -a "${WORK}/out"/. /mnt/server/ || fail "could not install MCGalaxy ${tag}"
+      echo "${tag}" > .mcgalaxy-version
+
+      ## SQLite (MCGalaxy's default database) loads the system's libsqlite3, which the image lacks
+      apt-get update -qq >/dev/null && (cd "${WORK}" && apt-get download -qq libsqlite3-0) \
+          || fail "could not download libsqlite3"
+      dpkg-deb -x "${WORK}"/libsqlite3-0_*.deb "${WORK}/sqlite" || fail "could not extract libsqlite3"
+      cp -L "$(ls "${WORK}"/sqlite/usr/lib/x86_64-linux-gnu/libsqlite3.so.0* | head -n 1)" /mnt/server/libsqlite3.so \
+          || fail "could not install libsqlite3"
+
+      ## properties/server.properties: seeded once so the panel's settings apply on the first start
+      mkdir -p properties
+      if [[ ! -f properties/server.properties ]]; then
+          cat > properties/server.properties << 'EOF'
+      server-name = [MCGalaxy] Default
+      motd = Welcome!
+      port = 25565
+      max-players = 12
+      public = true
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "MCGalaxy ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the classicube.net server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: "[MCGalaxy] Default"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: MOTD
+    description: Message shown while players join.
+    order: 2
+    env_variable: MOTD
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:128|regex:/^[^\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "12"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,128"
+  - name: Public
+    description: List the server on classicube.net. (true / false)
+    order: 4
+    env_variable: PUBLIC
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: MCGalaxy Version
+    description: latest, or a release tag such as 1.9.5.4. Reinstall to update.
+    order: 5
+    env_variable: MCG_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:32", 'regex:/^(latest|[\w.-]+)$/']
