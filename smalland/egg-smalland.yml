@@ -1,0 +1,228 @@
+name: "Smalland: Survive the Wilds"
+author: thexylo@pm.me
+description: >-
+  Smalland: Survive the Wilds, the multiplayer survival adventure where you are tiny in a giant
+  world of insects and creatures: craft, build, tame and survive together. Native Linux dedicated
+  server (Steam app 808040), listed through Epic Online Services.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # All settings are map URL options built from the panel variables on every start; the EOS
+  # credentials are the game's public dedicated server credentials. The URL is passed unquoted
+  # (globbing off): the engine joins its arguments with spaces, and a quoted argument containing
+  # spaces would be re-quoted and break the URL. The server reads no console input; the stop
+  # signal (SIGINT) saves the world (SMALLAND/Saved/SaveGames/Worlds) and exits.
+  Default: >-
+    set -f; OPTS="?SERVERNAME=\"${SERVER_NAME}\"?WORLDNAME=\"${WORLD_NAME}\"";
+    [ -n "${SERVER_PASSWORD}" ] && OPTS="${OPTS}?PASSWORD=\"${SERVER_PASSWORD}\"";
+    [ "${PRIVATE}" = "1" ] && OPTS="${OPTS}?PRIVATE";
+    [ "${FRIENDLY_FIRE}" = "1" ] && OPTS="${OPTS}?FRIENDLYFIRE";
+    [ "${PEACEFUL_MODE}" = "1" ] && OPTS="${OPTS}?PEACEFULMODE";
+    [ "${KEEP_INVENTORY}" = "1" ] && OPTS="${OPTS}?KEEPINVENTORY";
+    [ "${DETERIORATION}" = "0" ] && OPTS="${OPTS}?NODETERIORATION";
+    OPTS="${OPTS}?lengthofdayseconds=${DAY_LENGTH}?lengthofseasonseconds=${SEASON_LENGTH}";
+    OPTS="${OPTS}?creaturehealthmodifier=${CREATURE_HEALTH}?creaturedamagemodifier=${CREATURE_DAMAGE}";
+    OPTS="${OPTS}?nourishmentlossmodifier=${NOURISHMENT_LOSS}?falldamagemodifier=${FALL_DAMAGE}";
+    ./SMALLAND/Binaries/Linux/SMALLANDServer-Linux-Shipping SMALLAND /Game/Maps/WorldGame/WorldGame_Smalland${OPTS}
+    -ini:Engine:[EpicOnlineServices]:DeploymentId=50f2b148496e4cbbbdeefbecc2ccd6a3
+    -ini:Engine:[EpicOnlineServices]:DedicatedServerClientId=xyza78918KT08TkA6emolUay8yhvAAy2
+    -ini:Engine:[EpicOnlineServices]:DedicatedServerClientSecret=aN2GtVw7aHb6hx66HwohNM+qktFaO3vtrLSbGdTzZWk
+    -ini:Engine:[EpicOnlineServices]:DedicatedServerPrivateKey= -port={{SERVER_PORT}} -NOSTEAM -log
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Session 'GameSession' is being set as 'listening'"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Smalland: Survive the Wilds dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/SMALLAND/Binaries/Linux/SMALLANDServer-Linux-Shipping
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: "Smalland Server"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"?\r\n]+$/'
+  - name: World Name
+    description: Name of the world save; a new name creates a new world.
+    order: 2
+    env_variable: WORLD_NAME
+    default_value: "World"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"?\s]*$/'
+  - name: Private
+    description: Hide the server from the server browser. (1 = on, 0 = off)
+    order: 4
+    env_variable: PRIVATE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|in:0,1'
+  - name: Friendly Fire
+    description: Players can hurt each other. (1 = on, 0 = off)
+    order: 5
+    env_variable: FRIENDLY_FIRE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|in:0,1'
+  - name: Peaceful Mode
+    description: No hostile creatures. (1 = on, 0 = off)
+    order: 6
+    env_variable: PEACEFUL_MODE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|in:0,1'
+  - name: Keep Inventory
+    description: Players keep their inventory on death. (1 = on, 0 = off)
+    order: 7
+    env_variable: KEEP_INVENTORY
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|in:0,1'
+  - name: Deterioration
+    description: Items and buildings deteriorate. (1 = on, 0 = off)
+    order: 8
+    env_variable: DETERIORATION
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|in:0,1'
+  - name: Day Length
+    description: Length of a day in seconds.
+    order: 9
+    env_variable: DAY_LENGTH
+    default_value: "1800"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:60,86400'
+  - name: Season Length
+    description: Length of a season in seconds.
+    order: 10
+    env_variable: SEASON_LENGTH
+    default_value: "10800"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:60,864000'
+  - name: Creature Health
+    description: Creature health in percent.
+    order: 11
+    env_variable: CREATURE_HEALTH
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:1,1000'
+  - name: Creature Damage
+    description: Creature damage in percent.
+    order: 12
+    env_variable: CREATURE_DAMAGE
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:0,1000'
+  - name: Nourishment Loss
+    description: Hunger and thirst rate in percent.
+    order: 13
+    env_variable: NOURISHMENT_LOSS
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:0,1000'
+  - name: Fall Damage
+    description: Fall damage in percent.
+    order: 14
+    env_variable: FALL_DAMAGE
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|integer|between:0,1000'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 15
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Smalland dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "808040"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:808040"
