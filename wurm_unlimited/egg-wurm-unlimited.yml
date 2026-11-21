@@ -1,0 +1,181 @@
+name: Wurm Unlimited
+author: thexylo@pm.me
+description: >-
+  Wurm Unlimited, the standalone sandbox MMO of Wurm Online: shape the land, farm, build, craft
+  and fight in a persistent world on your own server. Native Linux dedicated server (Steam app
+  402370).
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # Ports, player limit, name, passwords, PvP and Epic rules are launch arguments; the world is
+  # loaded from worlds/<World> (copied from the shipped maps by the installer). The server logs to
+  # the console and takes console commands; "shutdown" saves the world and stops it.
+  Default: >-
+    ./WurmServerLauncher start=worlds/{{WORLD}} ip=0.0.0.0 externalport={{SERVER_PORT}}
+    queryport={{QUERY_PORT}} maxplayers={{MAX_PLAYERS}} servername="${SERVER_NAME}"
+    adminpwd="${ADMIN_PASSWORD}" serverpassword="${SERVER_PASSWORD}" pvp={{PVP}}
+    epicsettings={{EPIC}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Wurm Server launcher finished at"
+    strip_ansi: true
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Wurm Unlimited dedicated server installation script (native Linux build)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/WurmServerLauncher
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; downloads occasionally abort with a steamcmd state error
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/nativelibs
+      cp -v linux64/steamclient.so /mnt/server/nativelibs/steamclient.so
+
+      ## worlds: the shipped Adventure and Creative maps are copied once into worlds/, so game
+      ## updates (which may replace dist/) never touch a running world
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      mkdir -p worlds
+      for world in Adventure Creative; do
+          if [[ ! -d "worlds/${world}" ]]; then
+              cp -a "dist/${world}" "worlds/${world}" || fail "the server has no dist/${world}"
+          fi
+      done
+      ls worlds
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Wurm Unlimited Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+  - name: Admin Password
+    description: Password that unlocks the in-game admin commands.
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "25"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,500"
+  - name: World
+    description: World folder in worlds/ (Adventure and Creative are installed; copy a map folder there to add one).
+    order: 5
+    env_variable: WORLD
+    default_value: Adventure
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: PvP
+    description: Allow player versus player combat. (true or false)
+    order: 6
+    env_variable: PVP
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Epic Settings
+    description: Follow the rules of the Epic servers of Wurm Online. (true or false)
+    order: 7
+    env_variable: EPIC
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 8
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 9
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Wurm Unlimited dedicated server.
+    order: 10
+    env_variable: SRCDS_APPID
+    default_value: "402370"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:402370"
