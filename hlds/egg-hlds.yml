@@ -1,0 +1,200 @@
+name: Half-Life Dedicated Server
+author: thexylo@pm.me
+description: >-
+  Half-Life Dedicated Server (HLDS) for any GoldSource game in Steam app 90: Half-Life Deathmatch,
+  Counter-Strike, Condition Zero, Day of Defeat, Team Fortress Classic, Opposing Force, Deathmatch
+  Classic or Ricochet. Native Linux HLDS.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # hlds_run is the server's own start script. ulimit keeps a crash from writing a core file into
+  # the server directory. Name and passwords are written to panel.cfg in the game folder on every
+  # start and executed with +exec (hlds_run splits quoted arguments, so they cannot be passed as
+  # +hostname "..."); a hostname or password line in the game's server.cfg would win over them. The
+  # console takes server commands (status, changelevel, kick, say, ...); stopping sends quit.
+  Default: >-
+    printf 'hostname "%s"\nsv_password "%s"\nrcon_password "%s"\n' "${SERVER_NAME}" "${SERVER_PASSWORD}" "${RCON_PASSWORD}"
+    > "{{HLDS_GAME}}/panel.cfg"; ulimit -c 0; ./hlds_run -game {{HLDS_GAME}} -console -port {{SERVER_PORT}} +ip 0.0.0.0
+    -strictportbind -norestart +sv_lan 0 +maxplayers {{MAX_PLAYERS}} +exec panel.cfg +map "{{SRCDS_MAP}}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Connection to Steam servers successful
+    strip_ansi: false
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Half-Life Dedicated Server (HLDS) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/hlds_linux
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game. App 90 (HLDS) only installs the game files completely after a first
+      ## pass with the Windows platform; the Linux pass then adds the Linux binaries.
+      ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+          +app_set_config 90 mod "${HLDS_GAME}" +app_update "${SRCDS_APPID}" validate +quit \
+          || echo "SteamCMD Windows pass ended with an error; continuing with the Linux pass"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType linux +login anonymous \
+              +app_set_config 90 mod "${HLDS_GAME}" +app_update "${SRCDS_APPID}" validate +quit \
+              && [[ -f "${SERVER_BINARY}" && -d "/mnt/server/${HLDS_GAME}/maps" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" && -d "/mnt/server/${HLDS_GAME}/maps" ]] \
+          || fail "SteamCMD could not install app ${SRCDS_APPID} with ${HLDS_GAME}; check the install log and free disk space"
+      # The Windows pass leaves Windows binaries that the Linux server does not use.
+      find /mnt/server -maxdepth 2 \( -name '*.exe' -o -name '*.dll' \) -delete
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server.cfg: created when missing or blank, so custom settings survive reinstalls. The panel
+      ## passes hostname and passwords on the command line; lines setting them in server.cfg would
+      ## override that, so they are commented out.
+      CFG="/mnt/server/${HLDS_GAME}/server.cfg"
+      if ! grep -q '[^[:space:]]' "${CFG}" 2>/dev/null; then
+          echo "Creating server.cfg..."
+          cat > "${CFG}" << 'EOF'
+      // HLDS server configuration, run on every map start.
+      // hostname, sv_password and rcon_password are set from the panel.
+
+      mp_timelimit 30
+      sv_region 255
+      sv_allowupload 0
+      sv_allowdownload 1
+      log on
+      sv_logbans 1
+      sv_logecho 1
+      sv_logfile 1
+      sv_log_onefile 0
+
+      // Execute ban files
+      exec banned.cfg
+      exec listip.cfg
+      EOF
+      fi
+      sed -i -E 's#^[[:space:]]*(hostname|sv_password|rcon_password)([[:space:]]|$)#// set from the panel: &#' "${CFG}"
+      touch "/mnt/server/${HLDS_GAME}/banned.cfg" "/mnt/server/${HLDS_GAME}/listip.cfg"
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: "Half-Life Server"
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Game
+    description: >-
+      Game folder to install and run: valve (Half-Life Deathmatch), cstrike (Counter-Strike), czero
+      (Condition Zero), dod (Day of Defeat), tfc (Team Fortress Classic), gearbox (Opposing Force),
+      dmc (Deathmatch Classic) or ricochet. Reinstall after changing it.
+    order: 2
+    env_variable: HLDS_GAME
+    default_value: valve
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:valve,cstrike,czero,dod,tfc,gearbox,dmc,ricochet"
+  - name: Map
+    description: >-
+      Map to load on start; it must exist in the chosen game, e.g. crossfire (valve), de_dust2
+      (cstrike), dod_anzio (dod), 2fort (tfc), op4_bootcamp (gearbox), dmc_dm2 (dmc), rc_arena (ricochet).
+    order: 3
+    env_variable: SRCDS_MAP
+    default_value: crossfire
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,32"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 5
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: RCON Password
+    description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
+    order: 6
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Extra Arguments
+    description: Additional launch parameters or convars, e.g. +sys_ticrate 1000 -pingboost 2.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: "Steam app id of the Half-Life dedicated server (HLDS)."
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "90"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:90"
