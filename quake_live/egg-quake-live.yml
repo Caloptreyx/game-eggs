@@ -1,0 +1,169 @@
+name: Quake Live
+author: thexylo@pm.me
+description: >-
+  Quake Live, id Software's fast arena shooter: duel, FFA, CA, CTF, TDM and more. Native Linux
+  dedicated server (Steam app 349090), installed anonymously.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server loads its libraries from linux64/. baseq3/server.cfg runs first; name, password,
+  # player limit and server type are then passed as +set options, so they win over the file. The
+  # server starts on Map with the Factory (game type) and then picks maps from the factory's map
+  # pool (baseq3/mappool_<factory>.txt, when it exists). The console takes server commands (status,
+  # map, kick, say, ...); stopping sends quit. Values are expanded inside quotes, never re-parsed by
+  # the shell.
+  Default: >-
+    LD_LIBRARY_PATH=/home/container/linux64 ./qzeroded.x64 +set net_port {{SERVER_PORT}} +exec server.cfg
+    +set sv_hostname "${SERVER_NAME}" ${SERVER_PASSWORD:++set g_password "${SERVER_PASSWORD}"}
+    +set sv_maxclients {{MAX_PLAYERS}} +set sv_serverType {{SERVER_TYPE}}
+    $( [ -f "baseq3/mappool_${FACTORY}.txt" ] && printf -- '+set sv_mappoolFile mappool_%s.txt' "${FACTORY}" )
+    +map "${MAP}" "${FACTORY}" {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "zmq stats and rcon passwords updated"
+    strip_ansi: true
+  stop:
+    type: command
+    value: quit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Quake Live dedicated server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/qzeroded.x64
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the server; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous +app_update "${SRCDS_APPID}" validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p /mnt/server/baseq3
+      [[ -f /mnt/server/baseq3/server.cfg ]] || cat > /mnt/server/baseq3/server.cfg << 'EOF'
+      // Quake Live server settings. Name, password, player limit, server type, map and factory
+      // are set from the panel and override this file.
+      set g_motd "Welcome!"
+      set sv_mappoolFile "mappool.txt"
+      EOF
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Quake Live Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Factory
+    description: Game type preset (factory), e.g. ffa, duel, ca, ctf, tdm, ft, race, ad, dom, harv.
+    order: 4
+    env_variable: FACTORY
+    default_value: ffa
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^\w+$/'
+  - name: Map
+    description: Map to start with, e.g. campgrounds, bloodrun, aerowalk, toxicity.
+    order: 5
+    env_variable: MAP
+    default_value: campgrounds
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^\w+$/'
+  - name: Server Type
+    description: Visibility in the server browser. (0 = offline, 1 = LAN only, 2 = internet)
+    order: 6
+    env_variable: SERVER_TYPE
+    default_value: "2"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2"
+  - name: Extra Arguments
+    description: Additional +set options, e.g. +set g_motd Welcome +set fraglimit 30.
+    order: 7
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 8
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Quake Live dedicated server.
+    order: 9
+    env_variable: SRCDS_APPID
+    default_value: "349090"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:349090"
