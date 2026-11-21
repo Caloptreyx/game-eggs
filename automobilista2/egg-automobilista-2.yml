@@ -1,0 +1,173 @@
+name: Automobilista 2
+author: thexylo@pm.me
+description: >-
+  Automobilista 2, the racing simulator from Reiza Studios on the Madness engine: multiplayer
+  races with qualifying, rolling starts and dynamic weather. The Windows-only dedicated server
+  (Steam app 1338040) runs through Proton.
+features:
+  - steam_disk_space
+docker_images:
+  Proton: ghcr.io/caloptreyx/steamcmd:proton
+file_denylist: []
+startup_commands:
+  # The server reads server.cfg (created once from the shipped server_with_lists.cfg); name,
+  # password, player limit and ports are written into it on every start. Under Proton its console
+  # output only arrives when cmd.exe redirects it into a file (server_output.log), which is streamed
+  # to the panel; it reads no console input. Wine runs the server in its own process group, so the
+  # stop signal never reaches it: the shell forwards SIGINT to it and waits for it.
+  Default: >-
+    : > server_output.log; proton run cmd.exe /c "DedicatedServerCmd.exe > server_output.log 2>&1" >/dev/null 2>&1 & SRV=$!;
+    trap 'pkill -INT -f "DedicatedServerCmd\.exe"' INT;
+    tail -n +1 -F server_output.log --pid=${SRV} 2>/dev/null &
+    while kill -0 ${SRV} 2>/dev/null; do wait ${SRV}; done
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.cfg:
+      parser: file
+      replace:
+        - match: "name :"
+          replace_with: 'name : "{{env.SERVER_NAME}}"'
+        - match: "password :"
+          replace_with: 'password : "{{env.SERVER_PASSWORD}}"'
+        - match: "maxPlayerCount :"
+          replace_with: "maxPlayerCount : {{env.MAX_PLAYERS}}"
+        - match: "hostPort :"
+          replace_with: "hostPort : {{server.build.default.port}}"
+        - match: "queryPort :"
+          replace_with: "queryPort : {{env.QUERY_PORT}}"
+        - match: "steamPort :"
+          replace_with: "steamPort : {{env.STEAM_PORT}}"
+  startup:
+    done:
+      - "Server started"
+      - "switching to running state"
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Automobilista 2 dedicated server installation script (Windows server, run through Proton)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/DedicatedServerCmd.exe
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +@sSteamCmdForcePlatformType windows +login anonymous \
+              +app_update "${SRCDS_APPID}" validate +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      ## server.cfg: created once from the shipped sample (with track and vehicle lists)
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      if [[ ! -f server.cfg ]]; then
+          cp config_sample/server_with_lists.cfg server.cfg || fail "the server has no config_sample/server_with_lists.cfg"
+      fi
+      grep -nE '^\s*(name|password|maxPlayerCount|hostPort|queryPort|steamPort|enableHttpApi|httpApiPort) ' server.cfg
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser. Cannot contain double quotes.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Automobilista 2 Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 3
+    env_variable: MAX_PLAYERS
+    default_value: "16"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:2,64"
+  - name: Query Port
+    description: UDP port for Steam server queries. Needs its own allocation.
+    order: 4
+    env_variable: QUERY_PORT
+    default_value: "27016"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Steam Port
+    description: UDP port for Steam. Needs its own allocation.
+    order: 5
+    env_variable: STEAM_PORT
+    default_value: "8766"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 6
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Steam App ID
+    description: Steam app id of the Automobilista 2 dedicated server.
+    order: 7
+    env_variable: SRCDS_APPID
+    default_value: "1338040"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:1338040"
+  - name: Windows Install
+    description: The server is Windows-only; auto updates must download the Windows files.
+    order: 8
+    env_variable: WINDOWS_INSTALL
+    default_value: "1"
+    user_viewable: false
+    user_editable: false
+    rules: "required|in:1"
