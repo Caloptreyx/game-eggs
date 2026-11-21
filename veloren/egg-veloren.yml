@@ -1,0 +1,206 @@
+name: Veloren
+author: thexylo@pm.me
+description: >-
+  Veloren, the open-world, open-source multiplayer voxel RPG. Official Linux server (weekly or
+  nightly build from download.veloren.net).
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server's settings are RON files in userdata/server/server_config/. The panel values
+  # (name, player limit, PvP/PvE, ports) are written into settings.ron and the message of the day
+  # into description.ron on every start; everything else in those files stays yours. The console
+  # takes server commands (list-players, send-global-msg, admin, shutdown, ...); stopping sends
+  # "shutdown graceful 5", which warns players and saves the world before the server exits.
+  # Values reach perl through the environment, never re-parsed by the shell.
+  Default: >-
+    CFG=userdata/server/server_config;
+    perl -0pi -e 's/(address: ")0\.0\.0\.0:\d+(")/$1 . "0.0.0.0:" . $ENV{SERVER_PORT} . $2/e;
+    s/(address: ")\[::\]:\d+(")/$1 . "[::]:" . $ENV{SERVER_PORT} . $2/e;
+    s/query_address: (Some\(")?[^,\n]*/"query_address: Some(\"0.0.0.0:" . $ENV{QUERY_PORT} . "\")"/e;
+    s/max_players: \d+/max_players: $ENV{MAX_PLAYERS}/;
+    s/server_name: ".*?",/server_name: "$ENV{SERVER_NAME}",/;
+    s/battle_mode: Global\(\w+\)/battle_mode: Global($ENV{BATTLE_MODE})/' "${CFG}/settings.ron";
+    perl -0pi -e 's/motd: ".*?",/motd: "$ENV{MOTD}",/' "${CFG}/description.ron";
+    ./veloren-server-cli $( [ "${AUTH}" = "0" ] && printf %s --no-auth ) {{EXTRA_ARGS}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - "Server is ready to accept connections"
+    strip_ansi: false
+  stop:
+    type: command
+    value: shutdown graceful 5
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Veloren server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The game files are replaced; userdata/ (settings, world, characters) is kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      echo "Downloading the Veloren ${VELOREN_CHANNEL} build..."
+      curl -fsSL --retry 3 -o "${WORK}/veloren.zip" "https://download.veloren.net/latest/linux/x86_64/${VELOREN_CHANNEL}" \
+          || fail "could not download the Veloren ${VELOREN_CHANNEL} build"
+      rm -rf assets veloren-server-cli
+      unzip -q -o "${WORK}/veloren.zip" -x 'veloren-voxygen' -d /mnt/server || fail "could not extract Veloren"
+      [[ -f veloren-server-cli ]] || fail "the Veloren ${VELOREN_CHANNEL} build has no server"
+      chmod +x veloren-server-cli
+
+      ## settings: the panel edits these on every start, so they are created once with the server's
+      ## defaults; the server keeps and extends them.
+      CFG=/mnt/server/userdata/server/server_config
+      mkdir -p "${CFG}"
+      if [[ ! -f "${CFG}/settings.ron" ]]; then
+          seed=$(( (RANDOM << 15 | RANDOM) ))
+          cat > "${CFG}/settings.ron" << EOF
+      (
+          gameserver_protocols: [
+              Tcp(
+                  address: "[::]:14004",
+              ),
+              Tcp(
+                  address: "0.0.0.0:14004",
+              ),
+          ],
+          auth_server_address: Some("https://auth.veloren.net"),
+          query_address: Some("0.0.0.0:14006"),
+          max_players: 100,
+          world_seed: ${seed},
+          server_name: "Veloren Server",
+          day_length: 30.0,
+          map_file: None,
+          max_view_distance: Some(65),
+          max_player_group_size: 6,
+          client_timeout: (
+              secs: 40,
+              nanos: 0,
+          ),
+          max_player_for_kill_broadcast: None,
+          calendar_mode: Auto,
+          gameplay: (
+              battle_mode: Global(PvP),
+              explosion_burn_marks: true,
+          ),
+          moderation: (
+              banned_words_files: [],
+              automod: false,
+              admins_exempt: true,
+          ),
+          world: (
+              start_time: 32400.0,
+          ),
+      )
+      EOF
+      fi
+      if [[ ! -f "${CFG}/description.ron" ]]; then
+          cat > "${CFG}/description.ron" << 'EOF'
+      V2((
+          default_locale: "en",
+          descriptions: {
+              "en": (
+                  motd: "Welcome!",
+                  rules: None,
+              ),
+          },
+      ))
+      EOF
+      fi
+
+      echo "-----------------------------------------"
+      echo "Veloren (${VELOREN_CHANNEL}) installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Build
+    description: >-
+      weekly (recommended, what most players run) or nightly. Players need the same build. Reinstall to
+      update; userdata/ is kept.
+    order: 1
+    env_variable: VELOREN_CHANNEL
+    default_value: weekly
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:weekly,nightly"
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: Veloren Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Message of the Day
+    description: Message shown to players when they join.
+    order: 3
+    env_variable: MOTD
+    default_value: Welcome!
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:256|regex:/^[^"\\\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Battle Mode
+    description: PvP (players can fight each other) or PvE (players cannot hurt each other).
+    order: 5
+    env_variable: BATTLE_MODE
+    default_value: PvP
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:PvP,PvE"
+  - name: Authentication
+    description: >-
+      1 = players log in with a Veloren account (auth.veloren.net). 0 = no authentication, anyone can
+      join with any name (only for private servers).
+    order: 6
+    env_variable: AUTH
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Query Port
+    description: UDP port for server information queries (server browser). Needs its own allocation.
+    order: 7
+    env_variable: QUERY_PORT
+    default_value: "14006"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Extra Arguments
+    description: Additional launch parameters.
+    order: 8
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
