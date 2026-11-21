@@ -1,0 +1,168 @@
+name: open.mp
+author: thexylo@pm.me
+description: >-
+  open.mp (Open Multiplayer), the SA-MP compatible multiplayer server for GTA: San Andreas: runs
+  SA-MP game modes and filterscripts, and SA-MP 0.3.7 and 0.3.DL clients can join. Official Linux
+  server from the open.mp GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is a 32-bit program; the installer puts the 32-bit libatomic it needs, which the image
+  # lacks, into lib32/. Name, password, player limit, port, rcon and public listing are written to
+  # config.json on every start; everything else in it (game modes, scripts, plugins) stays yours.
+  # The console takes server commands (exit, gmx, changemode, kick, ban, say, ...); stopping sends
+  # exit.
+  Default: >-
+    LD_LIBRARY_PATH=/home/container/lib32 ./omp-server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.json:
+      parser: json
+      create_new: false
+      replace:
+        - match: name
+          replace_with: '"{{env.SERVER_NAME}}"'
+        - match: password
+          replace_with: '"{{env.SERVER_PASSWORD}}"'
+        - match: max_players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: announce
+          replace_with: "{{env.ANNOUNCE}}"
+        - match: network.port
+          replace_with: "{{server.build.default.port}}"
+        - match: rcon.enable
+          replace_with: "{{env.RCON_ENABLED}}"
+        - match: rcon.password
+          replace_with: '"{{env.RCON_PASSWORD}}"'
+  startup:
+    done:
+      - "started on port"
+    strip_ansi: true
+  stop:
+    type: command
+    value: exit
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # open.mp server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # The server binary and components are replaced; config.json, game modes, filterscripts,
+      # scriptfiles, plugins and bans are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      WORK=/mnt/server/.install-tmp
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+      trap 'rm -rf "${WORK}"' EXIT
+
+      ## resolve the release: the latest one, or a fixed tag
+      if [[ -z "${OMP_VERSION}" || "${OMP_VERSION}" == "latest" ]]; then
+          api=https://api.github.com/repos/openmultiplayer/open.mp/releases/latest
+      else
+          api="https://api.github.com/repos/openmultiplayer/open.mp/releases/tags/${OMP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up open.mp ${OMP_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name == "open.mp-linux-x86.tar.gz") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "open.mp ${OMP_VERSION} has no Linux server download"
+
+      echo "Downloading open.mp ${tag}..."
+      curl -fsSL --retry 3 -o "${WORK}/omp.tar.gz" "${url}" || fail "could not download open.mp ${tag}"
+      tar -xzf "${WORK}/omp.tar.gz" -C "${WORK}" || fail "could not extract open.mp ${tag}"
+      rm -rf components omp-server
+      cp -a "${WORK}"/Server/omp-server "${WORK}"/Server/components . || fail "could not install open.mp ${tag}"
+      # Shipped content (default game modes, config, ...) is only copied where nothing exists yet.
+      cp -an "${WORK}"/Server/. . || fail "could not install the open.mp default files"
+      chmod +x omp-server
+      echo "${tag}" > .omp-version
+
+      ## the 32-bit libatomic the server links against (the runtime image only has the 64-bit one)
+      echo "Installing the 32-bit libatomic..."
+      dpkg --add-architecture i386 && apt-get update -qq || fail "apt-get update failed"
+      (cd "${WORK}" && apt-get download -qq libatomic1:i386) || fail "could not download libatomic1:i386"
+      dpkg-deb -x "${WORK}"/libatomic1_*_i386.deb "${WORK}/atomic" || fail "could not extract libatomic1:i386"
+      mkdir -p lib32
+      cp -a "${WORK}"/atomic/usr/lib/i386-linux-gnu/libatomic.so.1* lib32/ || fail "could not install libatomic1:i386"
+
+      echo "-----------------------------------------"
+      echo "open.mp ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: open.mp Version
+    description: latest for the current release, or a release tag such as v1.6.7.3218. Reinstall to update; your config and scripts are kept.
+    order: 1
+    env_variable: OMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^(latest|v?\d+(\.\d+)*)$/'
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 2
+    env_variable: SERVER_NAME
+    default_value: open.mp server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 3
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n]*$/'
+  - name: Max Players
+    description: Maximum number of players (1-1000).
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "50"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Announce
+    description: List the server in the open.mp and SA-MP server lists. (true / false)
+    order: 5
+    env_variable: ANNOUNCE
+    default_value: "true"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: RCON
+    description: Enable remote console logins from game clients (/rcon login). (true / false)
+    order: 6
+    env_variable: RCON_ENABLED
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: RCON Password
+    description: Remote console password (at least 4 characters; the server refuses the default changeme1).
+    order: 7
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n\s]*$/'
