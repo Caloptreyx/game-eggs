@@ -144,3 +144,10 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - The EULA file FTB's installer writes is removed again, so the panel asks for the Minecraft EULA on the first start.
 - Reinstall to update the pack; FTB's installer updates it in place.
 - Tested with FTB Evolution 2 1.10.1 (NeoForge, about 1.3 GB of disk, about 7.5 GB of memory after start).
+
+## NanoLimbo
+
+`egg-minecraft-java-nanolimbo.yml` runs [NanoLimbo](https://github.com/Nan1t/NanoLimbo), a limbo server without a world (players wait in an empty dimension), e.g. as an AFK or fallback server behind a proxy. The installer takes a release jar (`latest` or a tag such as `v1.13.0`) and extracts its default `settings.yml`, so the panel's address, port and Max Players apply from the first start (checked with a server list ping: max players 9 on the allocation's port).
+
+- Idle it used about 90 MB of memory and 5 MB of disk on the test node. Stop sends `stop`.
+- Player info forwarding from a proxy is set under `infoForwarding` in `settings.yml`.

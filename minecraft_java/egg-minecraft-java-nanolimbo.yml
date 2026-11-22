@@ -1,0 +1,108 @@
+name: "Minecraft: Java Edition (NanoLimbo)"
+author: thexylo@pm.me
+description: >-
+  NanoLimbo, a tiny Minecraft: Java Edition "limbo" server with no world: players wait in an empty
+  void, for example as an AFK, queue or fallback server behind a Velocity or BungeeCord proxy.
+  Supports Minecraft 1.7 to current. Installed from the NanoLimbo GitHub releases.
+features: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  Default: java -Xms32M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # The file parser matches the start of a line as written: bind.ip and bind.port are indented.
+    settings.yml:
+      parser: file
+      replace:
+        - match: "  ip: "
+          replace_with: '  ip: "0.0.0.0"'
+        - match: "  port: "
+          replace_with: "  port: {{server.build.default.port}}"
+        - match: "maxPlayers: "
+          replace_with: "maxPlayers: {{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "Server started on"
+    strip_ansi: true
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (NanoLimbo) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=Nan1t/NanoLimbo
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      if [[ -z "${NANOLIMBO_VERSION}" || "${NANOLIMBO_VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          api="https://api.github.com/repos/${REPO}/releases/tags/${NANOLIMBO_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up NanoLimbo ${NANOLIMBO_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '[.assets[] | select(.name | endswith(".jar"))][0].browser_download_url // empty' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "NanoLimbo ${NANOLIMBO_VERSION} has no jar"
+      echo "Downloading NanoLimbo ${tag}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download NanoLimbo ${tag}"
+      unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded NanoLimbo jar is not valid"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${tag}" > .nanolimbo-version
+
+      ## settings.yml: the server writes it from its built-in template on the first start; it is taken
+      ## from the jar here so the panel's port applies from the first start
+      [[ -f settings.yml ]] || unzip -p "${SERVER_JARFILE}" settings.yml > settings.yml || fail "could not extract settings.yml"
+
+      echo "-----------------------------------------"
+      echo "NanoLimbo ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Max Players
+    description: Maximum number of players in the limbo (-1 for no limit).
+    order: 1
+    env_variable: MAX_PLAYERS
+    default_value: "100"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:-1,100000"
+  - name: NanoLimbo Version
+    description: Release tag of Nan1t/NanoLimbo (e.g. v1.13.0), or latest. Applied on reinstall.
+    order: 2
+    env_variable: NANOLIMBO_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: nanolimbo.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
