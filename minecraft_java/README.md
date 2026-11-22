@@ -125,3 +125,12 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Minecraft Version: `latest` for the newest version on SpigotMC's version list, or a version such as `1.21.10`. Reinstall to switch versions (it compiles again); worlds, plugins and configs are kept.
 - Like the Paper egg it creates `server.properties` with the port keys. Plugins go in `plugins/`; Spigot adds `spigot.yml` and `bukkit.yml`.
+
+## Modrinth modpacks
+
+`egg-minecraft-java-modrinth.yml` installs any modpack from [Modrinth](https://modrinth.com/modpacks) (`.mrpack`): set Modrinth Project to the pack's slug or ID (e.g. `adrenaserver`) and Modpack Version to `latest` or a version number.
+
+- The installer downloads the files of the pack's index that servers need (files marked server-unsupported are skipped; every file is checked against its SHA-512), copies `overrides/` and `server-overrides/`, and sets up the pack's loader: Fabric (server launcher), Quilt, Forge or NeoForge (their Java installers run on the first start, as in those eggs), or plain Minecraft.
+- It prints the Java version the pack's Minecraft version needs; select that image. Mod loaders and mods are often tied to it: the tested pack (Adrenaserver 1.7.0, Fabric, Minecraft 1.21.1, 83 mods) runs on Java 21 but fails on Java 25 (its Mixin version cannot read Java 25 classes).
+- Reinstall to change the pack version: the files the previous version installed (listed in `.modpack-files`) are removed first; worlds, mods you added yourself and other files stay.
+- Like the Paper egg it creates `server.properties` with the port keys.

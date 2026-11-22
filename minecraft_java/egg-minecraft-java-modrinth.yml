@@ -1,0 +1,223 @@
+name: "Minecraft: Java Edition (Modrinth modpack)"
+author: thexylo@pm.me
+description: >-
+  Any Minecraft: Java Edition modpack from Modrinth (.mrpack): the installer downloads the pack's
+  server-side mods and files and sets up its mod loader (Fabric, Quilt, Forge or NeoForge). The
+  matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # start-modpack.sh (written by the installer) runs the mod loader's Java installer on the first
+  # start after a (re)install where needed (Quilt, Forge, NeoForge; the installer image has no
+  # Java), then replaces itself with the server (exec), which reads the console and the stop command.
+  Default: bash ./start-modpack.sh
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Modrinth modpack) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs a Modrinth modpack version: the files of its index that servers need (checked against
+      # their SHA-512), its overrides and server-overrides, and its mod loader. Files installed by an
+      # earlier pack version are removed first (.modpack-files); worlds, configs changed by hand and
+      # mods added by hand stay.
+
+      API="https://api.modrinth.com/v2"
+      UA="calagopus-egg (https://github.com/Caloptreyx/game-eggs)"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+      WORK=/mnt/server/.modpack-install
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          rm -rf "${WORK}"
+          exit 1
+      }
+      get() { curl -fsSL --retry 3 -A "${UA}" "$@"; }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      rm -rf "${WORK}" && mkdir -p "${WORK}" || fail "cannot create ${WORK}"
+
+      ## the pack version: the newest one, or a version number / ID
+      [[ -n "${MODRINTH_PROJECT}" ]] || fail "Modrinth Project is empty"
+      versions=$(get "${API}/project/${MODRINTH_PROJECT}/version") || fail "Modrinth has no project '${MODRINTH_PROJECT}'"
+      if [[ -z "${MODRINTH_VERSION}" || "${MODRINTH_VERSION,,}" == "latest" ]]; then
+          version=$(jq -c '.[0] // empty' <<< "${versions}")
+      else
+          version=$(jq -c --arg v "${MODRINTH_VERSION}" '[.[] | select(.version_number == $v or .id == $v)][0] // empty' <<< "${versions}")
+      fi
+      [[ -n "${version}" ]] || fail "the Modrinth project '${MODRINTH_PROJECT}' has no version '${MODRINTH_VERSION}'"
+      url=$(jq -r '[.files[] | select(.filename | endswith(".mrpack"))] | (map(select(.primary)) + .)[0].url // empty' <<< "${version}")
+      [[ -n "${url}" ]] || fail "this Modrinth version has no .mrpack file (is '${MODRINTH_PROJECT}' a modpack?)"
+      echo "Downloading $(jq -r '.name' <<< "${version}") ($(jq -r '.version_number' <<< "${version}"))..."
+      get -o "${WORK}/pack.mrpack" "${url}" || fail "could not download the modpack"
+      unzip -q -o "${WORK}/pack.mrpack" -d "${WORK}/pack" < /dev/null || fail "could not extract the modpack"
+      index="${WORK}/pack/modrinth.index.json"
+      [[ -f "${index}" ]] || fail "the modpack has no modrinth.index.json"
+
+      ## remove the files of the previously installed pack version
+      if [[ -f .modpack-files ]]; then
+          while IFS= read -r f; do [[ -n "${f}" && "${f}" != *..* ]] && rm -f -- "/mnt/server/${f}"; done < .modpack-files
+      fi
+      : > .modpack-files
+
+      ## the files servers need
+      count=0
+      while IFS=$'\t' read -r path dl sha; do
+          [[ "${path}" == /* || "${path}" == *..* ]] && fail "the modpack has an unsafe file path: ${path}"
+          mkdir -p "$(dirname "/mnt/server/${path}")"
+          get -o "/mnt/server/${path}" "${dl}" || fail "could not download ${path}"
+          echo "${sha}  /mnt/server/${path}" | sha512sum -c --quiet - || fail "${path} is corrupt (checksum mismatch)"
+          echo "${path}" >> .modpack-files
+          count=$((count + 1))
+      done < <(jq -r '.files[] | select((.env.server // "required") != "unsupported") | [.path, .downloads[0], .hashes.sha512] | @tsv' "${index}")
+      echo "Downloaded ${count} files"
+
+      ## overrides, then the server-specific overrides
+      for dir in overrides server-overrides; do
+          if [[ -d "${WORK}/pack/${dir}" ]]; then
+              (cd "${WORK}/pack/${dir}" && find . -type f | sed 's#^\./##') >> .modpack-files
+              cp -a "${WORK}/pack/${dir}/." /mnt/server/ || fail "could not copy the ${dir}"
+          fi
+      done
+
+      ## the mod loader
+      mc=$(jq -r '.dependencies.minecraft' "${index}")
+      loader=vanilla; loader_version=""
+      for l in fabric-loader quilt-loader neoforge forge; do
+          v=$(jq -r --arg l "${l}" '.dependencies[$l] // empty' "${index}")
+          if [[ -n "${v}" ]]; then loader="${l%-loader}"; loader_version="${v}"; break; fi
+      done
+      echo "Minecraft ${mc}, loader ${loader} ${loader_version}"
+      rm -f .loader-install
+      case "${loader}" in
+          vanilla)
+              meta_url=$(get "${MANIFEST_URL}" | jq -r --arg v "${mc}" '.versions[] | select(.id == $v) | .url')
+              get -o server.jar "$(get "${meta_url}" | jq -r '.downloads.server.url')" || fail "could not download the Minecraft ${mc} server"
+              ;;
+          fabric)
+              installer=$(get https://meta.fabricmc.net/v2/versions/installer | jq -r '[.[] | select(.stable)][0].version')
+              get -o server.jar "https://meta.fabricmc.net/v2/versions/loader/${mc}/${loader_version}/${installer}/server/jar" \
+                  || fail "could not download the Fabric server launcher"
+              ;;
+          quilt)
+              get -o loader-installer.jar "$(get https://meta.quiltmc.org/v3/versions/installer | jq -r '.[0].url')" || fail "could not download the Quilt installer"
+              touch .loader-install
+              ;;
+          forge)
+              full="${mc}-${loader_version}"
+              get -o loader-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/${full}/forge-${full}-installer.jar" \
+                  || fail "could not download the Forge ${full} installer"
+              loader_version="${full}"
+              touch .loader-install
+              ;;
+          neoforge)
+              get -o loader-installer.jar "https://maven.neoforged.net/releases/net/neoforged/neoforge/${loader_version}/neoforge-${loader_version}-installer.jar" \
+                  || fail "could not download the NeoForge ${loader_version} installer"
+              touch .loader-install
+              ;;
+      esac
+      printf '%s\n' "${loader}" "${loader_version}" "${mc}" > .modpack-loader
+
+      ## the start script
+      cat > /mnt/server/start-modpack.sh << 'EOF'
+      #!/bin/bash
+      # Starts the modpack's server (written by the egg's installer; reinstalling replaces it).
+      cd /home/container || exit 1
+      { read -r loader; read -r version; read -r mc; } < .modpack-loader
+      # Java 8-17 set user.home to "?" when the container user has no passwd entry, and Minecraft then
+      # creates a "?" folder in the server root.
+      java_args=(-Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container)
+      if [[ -f .loader-install ]]; then
+          echo "Installing ${loader} ${version} for Minecraft ${mc}..."
+          case "${loader}" in
+              quilt) java -jar loader-installer.jar install server "${mc}" "${version}" --download-server --install-dir=. ;;
+              *) java -jar loader-installer.jar --installServer ;;
+          esac > loader-installer.log 2>&1 || { tail -n 30 loader-installer.log; exit 1; }
+          rm -f .loader-install loader-installer.jar loader-installer.jar.log
+          echo "${loader} installed"
+      fi
+      case "${loader}" in
+          quilt) exec java "${java_args[@]}" -jar quilt-server-launch.jar nogui ;;
+          forge)
+              args="libraries/net/minecraftforge/forge/${version}/unix_args.txt"
+              [[ -f "${args}" ]] && exec java "${java_args[@]}" "@${args}" nogui
+              exec java "${java_args[@]}" -jar "$(ls forge-"${version}"*.jar | grep -v installer | head -n 1)" nogui ;;
+          neoforge) exec java "${java_args[@]}" "@libraries/net/neoforged/neoforge/${version}/unix_args.txt" nogui ;;
+          *) exec java "${java_args[@]}" -jar server.jar nogui ;;
+      esac
+      EOF
+      chmod +x /mnt/server/start-modpack.sh
+      rm -rf "${WORK}"
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      meta_url=$(get "${MANIFEST_URL}" | jq -r --arg v "${mc}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${meta_url}" ]] && get "${meta_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "Modpack installed (Minecraft ${mc}, ${loader} ${loader_version}). It needs Java ${java_version:-17} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Modrinth Project
+    description: Slug or ID of the modpack on Modrinth, e.g. adrenaserver (from modrinth.com/modpack/adrenaserver).
+    order: 1
+    env_variable: MODRINTH_PROJECT
+    default_value: adrenaserver
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+$/'
+  - name: Modpack Version
+    description: latest for the newest version, or a version number or version ID of the pack. Reinstall to change it.
+    order: 2
+    env_variable: MODRINTH_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.+-]+$/'
