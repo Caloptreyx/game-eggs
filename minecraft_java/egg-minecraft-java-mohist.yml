@@ -1,0 +1,115 @@
+name: "Minecraft: Java Edition (Mohist)"
+author: thexylo@pm.me
+description: >-
+  Mohist, a Forge (or NeoForge) server that also runs Bukkit, Spigot and Paper plugins. Installed
+  from MohistMC's build API; the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry, and Minecraft then
+  # creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Mohist) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      API="https://api.mohistmc.com/project/mohist"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      versions=$(curl -fsSL --retry 3 "${API}/versions" | jq -r '.[].name') || fail "could not reach the MohistMC API"
+      grep -qxF -- "${MINECRAFT_VERSION}" <<< "${versions}" \
+          || fail "Mohist has no Minecraft version ${MINECRAFT_VERSION}; available: $(echo ${versions})"
+      build=$([[ -z "${BUILD_NUMBER}" || "${BUILD_NUMBER}" == "latest" ]] && echo latest || echo "${BUILD_NUMBER}")
+      info=$(curl -fsSL --retry 3 "${API}/${MINECRAFT_VERSION}/builds/${build}") || fail "Mohist ${MINECRAFT_VERSION} has no build ${build}"
+      id=$(jq -r '.id // empty' <<< "${info}")
+      sha=$(jq -r '.file_sha256 // empty' <<< "${info}")
+      [[ -n "${id}" && -n "${sha}" ]] || fail "Mohist ${MINECRAFT_VERSION} has no build ${build} to download"
+      echo "Downloading Mohist ${MINECRAFT_VERSION} build ${id} (Forge $(jq -r '.loader.forge_version // "?"' <<< "${info}"))..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${API}/${MINECRAFT_VERSION}/builds/${id}/download" \
+          || fail "could not download Mohist build ${id}"
+      echo "${sha}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet - || { rm -f "${SERVER_JARFILE}.download"; fail "the Mohist jar is corrupt (checksum mismatch)"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${MINECRAFT_VERSION} ${id}" > .mohist-version
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      echo "-----------------------------------------"
+      echo "Mohist ${MINECRAFT_VERSION} build ${id} installed. The first start downloads Forge's libraries."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: Minecraft version Mohist builds exist for (e.g. 1.20.1, 1.16.5, 1.12.2, 1.7.10). Reinstall to switch.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: 1.20.1
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^[0-9][0-9.]*$/'
+  - name: Build Number
+    description: latest, or a Mohist build number for that Minecraft version.
+    order: 2
+    env_variable: BUILD_NUMBER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: mohist.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

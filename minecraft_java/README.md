@@ -151,3 +151,17 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Idle it used about 90 MB of memory and 5 MB of disk on the test node. Stop sends `stop`.
 - Player info forwarding from a proxy is set under `infoForwarding` in `settings.yml`.
+
+## Mohist
+
+`egg-minecraft-java-mohist.yml` runs [Mohist](https://mohistmc.com/), a Forge server that also loads Bukkit/Spigot plugins (`mods/` and `plugins/`). The installer downloads a build from MohistMC's API (`latest` or a build number, checked against its SHA-256) for the chosen Minecraft version; the API lists versions from 1.7.10 to 1.21.4, but not every version has builds (1.21.1 had none when tested). Select the Java image that version needs.
+
+- The first start downloads Forge's libraries. Tested: 1.20.1 build 1003 on Java 21, about 2.4 GB of memory after start and 400 MB of disk; `stop` saves the worlds, and the second start works.
+- Like the Paper egg it creates `server.properties` with the port keys.
+
+## Arclight
+
+`egg-minecraft-java-arclight.yml` runs [Arclight](https://github.com/IzzelAliz/Arclight), which loads Bukkit/Spigot plugins next to NeoForge, Forge or Fabric mods. Set Minecraft Version and Mod Loader; the installer takes that build from the newest stable GitHub release that has one (or from the release tag given), and lists the available combinations when there is none.
+
+- The first start downloads the loader's libraries. Tested: NeoForge 1.21.1 (FeudalKings/1.0.1) on Java 21, about 1.2 GB of memory after start and 230 MB of disk; `stop` saves the worlds, and the second start works.
+- Like the Paper egg it creates `server.properties` with the port keys.
