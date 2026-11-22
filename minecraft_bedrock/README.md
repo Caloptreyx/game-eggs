@@ -50,3 +50,11 @@ About 1-2 GB of memory for a few players; more for large view or tick distances.
 - PowerNukkitX 3 talks to clients over NetherNet (the newer Bedrock transport) instead of RakNet: its signalling listens on TCP and its GameSpy4 query on UDP, both on the primary allocation's port. NetherNet media uses an ephemeral UDP port per player unless `network-settings.nethernet.udpPort` is set to a fixed port that is also allocated.
 - Console lines are server commands; stop sends `stop`, which saves the worlds.
 - The installation takes about 90 MB of disk.
+
+## WaterdogPE (proxy)
+
+`egg-waterdogpe.yml` runs [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE), a Bedrock proxy: players connect to it and it forwards them to the Bedrock servers listed under `servers:` in `config.yml` (first entry of `listener.priorities` on join). The installer takes the `latest` release jar; it runs on the Java 17, 21 or 25 image.
+
+- The panel writes the listener's address (allocation port), MOTD and player limit into `config.yml` on every start; the installer creates those keys so they apply from the first start.
+- By default (`listener.transport: both`) it accepts the old RakNet transport and the query on the primary allocation's UDP port, NetherNet signalling on the same port over TCP, and NetherNet's WebRTC media on a second UDP port (the log shows it, e.g. `WebRTC on udp/26112` for a listener on 26111; set `nethernet.webrtc_port` to fix it). Allocate that port too.
+- Backend servers should only be reachable by the proxy. Plugins go in `plugins/`. Stop sends `end`.

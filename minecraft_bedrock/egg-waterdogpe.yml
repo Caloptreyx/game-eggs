@@ -1,0 +1,99 @@
+name: "Minecraft: Bedrock Edition (WaterdogPE proxy)"
+author: thexylo@pm.me
+description: >-
+  WaterdogPE, a Minecraft: Bedrock Edition proxy: players connect to it and move between the
+  Bedrock servers (Bedrock Dedicated Server, PocketMine-MP, ...) it links together. Installed from
+  the WaterdogPE GitHub releases.
+features: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.yml:
+      parser: yaml
+      replace:
+        - match: listener.host
+          replace_with: "0.0.0.0:{{server.build.default.port}}"
+        - match: listener.motd
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: listener.max_players
+          replace_with: "{{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - Started query on address
+      - NetherNet signaling listening
+    strip_ansi: true
+  stop:
+    type: command
+    value: end
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Bedrock Edition (WaterdogPE proxy) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      echo "Downloading WaterdogPE..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" https://github.com/WaterdogPE/WaterdogPE/releases/download/latest/Waterdog.jar \
+          || fail "could not download WaterdogPE"
+      unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded WaterdogPE jar is not valid"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+
+      ## config.yml: written on the first start otherwise; the listener keys the panel sets are
+      ## created here (WaterdogPE adds the rest of its settings)
+      if [[ ! -f config.yml ]]; then
+          printf '%s\n' "listener:" "  host: 0.0.0.0:19132" "  motd: WaterdogPE Proxy" "  max_players: 20" > config.yml
+      fi
+
+      echo "-----------------------------------------"
+      echo "WaterdogPE installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Proxy Name (MOTD)
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: WaterdogPE Proxy
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players on the proxy.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,10000"
+  - name: Proxy Jar File
+    description: Name of the proxy jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: waterdog.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
