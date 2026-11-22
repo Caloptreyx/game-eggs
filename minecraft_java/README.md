@@ -20,7 +20,7 @@ Native Calagopus egg. The server jar is downloaded from Mojang and checked again
 | Game  | 25565   | TCP      | yes (primary allocation) |
 | Query | 25565   | UDP      | same port as the game; used by server list sites |
 
-The panel writes the allocation's port into `server.properties` on every start.
+The panel writes the allocation's port into `server.properties` on every start. The installer creates `server.properties` with these keys (an existing one is kept on reinstall), so the port also applies on the first start.
 
 ## Java version
 

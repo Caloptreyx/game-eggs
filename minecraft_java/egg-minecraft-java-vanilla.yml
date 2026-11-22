@@ -91,6 +91,12 @@ scripts:
       mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
       echo "${version}" > .minecraft-version
 
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
       echo "-----------------------------------------"
       echo "Minecraft ${version} installed. It needs Java ${java_version} or newer:"
       echo "select the matching Java image in the server's Startup settings."
