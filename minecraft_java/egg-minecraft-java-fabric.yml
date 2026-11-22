@@ -1,0 +1,140 @@
+name: "Minecraft: Java Edition (Fabric)"
+author: thexylo@pm.me
+description: >-
+  Minecraft: Java Edition with the Fabric mod loader, for Fabric server mods (Lithium, Fabric API
+  and the like). Fabric's server launcher downloads the official Mojang server on its first start;
+  the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry (Calagopus runs
+  # servers as UID 988), and Minecraft then creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Fabric) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      META="https://meta.fabricmc.net/v2"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## Minecraft version: the newest stable one Fabric supports, the newest snapshot, or a fixed one
+      games=$(curl -fsSL --retry 3 "${META}/versions/game") || fail "could not download Fabric's Minecraft version list"
+      case "${MINECRAFT_VERSION,,}" in
+          ""|latest) version=$(jq -r '[.[] | select(.stable)][0].version' <<< "${games}") ;;
+          snapshot) version=$(jq -r '.[0].version' <<< "${games}") ;;
+          *) version="${MINECRAFT_VERSION}" ;;
+      esac
+      jq -e --arg v "${version}" '.[] | select(.version == $v)' <<< "${games}" > /dev/null \
+          || fail "Fabric does not support Minecraft '${version}'"
+
+      ## loader and installer: the newest stable ones, or fixed ones
+      if [[ -z "${FABRIC_LOADER}" || "${FABRIC_LOADER,,}" == "latest" ]]; then
+          loader=$(curl -fsSL --retry 3 "${META}/versions/loader" | jq -r '[.[] | select(.stable)][0].version')
+      else
+          loader="${FABRIC_LOADER}"
+      fi
+      installer=$(curl -fsSL --retry 3 "${META}/versions/installer" | jq -r '[.[] | select(.stable)][0].version')
+      [[ -n "${loader}" && "${loader}" != "null" && -n "${installer}" && "${installer}" != "null" ]] \
+          || fail "could not look up the Fabric loader and installer versions"
+
+      echo "Downloading the Fabric server launcher for Minecraft ${version}, loader ${loader}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${META}/versions/loader/${version}/${loader}/${installer}/server/jar" \
+          || fail "could not download the Fabric server launcher (loader ${loader} may not support Minecraft ${version})"
+      unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded Fabric launcher is not a valid jar"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      mkdir -p mods
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+      echo "fabric ${version} ${loader}" > .server-version
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${version}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "Fabric loader ${loader} for Minecraft ${version} installed. It needs Java ${java_version:-17} or newer:"
+      echo "select the matching Java image in the server's Startup settings. Put mods in mods/."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest stable version Fabric supports, snapshot for the newest snapshot, or a
+      version such as 1.21.10. Reinstall the server to switch versions; worlds and mods are kept
+      (mods must match the new version). Worlds cannot be opened by an older version than the one
+      that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._ -]+$/'
+  - name: Fabric Loader Version
+    description: latest for the newest stable Fabric loader, or a loader version such as 0.17.3.
+    order: 2
+    env_variable: FABRIC_LOADER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.+-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: server.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

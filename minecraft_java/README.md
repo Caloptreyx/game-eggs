@@ -65,3 +65,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 ## Folia
 
 `egg-minecraft-java-folia.yml` runs [Folia](https://papermc.io/software/folia), PaperMC's fork of Paper that ticks separate regions of the world in parallel on several CPU cores. It suits servers with many players spread over a large world; only plugins marked as Folia-supported load. Installation, versions, builds and checks work as in the Paper egg (same download service). Folia only exists for recent versions (1.19.4 and newer, Java 17+), so the egg offers Java 17, 21 and 25 images. Give it several CPU cores: `config/paper-global.yml` sets how many threads tick regions.
+
+## Fabric
+
+`egg-minecraft-java-fabric.yml` runs Minecraft with the [Fabric](https://fabricmc.net/) mod loader. The installer downloads Fabric's server launcher from `meta.fabricmc.net`; on its first start the launcher downloads the official Mojang server and the loader libraries (`.fabric/`, `libraries/`).
+
+- Minecraft Version: `latest` for the newest stable version Fabric supports, `snapshot`, or a version such as `1.21.10`. Fabric Loader Version: `latest` for the newest stable loader, or a fixed one.
+- Put mods (`.jar`, built for Fabric and the installed Minecraft version) in `mods/`; most mods need [Fabric API](https://modrinth.com/mod/fabric-api) there too. The log lists the loaded mods (`Loading N mods`).
+- The installer prints the Java version Mojang's metadata gives for the installed version; select that image. Like the Paper egg it creates `server.properties` with the port keys, and a reinstall keeps worlds, mods and configs.
