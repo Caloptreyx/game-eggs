@@ -189,3 +189,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - Packs for Minecraft before 1.17 need the Java 8 image (the default); both tested packs ran on it.
 - Reinstall to update to the pack's newest server pack: files of the previous server pack (`.technic-files`) are removed first, files you added stay, and the world and `server.properties` are never replaced (some server packs ship a world; checked: world files and an edited `server.properties` survived a reinstall).
 - Tested: Tekkit (`tekkitmain`, Minecraft 1.6.4) with about 1.8 GB of memory after start and 100 MB of disk, and Blightfall (1.7.10) with about 2.6 GB and 440 MB; `stop` saves the worlds, and the second start works.
+
+## Purpur + Geyser + Floodgate (Java and Bedrock crossplay)
+
+`egg-minecraft-java-purpur-geyser.yml` installs Purpur (as in the Purpur egg, newest build of the chosen version) with the newest [Geyser](https://geysermc.org/) and [Floodgate](https://geysermc.org/wiki/floodgate/) Spigot plugins (checked against their SHA-256; updated on every reinstall). Bedrock players join through Geyser; Floodgate lets them in without a Java account.
+
+- Bedrock needs a second allocation, set as Bedrock Port. Current Geyser (2.12) uses Bedrock's NetherNet transport: its built-in signaling listens on that port over TCP and NetherNet uses it over UDP, so it cannot share the Java port (Geyser then falls back to an external signaling service, which failed to start on the test node). The panel writes the port into `plugins/Geyser-Spigot/config.yml`; the installer creates the keys so this applies from the first start.
+- Tested on Purpur 26.3 (Java 25): "Built-in signaling started on http://0.0.0.0:<Bedrock Port>", that port and the Java port reachable from outside, about 1.2 GB of memory and 290 MB of disk; `stop` saves the worlds, and the second start works. A Bedrock client join was not tested.
+- RakNet (older Bedrock clients, LAN discovery) can be enabled with `transport: both` in Geyser's config; it needs a third UDP port (`webrtc-port`).
