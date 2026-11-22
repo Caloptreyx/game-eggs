@@ -188,7 +188,7 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - The server jar is the one the pack's start script runs (`.technic-jar`), and that script's `-D` options (such as Blightfall's log4j configuration) are kept (`.technic-java-args`); the memory flags come from the server's limit instead. `-Dlog4j2.formatMsgNoLookups=true` is always added; it only has an effect on log4j 2.10 and newer, so old packs depend on their own log4j configuration.
 - Packs for Minecraft before 1.17 need the Java 8 image (the default); both tested packs ran on it.
 - Reinstall to update to the pack's newest server pack: files of the previous server pack (`.technic-files`) are removed first, files you added stay, and the world and `server.properties` are never replaced (some server packs ship a world; checked: world files and an edited `server.properties` survived a reinstall).
-- Tested: Tekkit (`tekkitmain`, Minecraft 1.6.4) with about 1.8 GB of memory after start and 100 MB of disk, and Blightfall (1.7.10) with about 2.6 GB and 440 MB; `stop` saves the worlds, and the second start works.
+- Tested: Tekkit (`tekkitmain`, Minecraft 1.6.4) with about 1.8 GB of memory after start and 100 MB of disk; Blightfall (1.7.10) with about 2.6 GB and 440 MB; Hexxit (`hexxit`) with about 1.8 GB and 170 MB; and Attack of the B-Team (`attack-of-the-bteam`) with about 1.9 GB and 150 MB. For each, `stop` saves the worlds, and the second start works.
 
 ## Purpur + Geyser + Floodgate (Java and Bedrock crossplay)
 
