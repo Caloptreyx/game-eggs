@@ -1,0 +1,163 @@
+name: "Minecraft: Bedrock Edition (PocketMine-MP)"
+author: thexylo@pm.me
+description: >-
+  PocketMine-MP, the plugin-based Minecraft: Bedrock Edition server written in PHP, with its own
+  PHP plugin API. Installed from the PocketMine-MP GitHub releases together with the matching
+  prebuilt PHP binary.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # PocketMine-MP runs on the PHP binary the installer puts into bin/ (the build PocketMine-MP's own
+  # installer uses). Console lines are server commands; stop sends "stop", which saves the worlds.
+  Default: ./bin/php7/bin/php ./PocketMine-MP.phar --no-wizard --disable-ansi
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: file
+      replace:
+        - match: server-port=
+          replace_with: server-port={{server.build.default.port}}
+          insert_new: true
+        - match: server-portv6=
+          replace_with: server-portv6={{server.build.default.port}}
+          insert_new: true
+        - match: motd=
+          replace_with: motd={{env.SERVER_NAME}}
+          insert_new: true
+        - match: max-players=
+          replace_with: max-players={{env.MAX_PLAYERS}}
+          insert_new: true
+        - match: gamemode=
+          replace_with: gamemode={{env.GAMEMODE}}
+          insert_new: true
+        - match: difficulty=
+          replace_with: difficulty={{env.DIFFICULTY}}
+          insert_new: true
+        - match: white-list=
+          replace_with: white-list={{env.WHITELIST}}
+          insert_new: true
+  startup:
+    done:
+      - "Done ("
+    strip_ansi: true
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Bedrock Edition (PocketMine-MP) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## PocketMine-MP: the latest release, or a fixed version
+      if [[ -z "${PMMP_VERSION}" || "${PMMP_VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/pmmp/PocketMine-MP/releases/latest"
+      else
+          api="https://api.github.com/repos/pmmp/PocketMine-MP/releases/tags/${PMMP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up PocketMine-MP ${PMMP_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      phar=$(jq -r '.assets[] | select(.name == "PocketMine-MP.phar") | .browser_download_url' <<< "${release}")
+      info=$(jq -r '.assets[] | select(.name == "build_info.json") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${phar}" && -n "${info}" ]] || fail "PocketMine-MP ${PMMP_VERSION} has no phar or build info"
+      build_info=$(curl -fsSL --retry 3 "${info}") || fail "could not download the build info of PocketMine-MP ${tag}"
+      php_version=$(jq -r '.php_version' <<< "${build_info}")
+      echo "Downloading PocketMine-MP ${tag} (Minecraft $(jq -r '.mcpe_version' <<< "${build_info}"), PHP ${php_version})..."
+      curl -fsSL --retry 3 -o PocketMine-MP.phar "${phar}" || fail "could not download PocketMine-MP ${tag}"
+
+      ## the PHP binary PocketMine-MP's own installer uses: pm<major>-php-<version>-latest
+      php_tag="pm${tag%%.*}-php-${php_version}-latest"
+      php_url=$(curl -fsSL --retry 3 "https://api.github.com/repos/pmmp/PHP-Binaries/releases/tags/${php_tag}" \
+          | jq -r '.assets[] | select(.name | test("Linux-x86_64-PM[0-9]+\\.tar\\.gz$")) | .browser_download_url' | head -n 1)
+      [[ -n "${php_url}" ]] || fail "could not find the PHP binary ${php_tag}"
+      echo "Downloading the PHP binary (${php_tag})..."
+      rm -rf bin
+      curl -fsSL --retry 3 "${php_url}" | tar -xz || fail "could not install the PHP binary"
+      [[ -x bin/php7/bin/php ]] || fail "the PHP binary package has no bin/php7/bin/php"
+      # The binaries' extension directory is compiled in (the build machine's path), so php.ini loads
+      # opcache by its full path in the server.
+      ext_dir=$(find "$(pwd)/bin/php7/lib/php/extensions" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+      [[ -n "${ext_dir}" ]] && sed -i "s#^zend_extension=opcache.so#zend_extension=/home/container/${ext_dir#/mnt/server/}/opcache.so#" bin/php7/bin/php.ini
+      echo "${tag}" > .pocketmine-version
+
+      ## server.properties: written on the first start otherwise; created here so the panel's values
+      ## apply from the first start (PocketMine-MP adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "motd=PocketMine-MP Server" "server-port=19132" "server-portv6=19133" "max-players=20" \
+              "gamemode=survival" "difficulty=2" "white-list=off" > server.properties
+      fi
+
+      echo "-----------------------------------------"
+      echo "PocketMine-MP ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name (MOTD)
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: PocketMine-MP Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Game Mode
+    description: survival, creative, adventure or spectator.
+    order: 3
+    env_variable: GAMEMODE
+    default_value: survival
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:survival,creative,adventure,spectator"
+  - name: Difficulty
+    description: 0 = peaceful, 1 = easy, 2 = normal, 3 = hard.
+    order: 4
+    env_variable: DIFFICULTY
+    default_value: "2"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: Whitelist
+    description: Only players on the whitelist (white-list.txt) can join. (on / off)
+    order: 5
+    env_variable: WHITELIST
+    default_value: "off"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:on,off"
+  - name: PocketMine-MP Version
+    description: Release tag of pmmp/PocketMine-MP (e.g. 5.44.3), or latest. Applied on reinstall.
+    order: 6
+    env_variable: PMMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'

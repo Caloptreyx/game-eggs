@@ -32,3 +32,12 @@ Worlds are stored in `worlds/<World Name>/`. A different World Name creates a ne
 ## Requirements
 
 About 1-2 GB of memory for a few players; more for large view or tick distances.
+
+## PocketMine-MP
+
+`egg-pocketmine-mp.yml` runs [PocketMine-MP](https://pmmp.io/), a Bedrock server written in PHP with its own plugin API (plugins in `plugins/`). The installer takes `PocketMine-MP.phar` from the GitHub release (latest, or the version set) and the prebuilt PHP binary that release asks for (`pm5-php-<version>-latest` from pmmp/PHP-Binaries) into `bin/`.
+
+- One UDP port (default 19132), the primary allocation; the panel writes it, the MOTD, player limit, game mode, difficulty and whitelist into `server.properties` on every start (the installer creates the file).
+- Each PocketMine-MP release supports specific Bedrock client versions (5.44.3: 1.26.30); reinstall to update when clients update.
+- Console lines are server commands (`version`, `op`, `whitelist`, ...); stop sends `stop`, which saves the worlds.
+- The installation takes about 45 MB of disk.
