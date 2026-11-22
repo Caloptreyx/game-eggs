@@ -1,0 +1,142 @@
+name: "Minecraft: Java Edition (Quilt)"
+author: thexylo@pm.me
+description: >-
+  Minecraft: Java Edition with the Quilt mod loader, which runs Quilt and most Fabric server mods.
+  Quilt's installer sets up the loader and downloads the official Mojang server on the first start;
+  the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  # Quilt's installer is a Java program and the installer image has no Java, so it runs here once
+  # after each (re)install, with the versions the install script chose (.quilt-install). Java 17 sets
+  # user.home to "?" when the container user has no passwd entry (Calagopus runs servers as UID 988),
+  # and Minecraft then creates a "?" folder in the server root.
+  Default: >-
+    if [ -f .quilt-install ]; then echo "Installing Quilt $(cat .quilt-install)...";
+    java -jar quilt-installer.jar install server $(cat .quilt-install) --download-server --install-dir=. || exit 1;
+    rm -f .quilt-install quilt-installer.jar; fi;
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar quilt-server-launch.jar nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Quilt) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      META="https://meta.quiltmc.org/v3"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## Minecraft version: the newest stable one Quilt supports, the newest snapshot, or a fixed one
+      games=$(curl -fsSL --retry 3 "${META}/versions/game") || fail "could not download Quilt's Minecraft version list"
+      case "${MINECRAFT_VERSION,,}" in
+          ""|latest) version=$(jq -r '[.[] | select(.stable)][0].version' <<< "${games}") ;;
+          snapshot) version=$(jq -r '.[0].version' <<< "${games}") ;;
+          *) version="${MINECRAFT_VERSION}" ;;
+      esac
+      jq -e --arg v "${version}" '.[] | select(.version == $v)' <<< "${games}" > /dev/null \
+          || fail "Quilt does not support Minecraft '${version}'"
+
+      ## loader: the newest release (not beta), or a fixed one
+      loaders=$(curl -fsSL --retry 3 "${META}/versions/loader") || fail "could not download the Quilt loader list"
+      if [[ -z "${QUILT_LOADER}" || "${QUILT_LOADER,,}" == "latest" ]]; then
+          loader=$(jq -r '[.[] | select(.version | test("beta|pre|rc") | not)][0].version // empty' <<< "${loaders}")
+      else
+          loader="${QUILT_LOADER}"
+          jq -e --arg v "${loader}" '.[] | select(.version == $v)' <<< "${loaders}" > /dev/null || fail "Quilt has no loader '${loader}'"
+      fi
+      [[ -n "${loader}" ]] || fail "could not find a Quilt loader release"
+
+      ## Quilt's installer (run on the next start, the installer image has no Java)
+      installer=$(curl -fsSL --retry 3 "${META}/versions/installer" | jq -c '.[0]') || fail "could not look up the Quilt installer"
+      url=$(jq -r '.url' <<< "${installer}")
+      sha256=$(jq -r '.hashes.sha256 // empty' <<< "${installer}")
+      echo "Downloading the Quilt installer $(jq -r '.version' <<< "${installer}")..."
+      curl -fsSL --retry 3 -o quilt-installer.jar "${url}" || fail "could not download the Quilt installer"
+      if [[ -n "${sha256}" ]] && ! echo "${sha256}  quilt-installer.jar" | sha256sum -c --quiet -; then
+          rm -f quilt-installer.jar
+          fail "the downloaded Quilt installer is corrupt (checksum mismatch)"
+      fi
+      echo "${version} ${loader}" > .quilt-install
+      mkdir -p mods
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${version}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "Quilt loader ${loader} for Minecraft ${version} is set up and installs on the next start."
+      echo "It needs Java ${java_version:-17} or newer: select the matching Java image in the server's"
+      echo "Startup settings. Put mods in mods/."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest stable version Quilt supports, snapshot for the newest snapshot, or a
+      version such as 1.21.10. Reinstall the server to switch versions; worlds and mods are kept
+      (mods must match the new version). Worlds cannot be opened by an older version than the one
+      that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._ -]+$/'
+  - name: Quilt Loader Version
+    description: latest for the newest Quilt loader release (betas excluded), or a loader version such as 0.29.2.
+    order: 2
+    env_variable: QUILT_LOADER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.+-]+$/'

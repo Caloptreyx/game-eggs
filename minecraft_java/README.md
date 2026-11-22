@@ -73,3 +73,10 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - Minecraft Version: `latest` for the newest stable version Fabric supports, `snapshot`, or a version such as `1.21.10`. Fabric Loader Version: `latest` for the newest stable loader, or a fixed one.
 - Put mods (`.jar`, built for Fabric and the installed Minecraft version) in `mods/`; most mods need [Fabric API](https://modrinth.com/mod/fabric-api) there too. The log lists the loaded mods (`Loading N mods`).
 - The installer prints the Java version Mojang's metadata gives for the installed version; select that image. Like the Paper egg it creates `server.properties` with the port keys, and a reinstall keeps worlds, mods and configs.
+
+## Quilt
+
+`egg-minecraft-java-quilt.yml` runs Minecraft with the [Quilt](https://quiltmc.org/) mod loader, which loads Quilt mods and most Fabric mods (put them in `mods/`). Quilt's installer is a Java program and the installer image has no Java, so the install script only picks the versions and downloads the installer (checked against its SHA-256); the first start after each (re)install runs it (`Installing Quilt ...` in the console), which downloads the Mojang server and the loader libraries, and then starts the server through `quilt-server-launch.jar`.
+
+- Minecraft Version: `latest` for the newest stable version Quilt supports, `snapshot`, or a version such as `1.21.10`. Quilt Loader Version: `latest` for the newest loader release (betas are skipped), or a fixed one.
+- Java image as printed by the installer (Quilt needs Java 17 or newer). Worlds, mods and configs survive reinstalls.
