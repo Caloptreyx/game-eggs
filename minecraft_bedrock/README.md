@@ -53,7 +53,7 @@ About 1-2 GB of memory for a few players; more for large view or tick distances.
 
 ## WaterdogPE (proxy)
 
-`egg-waterdogpe.yml` runs [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE), a Bedrock proxy: players connect to it and it forwards them to the Bedrock servers listed under `servers:` in `config.yml` (first entry of `listener.priorities` on join). The installer takes the `latest` release jar; it runs on the Java 17, 21 or 25 image.
+`egg-waterdogpe.yml` runs [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE), a Bedrock proxy: players connect to it and it forwards them to the Bedrock servers listed under `servers:` in `config.yml` (first entry of `listener.priorities` on join). The installer takes the `latest` release jar (tested on the Java 21 image).
 
 - The panel writes the listener's address (allocation port), MOTD and player limit into `config.yml` on every start; the installer creates those keys so they apply from the first start.
 - By default (`listener.transport: both`) it accepts the old RakNet transport and the query on the primary allocation's UDP port, NetherNet signalling on the same port over TCP, and NetherNet's WebRTC media on a second UDP port (the log shows it, e.g. `WebRTC on udp/26112` for a listener on 26111; set `nethernet.webrtc_port` to fix it). Allocate that port too.
