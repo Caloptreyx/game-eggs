@@ -1,0 +1,136 @@
+name: "Minecraft: Java Edition (FTB modpack)"
+author: thexylo@pm.me
+description: >-
+  Any Feed The Beast modpack (FTB Evolution, FTB Skies, Direwolf20, ...), installed with FTB's own
+  server installer, which also sets up the mod loader and a matching Java runtime.
+features:
+  - eula
+file_denylist: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+startup_commands:
+  # FTB's installer writes run.sh, which starts the server with the Java runtime it installed
+  # (jre/), so the image's Java version does not matter. The memory limit from FTB's recommendation
+  # in user_jvm_args.txt (-Xmx) is replaced by a share of the server's memory limit on every start.
+  Default: >-
+    sed -i 's/^-Xmx.*/-XX:MaxRAMPercentage=95.0/' user_jvm_args.txt 2>/dev/null;
+    [ -f run.sh ] || { echo "run.sh is missing; reinstall the server"; exit 1; };
+    exec bash ./run.sh
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+    # Many FTB packs ship the "Default Server Properties" mod, which writes default-server.properties
+    # over server.properties when the server starts, so the panel's keys are set in both files.
+    default-server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (FTB modpack) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Runs FTB's server installer (github.com/FTBTeam/FTB-Server-Installer), which downloads the
+      # pack, a Java runtime and the mod loader, and updates an installed pack in place.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## FTB's server installer (newest release, checked against its published SHA-256)
+      release=$(curl -fsSL --retry 3 https://api.github.com/repos/FTBTeam/FTB-Server-Installer/releases/latest) \
+          || fail "could not look up the FTB server installer"
+      url=$(jq -r '.assets[] | select(.name == "ftb-server-linux-amd64") | .browser_download_url' <<< "${release}")
+      sha_url=$(jq -r '.assets[] | select(.name == "ftb-server-linux-amd64.sha256") | .browser_download_url' <<< "${release}")
+      [[ -n "${url}" ]] || fail "the FTB server installer release has no Linux build"
+      curl -fsSL --retry 3 -o ftb-server-installer "${url}" || fail "could not download the FTB server installer"
+      if [[ -n "${sha_url}" ]]; then
+          sha=$(curl -fsSL --retry 3 "${sha_url}" | awk '{print $1}')
+          echo "${sha}  ftb-server-installer" | sha256sum -c --quiet - || fail "the FTB server installer is corrupt (checksum mismatch)"
+      fi
+      chmod +x ftb-server-installer
+
+      ## the pack; FTB's installer writes eula.txt, which is removed again (unless it existed) so the
+      ## panel asks for the Minecraft EULA on the first start
+      had_eula=$([[ -f eula.txt ]] && echo 1)
+      args=(-pack "${FTB_PACK_ID}" -auto -force -accept-eula -no-colours -dir /mnt/server)
+      [[ -n "${FTB_VERSION_ID}" && "${FTB_VERSION_ID,,}" != "latest" ]] && args+=(-version "${FTB_VERSION_ID}")
+      echo "Installing FTB modpack ${FTB_PACK_ID} (version ${FTB_VERSION_ID:-latest})..."
+      ./ftb-server-installer "${args[@]}" > ftb-install.log 2>&1 || { tail -n 30 ftb-install.log; fail "the FTB installer failed"; }
+      grep -E "Name:|Version:|ModLoader:|SUCCESS" ftb-install.log
+      [[ -f run.sh ]] || { tail -n 30 ftb-install.log; fail "the FTB installer did not create run.sh"; }
+      [[ -n "${had_eula}" ]] || rm -f eula.txt
+      rm -f ftb-server-installer
+
+      ## server.properties (and the pack's default-server.properties, see the config files above)
+      ## with the keys the panel sets
+      [[ -f default-server.properties ]] && [[ -n "$(tail -c 1 default-server.properties)" ]] && echo >> default-server.properties
+      for f in server.properties default-server.properties; do
+          [[ "${f}" == default-server.properties && ! -f "${f}" ]] && continue
+          for kv in server-ip=0.0.0.0 server-port=25565 enable-query=true query.port=25565; do
+              grep -q "^${kv%%=*}=" "${f}" 2>/dev/null || echo "${kv}" >> "${f}"
+          done
+      done
+
+      echo "-----------------------------------------"
+      echo "FTB modpack installed."
+      echo "-----------------------------------------"
+variables:
+  - name: FTB Pack ID
+    description: >-
+      ID of the FTB modpack, shown on its page at feed-the-beast.com (e.g. 135 for FTB Evolution 2).
+    order: 1
+    env_variable: FTB_PACK_ID
+    default_value: "135"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|min:1"
+  - name: FTB Version ID
+    description: latest for the newest version, or the ID of a version of the pack. Reinstall to update the pack.
+    order: 2
+    env_variable: FTB_VERSION_ID
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']

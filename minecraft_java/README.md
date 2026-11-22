@@ -134,3 +134,13 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - It prints the Java version the pack's Minecraft version needs; select that image. Mod loaders and mods are often tied to it: the tested pack (Adrenaserver 1.7.0, Fabric, Minecraft 1.21.1, 83 mods) runs on Java 21 but crashes on Java 25 with a Mixin error at start.
 - Reinstall to change the pack version: the files the previous version installed (listed in `.modpack-files`) are removed first; worlds, mods you added yourself and other files stay.
 - Like the Paper egg it creates `server.properties` with the port keys.
+
+## FTB modpacks
+
+`egg-minecraft-java-ftb.yml` installs any [Feed The Beast](https://www.feed-the-beast.com/) modpack with FTB's own [server installer](https://github.com/FTBTeam/FTB-Server-Installer) (checked against its published SHA-256). Set FTB Pack ID to the pack's ID (e.g. `135` for FTB Evolution 2) and FTB Version ID to `latest` or a version ID.
+
+- FTB's installer downloads the pack, a matching Java runtime (`jre/`) and the mod loader; the server starts through its `run.sh` with that runtime, whichever Java image is selected. Its recommended `-Xmx` in `user_jvm_args.txt` is replaced on every start by a share of the server's memory limit (95%).
+- Many FTB packs include the Default Server Properties mod, which copies `default-server.properties` over `server.properties` on the first start; the panel's port keys are kept in both files, so the allocation's port applies from the first start.
+- The EULA file FTB's installer writes is removed again, so the panel asks for the Minecraft EULA on the first start.
+- Reinstall to update the pack; FTB's installer updates it in place.
+- Tested with FTB Evolution 2 1.10.1 (NeoForge, about 1.3 GB of disk, about 7.5 GB of memory after start).
