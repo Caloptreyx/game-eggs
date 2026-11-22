@@ -1,0 +1,135 @@
+name: "Minecraft: Java Edition (Arclight)"
+author: thexylo@pm.me
+description: >-
+  Arclight, a Minecraft: Java Edition server that runs Bukkit/Spigot plugins next to NeoForge, Forge
+  or Fabric mods. Installed from the Arclight GitHub releases; the matching Java version is selected
+  through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Arclight) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Picks the jar arclight-<loader>-<minecraft version>-*.jar from the newest stable GitHub release
+      # that has one (or from the given release tag).
+
+      REPO=IzzelAliz/Arclight
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      releases=$(curl -fsSL --retry 3 "https://api.github.com/repos/${REPO}/releases?per_page=100") || fail "could not list the Arclight releases"
+      prefix="arclight-${ARCLIGHT_LOADER}-${MINECRAFT_VERSION}-"
+      if [[ -z "${ARCLIGHT_RELEASE}" || "${ARCLIGHT_RELEASE}" == "latest" ]]; then
+          pick='[.[] | select(.prerelease | not) | {tag: .tag_name, asset: ([.assets[] | select((.name | startswith($p)) and (.name | endswith(".jar")))][0])} | select(.asset)][0]'
+      else
+          pick='[.[] | select(.tag_name == $t) | {tag: .tag_name, asset: ([.assets[] | select((.name | startswith($p)) and (.name | endswith(".jar")))][0])} | select(.asset)][0]'
+      fi
+      found=$(jq -c --arg p "${prefix}" --arg t "${ARCLIGHT_RELEASE}" "${pick} // empty" <<< "${releases}")
+      if [[ -z "${found}" ]]; then
+          available=$(jq -r '[.[] | select(.prerelease | not) | .assets[].name | capture("^arclight-(?<l>[a-z]+)-(?<v>[0-9.]+)-") | "\(.l) \(.v)"] | unique | join(", ")' <<< "${releases}")
+          fail "no Arclight ${ARCLIGHT_LOADER} build for Minecraft ${MINECRAFT_VERSION} in release ${ARCLIGHT_RELEASE}; stable builds exist for: ${available}"
+      fi
+      tag=$(jq -r '.tag' <<< "${found}")
+      name=$(jq -r '.asset.name' <<< "${found}")
+      url=$(jq -r '.asset.browser_download_url' <<< "${found}")
+      digest=$(jq -r '.asset.digest // empty' <<< "${found}")
+      echo "Downloading ${name} (release ${tag})..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download ${name}"
+      if [[ "${digest}" == sha256:* ]]; then
+          echo "${digest#sha256:}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet - || { rm -f "${SERVER_JARFILE}.download"; fail "${name} is corrupt (checksum mismatch)"; }
+      else
+          unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "${name} is not a valid jar"; }
+      fi
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${tag} ${name}" > .arclight-version
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      echo "-----------------------------------------"
+      echo "Arclight ${name} installed. The first start downloads the mod loader's libraries."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: Minecraft version of the Arclight build (e.g. 1.21.1, 1.20.1). Reinstall to switch.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: 1.21.1
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^[0-9][0-9.]*$/'
+  - name: Mod Loader
+    description: Which mods Arclight runs next to the plugins (builds differ per Minecraft version).
+    order: 2
+    env_variable: ARCLIGHT_LOADER
+    default_value: neoforge
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|in:neoforge,forge,fabric'
+  - name: Arclight Release
+    description: latest for the newest stable release with a matching build, or a release tag such as FeudalKings/1.0.1.
+    order: 3
+    env_variable: ARCLIGHT_RELEASE
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.\/-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 4
+    env_variable: SERVER_JARFILE
+    default_value: arclight.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
