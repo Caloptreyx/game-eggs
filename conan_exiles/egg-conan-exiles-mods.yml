@@ -1,0 +1,306 @@
+name: Conan Exiles (Workshop mods)
+author: thexylo@pm.me
+description: >-
+  Survive in the brutal lands of Conan the Barbarian. Native Linux dedicated server (Steam app
+  443030, Conan Exiles Enhanced) with RCON console, plus Steam Workshop mods: the mods listed in
+  the panel are downloaded and loaded in that order on every start.
+features:
+  - steam_disk_space
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # conan-mods.sh (written by the installer) downloads the Workshop mods and writes modlist.txt
+  # first. Server output goes to ConanSandbox.log, which is streamed to the console; console lines
+  # are sent to the server over RCON once it is up.
+  Default: >-
+    bash ./conan-mods.sh;
+    mkdir -p ConanSandbox/Saved/Logs; : > ConanSandbox/Saved/Logs/ConanSandbox.log;
+    ./ConanSandbox/Binaries/Linux/ConanSandboxServer-Linux-Shipping ConanSandbox
+    -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -log {{EXTRA_ARGS}} & SRV=$!;
+    tail -n +1 -F ConanSandbox/Saved/Logs/ConanSandbox.log --pid=${SRV} 2>/dev/null &
+    (while read -r line; do rcon -a "127.0.0.1:${RCON_PORT}" -p "${RCON_PASSWORD}" "${line}"; done) <&0 &
+    wait ${SRV}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # The server reads the name from [OnlineSubsystemSteam] and saves it under [OnlineSubsystem],
+    # so it is kept in both. The installer creates these files with the keys, so they apply from the
+    # first start (the ini parser only replaces keys that exist).
+    ConanSandbox/Saved/Config/LinuxServer/Engine.ini:
+      parser: ini
+      replace:
+        - match: OnlineSubsystemSteam.ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: OnlineSubsystem.ServerName
+          replace_with: "{{env.SERVER_NAME}}"
+    ConanSandbox/Saved/Config/LinuxServer/Game.ini:
+      parser: ini
+      replace:
+        - match: "[/Script/Engine.GameSession].MaxPlayers"
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: RconPlugin.RconEnabled
+          replace_with: "1"
+        - match: RconPlugin.RconPassword
+          replace_with: "{{env.RCON_PASSWORD}}"
+        - match: RconPlugin.RconPort
+          replace_with: "{{env.RCON_PORT}}"
+    ConanSandbox/Saved/Config/LinuxServer/ServerSettings.ini:
+      parser: ini
+      replace:
+        - match: ServerSettings.ServerPassword
+          replace_with: "{{env.SERVER_PASSWORD}}"
+        - match: ServerSettings.AdminPassword
+          replace_with: "{{env.ADMIN_PASSWORD}}"
+        - match: ServerSettings.PVPEnabled
+          replace_with: "{{env.PVP}}"
+        - match: ServerSettings.IsBattlEyeEnabled
+          replace_with: "{{env.BATTLEYE}}"
+        - match: ServerSettings.serverRegion
+          replace_with: "{{env.REGION}}"
+  startup:
+    done:
+      - Started SourceServerQueries
+    strip_ansi: false
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Conan Exiles dedicated server installation script (native Linux build, Workshop mods)
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      SERVER_BINARY=/mnt/server/ConanSandbox/Binaries/Linux/ConanSandboxServer-Linux-Shipping
+      CONFIG_DIR=/mnt/server/ConanSandbox/Saved/Config/LinuxServer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      ## download and install steamcmd
+      cd /tmp || fail "cannot enter /tmp"
+      mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
+      curl -fsSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+          || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not extract SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
+
+      # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
+      chown -R root:root /mnt
+      export HOME=/mnt/server
+
+      ## install the game; the first attempt often fails with "Missing configuration"
+      for attempt in 1 2 3; do
+          ./steamcmd.sh +force_install_dir /mnt/server +login anonymous \
+              +app_update "${SRCDS_APPID}" $([[ -z "${SRCDS_BETAID}" ]] || printf %s "-beta ${SRCDS_BETAID}") validate \
+              +quit && [[ -f "${SERVER_BINARY}" ]] && break
+          echo "SteamCMD attempt ${attempt} failed, retrying..."
+          sleep 5
+      done
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD could not install app ${SRCDS_APPID}; check the install log and free disk space"
+
+      ## steamclient libraries
+      mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
+      cp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so
+      cp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so
+
+      chmod +x "${SERVER_BINARY}"
+      mkdir -p "${CONFIG_DIR}" /mnt/server/ConanSandbox/Saved/Logs /mnt/server/ConanSandbox/Mods
+
+      ## settings files with the keys the panel sets (kept when they already exist)
+      [[ -f "${CONFIG_DIR}/Engine.ini" ]] || printf '%s\n' '[OnlineSubsystemSteam]' 'ServerName=Conan Exiles Server' \
+          '' '[OnlineSubsystem]' 'ServerName=Conan Exiles Server' > "${CONFIG_DIR}/Engine.ini"
+      [[ -f "${CONFIG_DIR}/Game.ini" ]] || printf '%s\n' '[/Script/Engine.GameSession]' 'MaxPlayers=40' \
+          '' '[RconPlugin]' 'RconEnabled=1' 'RconPassword=' 'RconPort=25575' > "${CONFIG_DIR}/Game.ini"
+      [[ -f "${CONFIG_DIR}/ServerSettings.ini" ]] || printf '%s\n' '[ServerSettings]' 'ServerPassword=' 'AdminPassword=' \
+          'PVPEnabled=False' 'IsBattlEyeEnabled=False' 'serverRegion=0' > "${CONFIG_DIR}/ServerSettings.ini"
+
+      ## the Workshop mod step, run before every start
+      cat > /mnt/server/conan-mods.sh << 'EOF'
+      #!/bin/bash
+      # Workshop mods (written by the egg's installer; reinstalling replaces it). Runs before every
+      # start: downloads the mods in MOD_IDS (Workshop IDs, separated by commas or spaces) through
+      # SteamCMD into .workshop/ when UPDATE_MODS=1, copies their .pak files to ConanSandbox/Mods/ and
+      # writes ConanSandbox/Mods/modlist.txt with them, in that order. With MOD_IDS empty, modlist.txt
+      # is left as it is (for mods managed by hand).
+      cd /home/container || exit 0
+      ids=$(tr ',;' '  ' <<< "${MOD_IDS}")
+      [[ -z "${ids// /}" ]] && exit 0
+      if [[ "${UPDATE_MODS}" == "1" ]]; then
+          args=()
+          for id in ${ids}; do
+              [[ "${id}" =~ ^[0-9]+$ ]] && args+=(+workshop_download_item 440900 "${id}" validate)
+          done
+          echo "Updating Workshop mods: ${ids}"
+          ./steamcmd/steamcmd.sh +force_install_dir /home/container/.workshop +login anonymous "${args[@]}" +quit \
+              | grep -E "Success|ERROR|Failed" || echo "SteamCMD could not update the mods"
+      fi
+      mkdir -p ConanSandbox/Mods
+      : > ConanSandbox/Mods/modlist.txt.new
+      for id in ${ids}; do
+          pak=$(find ".workshop/steamapps/workshop/content/440900/${id}" -name '*.pak' 2>/dev/null | head -n 1)
+          if [[ -z "${pak}" ]]; then
+              echo "Mod ${id}: not downloaded, skipped"
+              continue
+          fi
+          cp -f "${pak}" ConanSandbox/Mods/
+          echo "/home/container/ConanSandbox/Mods/$(basename "${pak}")" >> ConanSandbox/Mods/modlist.txt.new
+          echo "Mod ${id}: $(basename "${pak}")"
+      done
+      mv -f ConanSandbox/Mods/modlist.txt.new ConanSandbox/Mods/modlist.txt
+      EOF
+      chmod +x /mnt/server/conan-mods.sh
+
+      echo "-----------------------------------------"
+      echo "Installation completed..."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the server browser.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: Conan Exiles Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:100"
+  - name: Server Password
+    description: Password players need to join. Leave empty for no password.
+    order: 2
+    env_variable: SERVER_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Admin Password
+    description: Password to become admin in game (Settings > Server Settings > Make Me Admin).
+    order: 3
+    env_variable: ADMIN_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: "nullable|string|max:64"
+  - name: Max Players
+    description: Maximum number of players, admins included.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "40"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,70"
+  - name: PvP
+    description: Allow players to fight each other.
+    order: 5
+    env_variable: PVP
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: BattlEye
+    description: Enable the BattlEye anti-cheat.
+    order: 6
+    env_variable: BATTLEYE
+    default_value: "False"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:True,False"
+  - name: Region
+    description: Server browser region number (serverRegion in ServerSettings.ini). 0 is the default.
+    order: 7
+    env_variable: REGION
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:0,20"
+  - name: Workshop Mods
+    description: >-
+      Steam Workshop IDs of the mods to load, in load order, separated by commas, e.g.
+      3733835102,3722388367. Only mods marked for Conan Exiles Enhanced work; an outdated mod stops
+      the server. Leave empty to manage ConanSandbox/Mods/modlist.txt by hand.
+    order: 8
+    env_variable: MOD_IDS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:1024|regex:/^[0-9, ]*$/'
+  - name: Update Mods
+    description: Download and update the Workshop mods on every start. (1 = on, 0 = use the downloaded copies)
+    order: 9
+    env_variable: UPDATE_MODS
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Query Port
+    description: UDP port for the Steam server browser. Needs its own allocation.
+    order: 10
+    env_variable: QUERY_PORT
+    default_value: "27015"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Port
+    description: >-
+      TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
+      remote admin tools.
+    order: 11
+    env_variable: RCON_PORT
+    default_value: "25575"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: RCON Password
+    description: RCON password, also used by the panel console. No spaces.
+    order: 12
+    env_variable: RCON_PASSWORD
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    secret: true
+    rules: 'required|string|min:3|max:64|regex:/^\S+$/'
+  - name: Extra Arguments
+    description: Additional launch parameters, e.g. -MULTIHOME=1.2.3.4.
+    order: 13
+    env_variable: EXTRA_ARGS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:512"
+  - name: Auto Update
+    description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
+    order: 14
+    env_variable: AUTO_UPDATE
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1"
+  - name: Beta Branch
+    description: Steam beta branch to install. Leave empty for the current release (the legacy branch has no Linux build).
+    order: 15
+    env_variable: SRCDS_BETAID
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+  - name: Steam App ID
+    description: Steam app id of the Conan Exiles dedicated server.
+    order: 16
+    env_variable: SRCDS_APPID
+    default_value: "443030"
+    user_viewable: false
+    user_editable: false
+    rules: "required|string|in:443030"
