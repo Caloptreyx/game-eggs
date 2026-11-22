@@ -69,3 +69,10 @@ Saved as `.pteroignore` in the server root, this limits backups to the worlds an
 - The startup command preloads BepInEx's Doorstop library (`doorstop_libs/libdoorstop_x64.so`), which starts the BepInEx preloader. Put server-side mods (`.dll`) in `BepInEx/plugins/`; their configs appear in `BepInEx/config/`. The BepInEx log is `BepInEx/LogOutput.log` (e.g. `Loading [Jotunn 2.30.2]`, `Chainloader startup complete (1 loaded, ...)`).
 - Reinstall to update BepInEx; mods and configs in `BepInEx/` are kept. Mods that change gameplay usually have to be installed on the players' clients too.
 - For backups, also keep `BepInEx/plugins/` and `BepInEx/config/`.
+
+## Valheim Plus
+
+`egg-valheim-plus.yml` installs [Valheim Plus](https://github.com/Grantapher/ValheimPlus) (the maintained Grantapher fork of the original, which stopped in 2022) on top of the server: its `UnixServer` release package brings BepInEx and `BepInEx/plugins/ValheimPlus.dll`, started the same way as the BepInEx egg. Valheim Plus Version takes `latest` or a release tag such as `10.4.0.0`; players need the same Valheim Plus version.
+
+- Its settings are in `BepInEx/config/org.bepinex.plugins.valheim_plus.cfg`, created on the first start; edit it while the server is stopped. Reinstalling updates the mod and keeps that file and other mods.
+- The log shows `Loading [Valheim Plus 10.4.0.0]` in `BepInEx/LogOutput.log` when the mod is active.
