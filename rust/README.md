@@ -45,3 +45,11 @@ Stop the server and delete the `.sav` and `.map` files in `server/rust/` for a m
 
 - The image's own update only knows the public branch, so it is turned off; the startup command updates the staging branch itself through SteamCMD when Auto Update is on (`Success! App '258550' already up to date.` in the console).
 - Vanilla only: the Oxide and Carbon builds follow the public branch and may not load on staging.
+
+## Autowipe
+
+`egg-rust-autowipe.yml` is the Rust egg (same variables, frameworks and ports) plus an automatic wipe. Before every start, `autowipe.sh` (written by the installer) checks whether a wipe time has passed since the last wipe and, if so, deletes the map (`server/rust/*.sav*` and `*.map`) and, with Wipe Blueprints on, the blueprints (`player.blueprints.*.db*`). The console shows what it did (`Autowipe (forced): wiping the map ...` or `no wipe due`).
+
+- Wipe Schedule `forced`: Facepunch's monthly forced wipe, the first Thursday of the month at Wipe Hour (UTC; the update lands at 19:00 UTC, 18:00 UTC in northern summer). `weekly`: every week on Wipe Day at Wipe Hour. `off`: never.
+- The wipe happens on the first start after the wipe time; add a Calagopus schedule that restarts the server shortly after it. The very first start only records the current period and does not wipe.
+- `.last-wipe` holds the start of the last wiped period (Unix time); delete it to restart the count, or set it to `0` to wipe on the next start.
