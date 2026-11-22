@@ -54,4 +54,3 @@ Saved as `.pteroignore` in the server root, this limits backups to your config a
 
 - Under Proton the server needs a virtual display (Xvfb; without one it hangs before loading the world) and writes nothing to the console. The startup command waits until RCON answers and prints its `Welcome to Pal Server[v...] <name>` reply, which marks the server as started.
 - Stopping sends `Save` and then `Shutdown 1` over RCON; the world is saved before the server exits.
-- It uses about as much memory as the Linux server, plus Proton's overhead.
