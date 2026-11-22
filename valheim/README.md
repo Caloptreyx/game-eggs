@@ -61,3 +61,11 @@ Saved as `.pteroignore` in the server root, this limits backups to the worlds an
 # Except the Valheim saves
 !saves/
 ```
+
+## BepInEx
+
+`egg-valheim-bepinex.yml` is the same server with the [BepInEx](https://github.com/BepInEx/BepInEx) mod loader, from the [BepInExPack for Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on Thunderstore (latest, or the BepInEx Version set). Variables, ports, saves and stop work as above.
+
+- The startup command preloads BepInEx's Doorstop library (`doorstop_libs/libdoorstop_x64.so`), which starts the BepInEx preloader. Put server-side mods (`.dll`) in `BepInEx/plugins/`; their configs appear in `BepInEx/config/`. The BepInEx log is `BepInEx/LogOutput.log` (e.g. `Loading [Jotunn 2.30.2]`, `Chainloader startup complete (1 loaded, ...)`).
+- Reinstall to update BepInEx; mods and configs in `BepInEx/` are kept. Mods that change gameplay usually have to be installed on the players' clients too.
+- For backups, also keep `BepInEx/plugins/` and `BepInEx/config/`.
