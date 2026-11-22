@@ -147,7 +147,7 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^(latest|[0-9.]+)$/'
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9.]+)$/']
   - name: Max Players
     description: Maximum number of players.
     order: 2

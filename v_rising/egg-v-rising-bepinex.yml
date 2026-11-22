@@ -261,7 +261,7 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^(latest|[0-9.]+)$/'
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9.]+)$/']
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 18

@@ -143,7 +143,7 @@ variables:
     default_value: "00:00"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|regex:/^([01]\d|2[0-3]):[0-5]\d$/'
+    rules: [required, string, 'regex:/^([01]\d|2[0-3]):[0-5]\d$/']
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 7
