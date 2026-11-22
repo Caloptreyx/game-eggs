@@ -61,3 +61,7 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - Minecraft Version: `latest` for the newest version Purpur supports, or a version such as `1.21.10`. Build Number: `latest` for the newest successful build, or a build number.
 - The installer prints the Java version Mojang's metadata gives for the installed version; select that image.
 - Like the Paper egg, the installer creates `server.properties` with the port keys, and a reinstall keeps worlds, plugins and configs.
+
+## Folia
+
+`egg-minecraft-java-folia.yml` runs [Folia](https://papermc.io/software/folia), PaperMC's fork of Paper that ticks separate regions of the world in parallel on several CPU cores. It suits servers with many players spread over a large world; only plugins marked as Folia-supported load. Installation, versions, builds and checks work as in the Paper egg (same download service). Folia only exists for recent versions (1.19.4 and newer, Java 17+), so the egg offers Java 17, 21 and 25 images. Give it several CPU cores: `config/paper-global.yml` sets how many threads tick regions.
