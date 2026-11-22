@@ -1,0 +1,163 @@
+name: "BeamNG.drive: KissMP"
+author: thexylo@pm.me
+description: >-
+  KissMP, a multiplayer mod for BeamNG.drive: drive together on any map with synced vehicles and
+  Lua addons. Native Linux KissMP server from the project's GitHub releases.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server reads config.json, whose port, name, description, map, player and vehicle limits and
+  # server-list setting the panel writes on every start. It takes no console commands; the stop
+  # signal (SIGINT) shuts it down.
+  Default: ./kissmp-server
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.json:
+      parser: json
+      replace:
+        - match: port
+          replace_with: "{{server.build.default.port}}"
+        - match: server_name
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: description
+          replace_with: "{{env.DESCRIPTION}}"
+        - match: map
+          replace_with: "{{env.MAP}}"
+        - match: max_players
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: max_vehicles_per_client
+          replace_with: "{{env.MAX_VEHICLES}}"
+        - match: show_in_server_list
+          replace_with: "{{env.PUBLIC}}"
+  startup:
+    done:
+      - Server is running!
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # KissMP (BeamNG.drive) server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=TheHellBox/KISS-multiplayer
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the release: the latest one, or a fixed tag
+      if [[ -z "${KISSMP_VERSION}" || "${KISSMP_VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          api="https://api.github.com/repos/${REPO}/releases/tags/${KISSMP_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up KissMP ${KISSMP_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '[.assets[] | select(.name | test("^KissMP.*\\.zip$"))][0].browser_download_url // empty' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "KissMP ${KISSMP_VERSION} has no release archive"
+
+      echo "Downloading KissMP ${tag}..."
+      cd /tmp || fail "cannot enter /tmp"
+      curl -fsSL --retry 3 -o kissmp.zip "${url}" || fail "could not download KissMP ${tag}"
+      # The archive also has linux-arm/ and windows/ builds; only the x86-64 Linux server is used.
+      unzip -o -q -j kissmp.zip 'linux/kissmp-server' -d /mnt/server < /dev/null || fail "the KissMP ${tag} archive has no linux/kissmp-server"
+      rm -f kissmp.zip
+      chmod +x /mnt/server/kissmp-server
+      echo "${tag}" > /mnt/server/.kissmp-version
+
+      ## config.json: the server writes it on its first start; it is created here so the panel can set
+      ## its values from the first start (existing settings are kept)
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      mkdir -p mods addons
+      if [[ ! -f config.json ]]; then
+          jq -n '{server_name: "KissMP Server", description: "A KissMP server", map: "/levels/gridmap_v2/info.json",
+              max_players: 8, tickrate: 60, port: 3698, max_vehicles_per_client: 3, show_in_server_list: true,
+              upnp_enabled: false, server_identifier: (now | tostring), require_scripts: false}' > config.json \
+              || fail "could not create config.json"
+      fi
+
+      echo "-----------------------------------------"
+      echo "KissMP ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Name shown in the KissMP server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: KissMP Server
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Description
+    description: Description shown in the KissMP server list.
+    order: 2
+    env_variable: DESCRIPTION
+    default_value: A KissMP server
+    user_viewable: true
+    user_editable: true
+    rules: "nullable|string|max:256"
+  - name: Map
+    description: >-
+      Map to load, as the path of its info.json, e.g. /levels/gridmap_v2/info.json,
+      /levels/west_coast_usa/info.json or /levels/italy/info.json. Players need the map.
+    order: 3
+    env_variable: MAP
+    default_value: /levels/gridmap_v2/info.json
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:128|regex:/^\/levels\/[\w.-]+\/info\.json$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 4
+    env_variable: MAX_PLAYERS
+    default_value: "8"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Max Vehicles Per Player
+    description: Vehicles each player may spawn.
+    order: 5
+    env_variable: MAX_VEHICLES
+    default_value: "3"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,20"
+  - name: Public
+    description: >-
+      Register the server with the KissMP server list (true / false). The list's site, kissmp.online,
+      was a parked domain when this egg was written, so players join by address.
+    order: 6
+    env_variable: PUBLIC
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: KissMP Version
+    description: Release tag of TheHellBox/KISS-multiplayer (e.g. v0.8.0), or latest. Applied on reinstall.
+    order: 7
+    env_variable: KISSMP_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'

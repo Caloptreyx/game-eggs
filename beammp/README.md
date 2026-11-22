@@ -28,3 +28,12 @@ Set Map to the level's info file, e.g. `/levels/gridmap_v2/info.json`, `/levels/
 ## Mods
 
 Client mods (zip files) go into `Resources/Client/`; server plugins (Lua) into `Resources/Server/<plugin>/`. `ServerConfig.toml` and `Resources/` are kept on reinstall.
+
+## KissMP
+
+`egg-kissmp.yml` runs a [KissMP](https://github.com/TheHellBox/KISS-multiplayer) server, the other BeamNG.drive multiplayer mod (players need the KissMP client mod, not BeamMP). The installer takes the x86-64 Linux server from the GitHub release (latest, or the KissMP Version set) and creates `config.json`; the panel writes the port, server name, description, map, player and vehicle limits and the server-list setting into it on every start.
+
+- One UDP port (QUIC; default 3698), the primary allocation. Players join by address; the KissMP server list site (kissmp.online) was a parked domain when this egg was written, so Public defaults to `false`.
+- Map takes the level's info file, as for BeamMP. Client mods go in `mods/`, server Lua addons in `addons/`.
+- The server has no console commands; stopping sends SIGINT. It keeps no world state.
+- It needs only a few MB of memory and disk.
