@@ -196,4 +196,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Bedrock needs a second allocation, set as Bedrock Port. Current Geyser (2.12) uses Bedrock's NetherNet transport: its built-in signaling listens on that port over TCP and NetherNet uses it over UDP, so it cannot share the Java port (Geyser then falls back to an external signaling service, which failed to start on the test node). The panel writes the port into `plugins/Geyser-Spigot/config.yml`; the installer creates the keys so this applies from the first start.
 - Tested on Purpur 26.3 (Java 25): "Built-in signaling started on http://0.0.0.0:<Bedrock Port>", that port and the Java port reachable from outside, about 1.2 GB of memory and 290 MB of disk; `stop` saves the worlds, and the second start works. A Bedrock client join was not tested.
-- RakNet (older Bedrock clients, LAN discovery) can be enabled with `transport: both` in Geyser's config; it needs a third UDP port (`webrtc-port`).
+- Geyser's config also offers `transport: both` (NetherNet and RakNet), which needs another UDP port for NetherNet (`webrtc-port`); not tested.
+
+## CanvasMC
+
+`egg-minecraft-java-canvas.yml` runs [CanvasMC](https://canvasmc.io/), a performance fork of Folia (see the Folia section: regions ticked in parallel, only Folia-supported plugins). The installer takes the newest successful build from CanvasMC's build API (for the given Minecraft version, or a build number) and checks that the jar is a valid archive (the API publishes no checksum). The server starts with `--add-modules=jdk.incubator.vector`, which CanvasMC uses.
+
+- Tested: 26.3 build 1045 on Java 25, about 1.4 GB of memory after start and 230 MB of disk; `stop` saves all worlds ("Saved all worlds"), and the second start works.
+- Like the Paper egg it creates `server.properties` with the port keys.

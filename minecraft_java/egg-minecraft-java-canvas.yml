@@ -1,0 +1,128 @@
+name: "Minecraft: Java Edition (CanvasMC)"
+author: thexylo@pm.me
+description: >-
+  CanvasMC, a performance fork of Folia (regions of the world ticked in parallel on several CPU
+  cores). Only plugins marked as Folia-supported work. Downloaded from CanvasMC's build server; the
+  matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+file_denylist: []
+startup_commands:
+  # CanvasMC uses the Vector API, which is an incubator module that has to be added explicitly.
+  Default: >-
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container --add-modules=jdk.incubator.vector
+    -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (CanvasMC) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      API="https://canvasmc.io/api/v2/builds"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the build: the newest one (for the Minecraft version, if one is given), or a build number
+      if [[ -n "${BUILD_NUMBER}" && "${BUILD_NUMBER}" != "latest" ]]; then
+          build=$(curl -fsSL --retry 3 "${API}?project=canvas" | jq -c --argjson b "${BUILD_NUMBER}" '[.builds[] | select(.buildNumber == $b)][0] // empty') \
+              || fail "could not reach the CanvasMC build API"
+      elif [[ -z "${MINECRAFT_VERSION}" || "${MINECRAFT_VERSION}" == "latest" ]]; then
+          build=$(curl -fsSL --retry 3 "${API}/latest?project=canvas") || fail "could not reach the CanvasMC build API"
+      else
+          build=$(curl -fsSL --retry 3 "${API}/latest?project=canvas&channel=${MINECRAFT_VERSION}") || build=""
+      fi
+      url=$(jq -r 'select(.result == "SUCCESS") | .downloadUrl // empty' <<< "${build}" 2>/dev/null)
+      if [[ -z "${url}" ]]; then
+          available=$(curl -fsSL "${API}?project=canvas" | jq -r '[.builds[].channelVersion | select(. != "unknown")] | unique | join(", ")')
+          fail "no CanvasMC build for Minecraft ${MINECRAFT_VERSION} / build ${BUILD_NUMBER}; versions with builds: ${available}"
+      fi
+      version=$(jq -r '.channelVersion' <<< "${build}")
+      build_id=$(jq -r '.buildNumber' <<< "${build}")
+      echo "Downloading CanvasMC ${version} build ${build_id}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download CanvasMC build ${build_id}"
+      unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded CanvasMC jar is not valid"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "canvas ${version} ${build_id}" > .server-version
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${version}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "CanvasMC ${version} build ${build_id} installed. It needs Java ${java_version:-21} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: latest for the newest CanvasMC build, or a Minecraft version CanvasMC has builds for (e.g. 1.21.11). Reinstall to switch.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Build Number
+    description: latest, or a CanvasMC build number (overrides Minecraft Version).
+    order: 2
+    env_variable: BUILD_NUMBER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: server.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
