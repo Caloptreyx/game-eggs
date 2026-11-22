@@ -171,7 +171,7 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:16|regex:/^(0|[1-9][0-9]*[mhd])$/'
+    rules: [nullable, string, "max:16", 'regex:/^(0|[1-9][0-9]*[mhd])$/']
   - name: Pregeneration
     description: >-
       true enables Horizon's pregen console command, which generates the world around spawn ahead
