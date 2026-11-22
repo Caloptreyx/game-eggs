@@ -1,0 +1,144 @@
+name: "Minecraft: Java Edition (Spigot)"
+author: thexylo@pm.me
+description: >-
+  Spigot, the Bukkit-based Minecraft: Java Edition server for Bukkit and Spigot plugins. SpigotMC
+  only distributes it as source, so the installer compiles it with SpigotMC's BuildTools; the
+  matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry (Calagopus runs
+  # servers as UID 988), and Minecraft then creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Spigot) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Compiles Spigot with BuildTools (needs git, which this image has, and a JDK, which is
+      # downloaded for the build and removed afterwards). Compiling takes several minutes and about
+      # 1.5 GB of memory.
+
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+      WORK=/mnt/server/.buildtools
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          rm -rf "${WORK}"
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## Minecraft version and the Java version it needs (Mojang's metadata)
+      manifest=$(curl -fsSL --retry 3 "${MANIFEST_URL}") || fail "could not download the Minecraft version list"
+      if [[ -z "${MINECRAFT_VERSION}" || "${MINECRAFT_VERSION,,}" == "latest" ]]; then
+          version=$(curl -fsSL --retry 3 https://hub.spigotmc.org/versions/ | grep -oE 'href="[0-9][0-9.]*\.json"' \
+              | grep -oE '[0-9][0-9.]*[0-9]' | sort -V | tail -n 1)
+          [[ -n "${version}" ]] || fail "could not look up the newest Spigot version"
+      else
+          version="${MINECRAFT_VERSION}"
+      fi
+      curl -fsSL --retry 3 -o /dev/null "https://hub.spigotmc.org/versions/${version}.json" || fail "Spigot has no version '${version}'"
+      version_url=$(jq -r --arg v "${version}" '.versions[] | select(.id == $v) | .url' <<< "${manifest}")
+      java=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // 8')
+      java=${java:-21}
+      (( java == 16 )) && java=17
+
+      ## a temporary JDK and BuildTools
+      rm -rf "${WORK}" && mkdir -p "${WORK}/jdk" || fail "cannot create ${WORK}"
+      echo "Downloading a Java ${java} JDK for the build..."
+      jdk=$(curl -fsSL --retry 3 "https://api.adoptium.net/v3/assets/latest/${java}/hotspot?architecture=x64&image_type=jdk&os=linux&vendor=eclipse") \
+          || fail "could not look up a Java ${java} JDK"
+      jdk_url=$(jq -r '.[0].binary.package.link // empty' <<< "${jdk}")
+      jdk_sha=$(jq -r '.[0].binary.package.checksum // empty' <<< "${jdk}")
+      [[ -n "${jdk_url}" ]] || fail "Adoptium has no Java ${java} JDK"
+      curl -fsSL --retry 3 -o "${WORK}/jdk.tar.gz" "${jdk_url}" || fail "could not download the JDK"
+      echo "${jdk_sha}  ${WORK}/jdk.tar.gz" | sha256sum -c --quiet - || fail "the downloaded JDK is corrupt (checksum mismatch)"
+      tar -xzf "${WORK}/jdk.tar.gz" -C "${WORK}/jdk" --strip-components=1 && rm -f "${WORK}/jdk.tar.gz" || fail "could not extract the JDK"
+      curl -fsSL --retry 3 -o "${WORK}/BuildTools.jar" https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar \
+          || fail "could not download BuildTools"
+
+      ## compile
+      echo "Compiling Spigot ${version} with BuildTools (this takes a while)..."
+      cd "${WORK}" || fail "cannot enter ${WORK}"
+      export HOME="${WORK}"
+      "${WORK}/jdk/bin/java" -Xmx1536M -jar BuildTools.jar --rev "${version}" --output-dir "${WORK}/out" --final-name spigot.jar \
+          > "${WORK}/buildtools.log" 2>&1 || { tail -n 40 "${WORK}/buildtools.log"; fail "BuildTools could not compile Spigot ${version}"; }
+      [[ -f "${WORK}/out/spigot.jar" ]] || { tail -n 40 "${WORK}/buildtools.log"; fail "BuildTools produced no spigot.jar"; }
+      mv -f "${WORK}/out/spigot.jar" "/mnt/server/${SERVER_JARFILE}" || fail "could not install spigot.jar"
+      cd /mnt/server && rm -rf "${WORK}"
+      echo "spigot ${version}" > .server-version
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      echo "-----------------------------------------"
+      echo "Spigot ${version} installed. It needs Java ${java} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest version Spigot supports, or a version such as 1.21.10. Reinstall to
+      switch versions (it compiles again); worlds and plugins are kept. Worlds cannot be opened by an
+      older version than the one that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 2
+    env_variable: SERVER_JARFILE
+    default_value: server.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

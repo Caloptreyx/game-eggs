@@ -118,3 +118,10 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - The panel writes the allocation's port into the first listener's `host` and `query_port` in `config.yml` on every start; the installer creates that listener so this works from the first start, and the proxy adds the rest of its settings. Backends are listed under `servers:`.
 - Backends need `bungeecord: true` in `spigot.yml` and `online-mode=false`, and should only be reachable by the proxy. Plugins go in `plugins/`. Stop sends `end`.
 - Same ports as Velocity (proxy TCP and query UDP on the primary allocation).
+
+## Spigot
+
+`egg-minecraft-java-spigot.yml` runs [Spigot](https://www.spigotmc.org/). SpigotMC only distributes the source, so the installer compiles it with SpigotMC's BuildTools: it downloads a temporary JDK (Eclipse Temurin, the Java version Mojang lists for that Minecraft version, SHA-256 checked) and BuildTools, builds `spigot.jar` and removes the build files again. A build takes a few minutes (about 2 minutes for 26.3 on the test node) and up to 1.5 GB of memory, so give the server at least 2 GB while installing.
+
+- Minecraft Version: `latest` for the newest version on SpigotMC's version list, or a version such as `1.21.10`. Reinstall to switch versions (it compiles again); worlds, plugins and configs are kept.
+- Like the Paper egg it creates `server.properties` with the port keys. Plugins go in `plugins/`; Spigot adds `spigot.yml` and `bukkit.yml`.
