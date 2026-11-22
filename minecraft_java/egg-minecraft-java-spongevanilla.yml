@@ -1,0 +1,120 @@
+name: "Minecraft: Java Edition (SpongeVanilla)"
+author: thexylo@pm.me
+description: >-
+  SpongeVanilla, a Minecraft: Java Edition server for Sponge plugins. Installed from SpongePowered's
+  download API (recommended builds); the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry, and Minecraft then
+  # creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (SpongeVanilla) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      API="https://dl-api.spongepowered.org/v2/groups/org.spongepowered/artifacts/spongevanilla/versions"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the build: the newest recommended one (for the Minecraft version, if one is given), or an exact
+      ## SpongeVanilla version such as 1.21.10-17.0.0; the API lists the newest first
+      if [[ -n "${SPONGE_VERSION}" && "${SPONGE_VERSION}" != "latest" ]]; then
+          version="${SPONGE_VERSION}"
+      else
+          query="limit=1&recommended=true"
+          [[ -n "${MINECRAFT_VERSION}" && "${MINECRAFT_VERSION}" != "latest" ]] && query+="&tags=minecraft:${MINECRAFT_VERSION}"
+          version=$(curl -fsSL --retry 3 "${API}?${query}" | jq -r '.artifacts | keys_unsorted[0] // empty') || fail "could not reach the Sponge download API"
+          [[ -n "${version}" ]] || fail "there is no recommended SpongeVanilla build for Minecraft ${MINECRAFT_VERSION}"
+      fi
+      asset=$(curl -fsSL --retry 3 "${API}/${version}" | jq -c '[.assets[] | select(.classifier == "universal" and .extension == "jar")][0] // empty') \
+          || fail "SpongeVanilla ${version} does not exist"
+      [[ -n "${asset}" ]] || fail "SpongeVanilla ${version} has no server (universal) jar"
+      echo "Downloading SpongeVanilla ${version}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "$(jq -r '.downloadUrl' <<< "${asset}")" || fail "could not download SpongeVanilla ${version}"
+      echo "$(jq -r '.sha1' <<< "${asset}")  ${SERVER_JARFILE}.download" | sha1sum -c --quiet - \
+          || { rm -f "${SERVER_JARFILE}.download"; fail "the SpongeVanilla jar is corrupt (checksum mismatch)"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${version}" > .sponge-version
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      echo "-----------------------------------------"
+      echo "SpongeVanilla ${version} installed. The first start downloads its libraries."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: latest, or a Minecraft version (e.g. 1.21.1); the newest recommended SpongeVanilla build for it is installed.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+  - name: SpongeVanilla Version
+    description: latest to follow Minecraft Version, or an exact SpongeVanilla version such as 1.21.10-17.0.0. Reinstall to switch.
+    order: 2
+    env_variable: SPONGE_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:48|regex:/^[\w.-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: spongevanilla.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

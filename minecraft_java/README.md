@@ -165,3 +165,10 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - The first start downloads the loader's libraries. Tested: NeoForge 1.21.1 (FeudalKings/1.0.1) on Java 21, about 1.2 GB of memory after start and 230 MB of disk; `stop` saves the worlds, and the second start works.
 - Like the Paper egg it creates `server.properties` with the port keys.
+
+## SpongeVanilla
+
+`egg-minecraft-java-spongevanilla.yml` runs [SpongeVanilla](https://spongepowered.org/), a server for Sponge plugins (`mods/`). The installer takes the newest recommended build from SpongePowered's download API (for the given Minecraft version, or overall with `latest`), or an exact SpongeVanilla version, checked against its SHA-1.
+
+- The first start downloads Sponge's libraries. Tested: 1.21.10-17.0.0 on Java 21, about 1.4 GB of memory after start and 170 MB of disk; `stop` saves the worlds, and the second start works.
+- Like the Paper egg it creates `server.properties` with the port keys.
