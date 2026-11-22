@@ -97,3 +97,16 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - Minecraft Version: `latest`, or a version such as `1.21.1`; the egg picks the newest NeoForge release (betas excluded) for it. NeoForge Version: `latest`, or a fixed version such as `21.1.267`, which also decides the Minecraft version (21.1.x is for 1.21.1, 26.3.0.x for 26.3).
 - NeoForge for 1.20.1 was a fork of Forge with different coordinates and is not offered; use the Forge egg for 1.20.1.
 - Java 17, 21 or 25 image, as printed by the installer. Tested: 26.3 (NeoForge 26.3.0.115) and 1.21.1 (NeoForge 21.1.267) on Java 25. Worlds, mods and configs survive reinstalls.
+
+## Velocity (proxy)
+
+`egg-minecraft-java-velocity.yml` runs [Velocity](https://papermc.io/software/velocity), PaperMC's proxy. Players connect to the proxy, which forwards them to the backend servers listed in `velocity.toml` (`[servers]`, `try`) and lets them switch between them. It is downloaded from PaperMC's download service (SHA-256 checked), like Paper; Velocity Version and Build Number work the same way. No EULA is needed for the proxy.
+
+- The panel writes the allocation's port into `bind` and the GameSpy4 query `port` in `velocity.toml` on every start; the installer creates both lines so this works from the first start, and Velocity adds the rest of its settings.
+- Backends run on separate servers (for example Paper eggs) that only the proxy should reach. For modern forwarding set `player-info-forwarding-mode = "modern"`, copy `forwarding.secret` to each Paper backend (`config/paper-global.yml`, `proxies.velocity`), and set `online-mode=false` on the backends.
+- Plugins go in `plugins/`. Stop sends `end`.
+
+| Port | Default | Protocol | Required |
+|------|---------|----------|----------|
+| Proxy | 25577 | TCP | yes (primary allocation) |
+| Query | 25577 | UDP | same port; GameSpy4 query |

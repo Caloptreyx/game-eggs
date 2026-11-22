@@ -1,0 +1,139 @@
+name: "Minecraft: Java Edition (Velocity proxy)"
+author: thexylo@pm.me
+description: >-
+  Velocity, PaperMC's Minecraft: Java Edition proxy: players connect to it and move between the
+  backend servers (Paper, Purpur, Fabric, ...) it links together. Downloaded from PaperMC; the
+  matching Java version is selected through the Docker image.
+features:
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+file_denylist: []
+startup_commands:
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    velocity.toml:
+      parser: file
+      replace:
+        - match: "bind = "
+          replace_with: bind = "0.0.0.0:{{server.build.default.port}}"
+        - match: "port = "
+          replace_with: "port = {{server.build.default.port}}"
+  startup:
+    done:
+      - "Done ("
+    strip_ansi: true
+  stop:
+    type: command
+    value: end
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Velocity proxy) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      PROJECT=velocity
+      API="https://fill.papermc.io/v3/projects/${PROJECT}"
+      # PaperMC asks API clients to identify themselves.
+      UA="calagopus-egg (https://github.com/Caloptreyx/game-eggs)"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+      api() { curl -fsSL --retry 3 -A "${UA}" "${API}$1"; }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## version: the newest one with a stable build, or the one set in the panel
+      versions=$(api /versions) || fail "could not download the ${PROJECT} version list"
+      if [[ -z "${VELOCITY_VERSION}" || "${VELOCITY_VERSION,,}" == "latest" ]]; then
+          version=""
+          for v in $(jq -r '.versions[].version.id' <<< "${versions}" | head -n 15); do
+              if [[ -n "$(api "/versions/${v}/builds?channel=STABLE" | jq -r '.[0].id // empty')" ]]; then
+                  version="${v}"
+                  break
+              fi
+          done
+          [[ -n "${version}" ]] || fail "no ${PROJECT} version with a stable build found"
+      else
+          version="${VELOCITY_VERSION}"
+          jq -e --arg v "${version}" '.versions[] | select(.version.id == $v)' <<< "${versions}" > /dev/null \
+              || fail "${PROJECT} has no version '${version}'"
+      fi
+      java_version=$(jq -r --arg v "${version}" '.versions[] | select(.version.id == $v) | .version.java.version.minimum // empty' <<< "${versions}")
+
+      ## build: the newest stable one (or the newest of any channel), or the one set in the panel
+      if [[ -z "${BUILD_NUMBER}" || "${BUILD_NUMBER,,}" == "latest" ]]; then
+          build=$(api "/versions/${version}/builds?channel=STABLE" | jq -c '.[0] // empty')
+          [[ -n "${build}" ]] || build=$(api "/versions/${version}/builds/latest") \
+              || fail "${PROJECT} ${version} has no builds"
+      else
+          build=$(api "/versions/${version}/builds/${BUILD_NUMBER}") || fail "${PROJECT} ${version} has no build ${BUILD_NUMBER}"
+      fi
+      build_id=$(jq -r '.id' <<< "${build}")
+      url=$(jq -r '.downloads["server:default"].url // empty' <<< "${build}")
+      sha256=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' <<< "${build}")
+      [[ -n "${url}" && -n "${sha256}" ]] || fail "${PROJECT} ${version} build ${build_id} has no download"
+
+      echo "Downloading ${PROJECT} ${version} build ${build_id}..."
+      curl -fsSL --retry 3 -A "${UA}" -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download ${PROJECT} ${version} build ${build_id}"
+      if ! echo "${sha256}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet -; then
+          rm -f "${SERVER_JARFILE}.download"
+          fail "the downloaded ${PROJECT} jar is corrupt (checksum mismatch)"
+      fi
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${PROJECT} ${version} ${build_id}" > .server-version
+
+      ## velocity.toml: the proxy writes it on its first start; the lines the panel sets are created
+      ## here so the panel's port applies from the first start (Velocity adds the rest)
+      if [[ ! -f velocity.toml ]]; then
+          printf '%s\n' 'bind = "0.0.0.0:25577"' '' '[query]' 'enabled = true' 'port = 25577' > velocity.toml
+      fi
+
+      echo "-----------------------------------------"
+      echo "${PROJECT} ${version} build ${build_id} installed. It needs Java ${java_version:-17} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Velocity Version
+    description: latest for the newest Velocity version with a stable build, or a version such as 3.4.0-SNAPSHOT.
+    order: 1
+    env_variable: VELOCITY_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Build Number
+    description: latest for the newest stable build, or a Velocity build number.
+    order: 2
+    env_variable: BUILD_NUMBER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+  - name: Server Jar File
+    description: Name of the proxy jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: velocity.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
