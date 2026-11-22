@@ -1,0 +1,156 @@
+name: "Minecraft: Java Edition (NeoForge)"
+author: thexylo@pm.me
+description: >-
+  Minecraft: Java Edition with the NeoForge mod loader, for NeoForge mods and modpacks. NeoForge's
+  installer sets up the loader and the official Mojang server on the first start; the matching
+  Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  # NeoForge's installer is a Java program and the installer image has no Java, so it runs here once
+  # after each (re)install (.neoforge-install); the server starts through the argument file it writes
+  # into libraries/. Java 17 sets user.home to "?" when the container user has no passwd entry
+  # (Calagopus runs servers as UID 988), and Minecraft then creates a "?" folder in the server root.
+  Default: >-
+    if [ -f .neoforge-install ]; then echo "Installing NeoForge $(cat .neoforge-version)...";
+    java -jar neoforge-installer.jar --installServer > neoforge-installer.log 2>&1 || { tail -n 30 neoforge-installer.log; exit 1; };
+    rm -f .neoforge-install neoforge-installer.jar neoforge-installer.jar.log; echo "NeoForge installed"; fi;
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container
+    @libraries/net/neoforged/neoforge/$(cat .neoforge-version)/unix_args.txt nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (NeoForge) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      MAVEN="https://maven.neoforged.net/releases/net/neoforged/neoforge"
+      VERSIONS="https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      # NeoForge versions encode the Minecraft version: 21.1.x is for 1.21.1, 20.4.x for 1.20.4,
+      # 21.0.x for 1.21; from 26.1 on, 26.1.0.x is for Minecraft 26.1.
+      mc_of() {
+          local major minor
+          IFS=. read -r major minor _ <<< "$1"
+          if (( major >= 26 )); then echo "${major}.${minor}"
+          elif [[ "${minor}" == 0 ]]; then echo "1.${major}"
+          else echo "1.${major}.${minor}"; fi
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      versions=$(curl -fsSL --retry 3 "${VERSIONS}" | jq -r '.versions[]') || fail "could not download NeoForge's version list"
+      # 1.20.1 builds (47.1.x) belong to the old Forge-based project and are not in this list.
+      [[ -n "${versions}" ]] || fail "NeoForge's version list is empty"
+
+      ## NeoForge version: the newest release for the chosen Minecraft version, or a fixed one
+      if [[ -z "${NEOFORGE_VERSION}" || "${NEOFORGE_VERSION,,}" == "latest" ]]; then
+          releases=$(grep -vE 'alpha|beta' <<< "${versions}")
+          if [[ -z "${MINECRAFT_VERSION}" || "${MINECRAFT_VERSION,,}" == "latest" ]]; then
+              neoforge=$(sort -V <<< "${releases}" | tail -n 1)
+          else
+              neoforge=""
+              while read -r v; do
+                  [[ "$(mc_of "${v}")" == "${MINECRAFT_VERSION}" ]] && neoforge="${v}"
+              done < <(sort -V <<< "${releases}")
+          fi
+          [[ -n "${neoforge}" ]] || fail "NeoForge has no release for Minecraft '${MINECRAFT_VERSION}'"
+      else
+          neoforge="${NEOFORGE_VERSION}"
+          grep -qxF "${neoforge}" <<< "${versions}" || fail "NeoForge has no version '${neoforge}'"
+      fi
+      mc=$(mc_of "${neoforge}")
+
+      echo "Downloading the installer of NeoForge ${neoforge} (Minecraft ${mc})..."
+      curl -fsSL --retry 3 -o neoforge-installer.jar "${MAVEN}/${neoforge}/neoforge-${neoforge}-installer.jar" \
+          || fail "could not download the installer of NeoForge ${neoforge}"
+      sha1=$(curl -fsSL "${MAVEN}/${neoforge}/neoforge-${neoforge}-installer.jar.sha1" 2>/dev/null)
+      if [[ -n "${sha1}" ]] && ! echo "${sha1}  neoforge-installer.jar" | sha1sum -c --quiet -; then
+          rm -f neoforge-installer.jar
+          fail "the downloaded NeoForge installer is corrupt (checksum mismatch)"
+      fi
+      echo "${neoforge}" > .neoforge-version
+      touch .neoforge-install
+      mkdir -p mods
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${mc}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "NeoForge ${neoforge} for Minecraft ${mc} is set up and installs on the next start."
+      echo "It needs Java ${java_version:-21} or newer: select the matching Java image in the server's"
+      echo "Startup settings. Put mods in mods/."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest Minecraft version NeoForge has a release for, or a version such as
+      1.21.1. Reinstall the server to switch versions; worlds and mods are kept (mods must match the
+      new version). Worlds cannot be opened by an older version than the one that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: NeoForge Version
+    description: >-
+      latest for the newest NeoForge release for that Minecraft version (betas excluded), or a
+      NeoForge version such as 21.1.267, which also decides the Minecraft version.
+    order: 2
+    env_variable: NEOFORGE_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.-]+$/'

@@ -87,5 +87,13 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Minecraft Version: `latest` for the newest version Forge has a build for, or a version such as `1.20.1` or `1.12.2`.
 - Forge Version: `recommended` (the recommended build, or the latest if none is recommended), `latest`, or a Forge version such as `47.4.0`.
-- Java: as printed by the installer; old versions need old Java (1.12.2 runs on the Java 8 image only). Tested: 26.3 with Forge 66.1.9 on Java 25 and 1.12.2 with Forge 14.23.5.2859 on Java 8.
+- Java: as printed by the installer; old versions need old Java (Forge for 1.12.2 needs the Java 8 image). Tested: 26.3 with Forge 66.1.9 on Java 25 and 1.12.2 with Forge 14.23.5.2859 on Java 8.
 - Worlds, mods and configs survive reinstalls.
+
+## NeoForge
+
+`egg-minecraft-java-neoforge.yml` runs Minecraft with [NeoForge](https://neoforged.net/), for NeoForge mods (put them in `mods/`). Like the Forge egg, the install script downloads NeoForge's installer from its Maven (SHA-1 checked) and the first start after each (re)install runs it (`Installing NeoForge ...`, output in `neoforge-installer.log`); the server then starts through `libraries/net/neoforged/neoforge/<version>/unix_args.txt`.
+
+- Minecraft Version: `latest`, or a version such as `1.21.1`; the egg picks the newest NeoForge release (betas excluded) for it. NeoForge Version: `latest`, or a fixed version such as `21.1.267`, which also decides the Minecraft version (21.1.x is for 1.21.1, 26.3.0.x for 26.3).
+- NeoForge for 1.20.1 was a fork of Forge with different coordinates and is not offered; use the Forge egg for 1.20.1.
+- Java 17, 21 or 25 image, as printed by the installer. Tested: 26.3 (NeoForge 26.3.0.115) and 1.21.1 (NeoForge 21.1.267) on Java 25. Worlds, mods and configs survive reinstalls.
