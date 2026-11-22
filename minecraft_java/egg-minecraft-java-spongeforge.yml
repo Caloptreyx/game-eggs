@@ -1,0 +1,185 @@
+name: "Minecraft: Java Edition (SpongeForge)"
+author: thexylo@pm.me
+description: >-
+  SpongeForge: Minecraft Forge with the Sponge mod, for Sponge plugins next to Forge mods. Forge's
+  installer sets up the loader on the first start; the matching Java version is selected through
+  the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  # start-spongeforge.sh is written by the installer: it runs Forge's installer on the first start
+  # after a (re)install (the installer image has no Java) and then the server.
+  Default: bash ./start-spongeforge.sh
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (SpongeForge) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # SpongeForge versions are <minecraft>-<forge>-<sponge api>; the matching Forge installer is
+      # downloaded (it runs on the first start) and the SpongeForge jar goes into mods/.
+
+      API="https://dl-api.spongepowered.org/v2/groups/org.spongepowered/artifacts/spongeforge/versions"
+      MAVEN="https://maven.minecraftforge.net/net/minecraftforge/forge"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server/mods
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the SpongeForge build: the newest recommended one (for the Minecraft version, if one is
+      ## given; the API lists the newest first), or an exact version such as 1.21.10-60.0.1-17.0.0
+      if [[ -n "${SPONGEFORGE_VERSION}" && "${SPONGEFORGE_VERSION}" != "latest" ]]; then
+          version="${SPONGEFORGE_VERSION}"
+      else
+          query="limit=1&recommended=true"
+          [[ -n "${MINECRAFT_VERSION}" && "${MINECRAFT_VERSION}" != "latest" ]] && query+="&tags=minecraft:${MINECRAFT_VERSION}"
+          version=$(curl -fsSL --retry 3 "${API}?${query}" | jq -r '.artifacts | keys_unsorted[0] // empty') || fail "could not reach the Sponge download API"
+          [[ -n "${version}" ]] || fail "there is no recommended SpongeForge build for Minecraft ${MINECRAFT_VERSION}"
+      fi
+      info=$(curl -fsSL --retry 3 "${API}/${version}") || fail "SpongeForge ${version} does not exist"
+      mc=$(jq -r '.tags.minecraft // empty' <<< "${info}")
+      forge=$(jq -r '.tags.forge // empty' <<< "${info}")
+      [[ -n "${mc}" ]] || mc="${version%%-*}"
+      [[ -n "${forge}" ]] || forge=$(cut -d- -f2 <<< "${version}")
+      asset=$(jq -c '[.assets[] | select(.classifier == "universal" and .extension == "jar")][0] // empty' <<< "${info}")
+      [[ -n "${asset}" ]] || fail "SpongeForge ${version} has no universal jar"
+
+      ## SpongeForge itself (an older SpongeForge jar from a previous install is replaced)
+      echo "Downloading SpongeForge ${version}..."
+      curl -fsSL --retry 3 -o mods/spongeforge.jar.download "$(jq -r '.downloadUrl' <<< "${asset}")" || fail "could not download SpongeForge ${version}"
+      echo "$(jq -r '.sha1' <<< "${asset}")  mods/spongeforge.jar.download" | sha1sum -c --quiet - \
+          || { rm -f mods/spongeforge.jar.download; fail "the SpongeForge jar is corrupt (checksum mismatch)"; }
+      rm -f mods/spongeforge-*.jar
+      mv -f mods/spongeforge.jar.download "mods/spongeforge-${version}.jar"
+
+      ## the Forge installer for it
+      full="${mc}-${forge}"
+      curl -fsSL --retry 3 -o forge-installer.jar "${MAVEN}/${full}/forge-${full}-installer.jar" \
+          || fail "could not download the installer of Forge ${forge} for Minecraft ${mc}"
+      sha1=$(curl -fsSL "${MAVEN}/${full}/forge-${full}-installer.jar.sha1" 2>/dev/null)
+      if [[ -n "${sha1}" ]] && ! echo "${sha1}  forge-installer.jar" | sha1sum -c --quiet -; then
+          rm -f forge-installer.jar
+          fail "the downloaded Forge installer is corrupt (checksum mismatch)"
+      fi
+      echo "Downloaded the installer of Forge ${forge} for Minecraft ${mc}"
+      echo "${full}" > .forge-version
+      echo "${version}" > .spongeforge-version
+      touch .forge-install
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the start script
+      cat > start-spongeforge.sh << 'EOF'
+      #!/bin/bash
+      # Starts SpongeForge (written by the egg's installer; reinstalling replaces it).
+      cd /home/container || exit 1
+      version=$(cat .forge-version)
+      if [[ -f .forge-install ]]; then
+          echo "Installing Forge ${version}..."
+          java -jar forge-installer.jar --installServer > forge-installer.log 2>&1 || { tail -n 30 forge-installer.log; exit 1; }
+          rm -f .forge-install forge-installer.jar forge-installer.jar.log
+          echo "Forge installed"
+      fi
+
+      # On the first start (while Sponge downloads its libraries) SpongeForge leaves a thread running
+      # that keeps Java from exiting after "stop", although the worlds are saved. The console is
+      # therefore passed on through a pipe: once "stop" was sent and the server reported its worlds
+      # saved, Java gets 30 seconds to exit by itself and is then ended with SIGTERM.
+      # (a background loop gets /dev/null as input unless the console is passed explicitly: fd 4)
+      exec 4<&0
+      rm -f .console && mkfifo .console || exit 1
+      java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container \
+          "@libraries/net/minecraftforge/forge/${version}/unix_args.txt" nogui < .console > >(
+          while IFS= read -r line; do
+              printf '%s\n' "${line}"
+              if [[ "${line}" == *"All dimensions are saved"* && -f .stopping ]]; then
+                  (sleep 30; kill -TERM "$(cat .java-pid)" 2> /dev/null) &
+              fi
+          done) 2>&1 &
+      echo $! > .java-pid
+      rm -f .stopping
+      exec 3> .console
+      while IFS= read -r line; do
+          [[ "${line}" == "stop" || "${line}" == "/stop" ]] && touch .stopping
+          printf '%s\n' "${line}" >&3
+      done <&4 &
+      wait "$(cat .java-pid)"
+      code=$?
+      exec 3>&-
+      rm -f .console .java-pid .stopping
+      exit "${code}"
+      EOF
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${mc}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "SpongeForge ${version} is set up; Forge ${forge} installs on the next start."
+      echo "It needs Java ${java_version:-17} or newer: select the matching Java image in the server's"
+      echo "Startup settings. Put Sponge plugins and Forge mods in mods/."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: latest, or a Minecraft version (e.g. 1.21.10); the newest recommended SpongeForge build for it is installed.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+  - name: SpongeForge Version
+    description: latest to follow Minecraft Version, or an exact SpongeForge version such as 1.21.10-60.0.1-17.0.0. Reinstall to switch.
+    order: 2
+    env_variable: SPONGEFORGE_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:48|regex:/^[\w.-]+$/'

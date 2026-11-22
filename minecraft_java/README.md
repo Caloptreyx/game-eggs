@@ -207,8 +207,15 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 ## VIAaaS
 
-`egg-viaaas.yml` runs [VIAaaS](https://github.com/ViaVersion/VIAaaS) (ViaVersion as a Service), a standalone proxy that lets players join servers of other Minecraft versions. Players connect to a virtual host name such as `mc.example.com._p25565._v1_8.via.example.com`, so it needs a wildcard DNS record pointing at the server and its domain under `host-name` in `config/viaaas.yml`. Without one, the server list shows "Missing parts in hostname".
+`egg-viaaas.yml` runs [VIAaaS](https://github.com/ViaVersion/VIAaaS) (ViaVersion as a Service), a standalone proxy that lets players join servers of other Minecraft versions. Players connect through a virtual host name made of the target server's address and VIAaaS's domain (format in the VIAaaS README), so it needs a wildcard DNS record pointing at the server and that domain under `host-name` in `config/viaaas.yml`. A plain connection gets "Missing parts in hostname" (seen in the server list ping).
 
 - Ports: the Minecraft port is the default allocation; the HTTPS web page (online-mode logins, self-signed certificate by default) needs a second allocation, set as Web Port. The installer takes `config/viaaas.yml` from the jar, and the panel writes the bind address and Max Players into it from the first start.
 - The installer takes a GitHub release (`latest` or a tag), checked against the release's SHA-256.
 - Tested: v0.5.2 on Java 21. The server list ping answered on the Minecraft port (max players 11 from the panel) and the web page answered on the Web Port. It used about 320 MB of memory and 40 MB of disk; `end` stops it cleanly, and the second start works.
+
+## SpongeForge
+
+`egg-minecraft-java-spongeforge.yml` runs Minecraft Forge with [SpongeForge](https://spongepowered.org/), so Sponge plugins and Forge mods both go in `mods/`. The installer takes the newest recommended SpongeForge build from SpongePowered's download API (for the given Minecraft version, or overall with `latest`) or an exact version (`<minecraft>-<forge>-<api>`), checked against its SHA-1, plus the matching Forge installer, which runs on the first start as in the Forge egg.
+
+- After `stop`, SpongeForge sometimes does not exit although its worlds are saved: a thread it starts keeps Java running. This happened on every first start in the tests, and the server then stayed in "stopping". The start script (`start-spongeforge.sh`, written by the installer) passes the console through to the server. Once `stop` was sent and the server reported "All dimensions are saved", it gives Java 30 seconds to exit and then ends it with SIGTERM.
+- Tested: 1.21.10-60.0.1-17.0.0 (Forge 60.0.1) on Java 21, about 1.2 GB of memory after start and 200 MB of disk. Console commands reach the server through the script (`list` answered). `stop` saved the worlds and the server went offline on the first and second start.
