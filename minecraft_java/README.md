@@ -80,3 +80,12 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Minecraft Version: `latest` for the newest stable version Quilt supports, `snapshot`, or a version such as `1.21.10`. Quilt Loader Version: `latest` for the newest loader release (betas are skipped), or a fixed one.
 - Java image as printed by the installer (Quilt needs Java 17 or newer). Worlds, mods and configs survive reinstalls.
+
+## Forge
+
+`egg-minecraft-java-forge.yml` runs Minecraft with [Minecraft Forge](https://files.minecraftforge.net/), for Forge mods (put them in `mods/`). The install script picks the versions from Forge's promotions list and downloads Forge's installer from its Maven (checked against the published SHA-1). The installer is a Java program and the installer image has no Java, so the first start after each (re)install runs it (`Installing Forge ...`, its output goes to `forge-installer.log`); it downloads the Mojang server and the libraries. Forge 1.17 and newer start through the argument file in `libraries/net/minecraftforge/forge/<version>/unix_args.txt`, older versions through their `forge-<version>.jar`; the startup command picks the right one.
+
+- Minecraft Version: `latest` for the newest version Forge has a build for, or a version such as `1.20.1` or `1.12.2`.
+- Forge Version: `recommended` (the recommended build, or the latest if none is recommended), `latest`, or a Forge version such as `47.4.0`.
+- Java: as printed by the installer; old versions need old Java (1.12.2 runs on the Java 8 image only). Tested: 26.3 with Forge 66.1.9 on Java 25 and 1.12.2 with Forge 14.23.5.2859 on Java 8.
+- Worlds, mods and configs survive reinstalls.

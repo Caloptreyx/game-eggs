@@ -1,0 +1,151 @@
+name: "Minecraft: Java Edition (Forge)"
+author: thexylo@pm.me
+description: >-
+  Minecraft: Java Edition with the Minecraft Forge mod loader, for Forge mods and modpacks. Forge's
+  installer sets up the loader and the official Mojang server on the first start; the matching Java
+  version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Forge's installer is a Java program and the installer image has no Java, so it runs here once
+  # after each (re)install (.forge-install). Forge 1.17 and newer start through the argument file the
+  # installer writes into libraries/; older versions start their forge-*.jar. Java 8-17 set user.home
+  # to "?" when the container user has no passwd entry (Calagopus runs servers as UID 988), and
+  # Minecraft then creates a "?" folder in the server root.
+  Default: >-
+    if [ -f .forge-install ]; then echo "Installing Forge $(cat .forge-version)...";
+    java -jar forge-installer.jar --installServer > forge-installer.log 2>&1 || { tail -n 30 forge-installer.log; exit 1; };
+    rm -f .forge-install forge-installer.jar forge-installer.jar.log; echo "Forge installed"; fi;
+    V=$(cat .forge-version); A=libraries/net/minecraftforge/forge/${V}/unix_args.txt;
+    if [ -f "${A}" ]; then L="@${A}"; else L="-jar $(ls forge-${V}*.jar | grep -v installer | head -n 1)"; fi;
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container ${L} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Forge) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      PROMOS="https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"
+      MAVEN="https://maven.minecraftforge.net/net/minecraftforge/forge"
+      MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      promos=$(curl -fsSL --retry 3 "${PROMOS}" | jq '.promos') || fail "could not download Forge's version list"
+
+      ## Minecraft version: the newest one Forge has a build for, or a fixed one
+      if [[ -z "${MINECRAFT_VERSION}" || "${MINECRAFT_VERSION,,}" == "latest" ]]; then
+          mc=$(jq -r 'keys[] | sub("-(latest|recommended)$"; "")' <<< "${promos}" | sort -uV | tail -n 1)
+      else
+          mc="${MINECRAFT_VERSION}"
+      fi
+
+      ## Forge version: the recommended build (the latest one when there is no recommended build),
+      ## the latest build, or a fixed one
+      case "${FORGE_VERSION,,}" in
+          ""|recommended) forge=$(jq -r --arg m "${mc}" '.[$m + "-recommended"] // .[$m + "-latest"] // empty' <<< "${promos}") ;;
+          latest) forge=$(jq -r --arg m "${mc}" '.[$m + "-latest"] // empty' <<< "${promos}") ;;
+          *) forge="${FORGE_VERSION}" ;;
+      esac
+      [[ -n "${forge}" ]] || fail "Forge has no build for Minecraft '${mc}'"
+
+      ## the installer; Forge for 1.7.10 and older names its files <mc>-<forge>-<mc>
+      full="${mc}-${forge}"
+      if ! curl -fsSL --retry 3 -o forge-installer.jar "${MAVEN}/${full}/forge-${full}-installer.jar"; then
+          full="${mc}-${forge}-${mc}"
+          curl -fsSL --retry 3 -o forge-installer.jar "${MAVEN}/${full}/forge-${full}-installer.jar" \
+              || fail "could not download the installer of Forge ${forge} for Minecraft ${mc}"
+      fi
+      sha1=$(curl -fsSL "${MAVEN}/${full}/forge-${full}-installer.jar.sha1" 2>/dev/null)
+      if [[ -n "${sha1}" ]] && ! echo "${sha1}  forge-installer.jar" | sha1sum -c --quiet -; then
+          rm -f forge-installer.jar
+          fail "the downloaded Forge installer is corrupt (checksum mismatch)"
+      fi
+      echo "Downloaded the installer of Forge ${forge} for Minecraft ${mc}"
+      echo "${full}" > .forge-version
+      touch .forge-install
+      mkdir -p mods
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+
+      ## the Java version Mojang's metadata gives for this Minecraft version
+      version_url=$(curl -fsSL --retry 3 "${MANIFEST_URL}" | jq -r --arg v "${mc}" '.versions[] | select(.id == $v) | .url')
+      java_version=$([[ -n "${version_url}" ]] && curl -fsSL --retry 3 "${version_url}" | jq -r '.javaVersion.majorVersion // empty')
+
+      echo "-----------------------------------------"
+      echo "Forge ${forge} for Minecraft ${mc} is set up and installs on the next start."
+      echo "It needs Java ${java_version:-17} or newer: select the matching Java image in the server's"
+      echo "Startup settings. Put mods in mods/."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest Minecraft version Forge has a build for, or a version such as 1.20.1.
+      Reinstall the server to switch versions; worlds and mods are kept (mods must match the new
+      version). Worlds cannot be opened by an older version than the one that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Forge Version
+    description: >-
+      recommended for the recommended Forge build of that Minecraft version (or its latest build if
+      none is recommended), latest for the newest build, or a Forge version such as 47.4.0.
+    order: 2
+    env_variable: FORGE_VERSION
+    default_value: recommended
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.-]+$/'
