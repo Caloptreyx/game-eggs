@@ -36,4 +36,4 @@ Client mods (zip files) go into `Resources/Client/`; server plugins (Lua) into `
 - One UDP port (QUIC; default 3698), the primary allocation. Players join by address; the KissMP server list site (kissmp.online) was a parked domain when this egg was written, so Public defaults to `false`.
 - Map takes the level's info file, as for BeamMP. Client mods go in `mods/`, server Lua addons in `addons/`.
 - The server has no console commands; stopping sends SIGINT. It keeps no world state.
-- It needs only a few MB of memory and disk.
+- The installation takes about 12 MB of disk.
