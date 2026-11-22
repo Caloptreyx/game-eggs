@@ -40,3 +40,16 @@ Change Minecraft Version and reinstall. Worlds and settings are kept; only the j
 ## Requirements
 
 About 2 GB of memory for a few players; more for large view distances, many players or big worlds.
+
+## Paper
+
+`egg-minecraft-java-paper.yml` runs [Paper](https://papermc.io/), the high-performance server that loads Bukkit, Spigot and Paper plugins (put them in `plugins/`). It is downloaded from PaperMC's download service (Fill) and checked against the published SHA-256.
+
+- Minecraft Version: `latest` picks the newest version that has a stable Paper build; or a version such as `1.21.10`.
+- Build Number: `latest` for the newest stable build (the newest build of any channel when a version has no stable one yet), or a build number.
+- The installer prints the Java version Paper requires for the installed version (for example 25 for 26.x, 21 for 1.21.x); select that image.
+- The installer creates `server.properties` with the port keys, so the panel's port applies from the first start.
+- On its first start Paper downloads the matching Mojang server and builds its patched jar into `cache/` and `libraries/`; later starts skip this.
+- Reinstall to change version or build. Worlds, plugins and their configs are kept.
+
+Ports, EULA, memory and stop behave as described above. Paper adds `config/paper-*.yml`, `bukkit.yml` and `spigot.yml` with its own settings.

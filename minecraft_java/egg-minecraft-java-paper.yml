@@ -1,0 +1,152 @@
+name: "Minecraft: Java Edition (Paper)"
+author: thexylo@pm.me
+description: >-
+  Paper, the high-performance Minecraft: Java Edition server that runs Bukkit, Spigot and Paper
+  plugins and fixes many gameplay and performance issues of the vanilla server. Downloaded from
+  PaperMC; the matching Java version is selected through the Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  # Java 8-17 set user.home to "?" when the container user has no passwd entry (Calagopus runs
+  # servers as UID 988), and Minecraft then creates a "?" folder in the server root.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Paper) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      PROJECT=paper
+      API="https://fill.papermc.io/v3/projects/${PROJECT}"
+      # PaperMC asks API clients to identify themselves.
+      UA="calagopus-egg (https://github.com/Caloptreyx/game-eggs)"
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+      api() { curl -fsSL --retry 3 -A "${UA}" "${API}$1"; }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## version: the newest one with a stable build, or the one set in the panel
+      versions=$(api /versions) || fail "could not download the ${PROJECT} version list"
+      if [[ -z "${MINECRAFT_VERSION}" || "${MINECRAFT_VERSION,,}" == "latest" ]]; then
+          version=""
+          for v in $(jq -r '.versions[].version.id' <<< "${versions}" | head -n 15); do
+              if [[ -n "$(api "/versions/${v}/builds?channel=STABLE" | jq -r '.[0].id // empty')" ]]; then
+                  version="${v}"
+                  break
+              fi
+          done
+          [[ -n "${version}" ]] || fail "no ${PROJECT} version with a stable build found"
+      else
+          version="${MINECRAFT_VERSION}"
+          jq -e --arg v "${version}" '.versions[] | select(.version.id == $v)' <<< "${versions}" > /dev/null \
+              || fail "${PROJECT} has no version '${version}'"
+      fi
+      java_version=$(jq -r --arg v "${version}" '.versions[] | select(.version.id == $v) | .version.java.version.minimum // empty' <<< "${versions}")
+
+      ## build: the newest stable one (or the newest of any channel when the version has no stable
+      ## build yet), or the one set in the panel
+      if [[ -z "${BUILD_NUMBER}" || "${BUILD_NUMBER,,}" == "latest" ]]; then
+          build=$(api "/versions/${version}/builds?channel=STABLE" | jq -c '.[0] // empty')
+          [[ -n "${build}" ]] || build=$(api "/versions/${version}/builds/latest") \
+              || fail "${PROJECT} ${version} has no builds"
+      else
+          build=$(api "/versions/${version}/builds/${BUILD_NUMBER}") || fail "${PROJECT} ${version} has no build ${BUILD_NUMBER}"
+      fi
+      build_id=$(jq -r '.id' <<< "${build}")
+      channel=$(jq -r '.channel' <<< "${build}")
+      url=$(jq -r '.downloads["server:default"].url // empty' <<< "${build}")
+      sha256=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' <<< "${build}")
+      [[ -n "${url}" && -n "${sha256}" ]] || fail "${PROJECT} ${version} build ${build_id} has no server download"
+
+      echo "Downloading ${PROJECT} ${version} build ${build_id} (${channel})..."
+      curl -fsSL --retry 3 -A "${UA}" -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download ${PROJECT} ${version} build ${build_id}"
+      if ! echo "${sha256}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet -; then
+          rm -f "${SERVER_JARFILE}.download"
+          fail "the downloaded ${PROJECT} jar is corrupt (checksum mismatch)"
+      fi
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+
+      ## server.properties: the panel only replaces keys that exist, and the server writes the file on
+      ## its first start, so the keys it sets are created here (the server adds the rest)
+      if [[ ! -f server.properties ]]; then
+          printf '%s\n' "server-ip=0.0.0.0" "server-port=25565" "enable-query=true" "query.port=25565" > server.properties
+      fi
+      echo "${PROJECT} ${version} ${build_id}" > .server-version
+
+      echo "-----------------------------------------"
+      echo "${PROJECT} ${version} build ${build_id} installed. It needs Java ${java_version:-17} or newer:"
+      echo "select the matching Java image in the server's Startup settings."
+      echo "-----------------------------------------"
+variables:
+  - name: Minecraft Version
+    description: >-
+      latest for the newest version with a stable Paper build, or a version such as 1.21.10.
+      Reinstall the server to switch versions; worlds and plugins are kept. Worlds cannot be opened
+      by an older version than the one that last saved them.
+    order: 1
+    env_variable: MINECRAFT_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+  - name: Build Number
+    description: latest for the newest stable build, or a Paper build number such as 130.
+    order: 2
+    env_variable: BUILD_NUMBER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: server.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
