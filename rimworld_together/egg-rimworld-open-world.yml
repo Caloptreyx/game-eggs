@@ -1,0 +1,149 @@
+name: "RimWorld: Open World"
+author: thexylo@pm.me
+description: >-
+  Open World, a multiplayer mod for RimWorld: every player runs their own colony on a shared
+  planet and can trade, gift, visit and raid the others. Server from the D12-Dev/OpenWorld GitHub
+  releases (last release v1.0.4, for RimWorld 1.4), run on the .NET runtime the installer adds.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # The server is built for .NET Core 3.1, which is end of life and needs OpenSSL 1.1; it runs on
+  # the .NET 8 runtime in .dotnet/ (installed by the installer) through roll-forward. The image has
+  # no ICU, so .NET runs in invariant globalization mode; the server sets the en-US culture, which
+  # PREDEFINED_CULTURES_ONLY=0 allows there. Console lines are server commands (help, list, say,
+  # kick, ban, ...); the panel's stop sends "shutdown", which saves the players' data and exits.
+  Default: >-
+    ulimit -c 0; DOTNET_ROLL_FORWARD=Major DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_SYSTEM_GLOBALIZATION_PREDEFINED_CULTURES_ONLY=0
+    DOTNET_ROOT=/home/container/.dotnet /home/container/.dotnet/dotnet OpenWorldServer.dll
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    Data/Config.json:
+      parser: json
+      replace:
+        - match: LocalAddress
+          replace_with: 0.0.0.0
+        - match: ServerPort
+          replace_with: "{{server.build.default.port}}"
+        - match: MaxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: EnforceMods
+          replace_with: "{{env.ENFORCE_MODS}}"
+        - match: UseModBlacklist
+          replace_with: "{{env.USE_MOD_BLACKLIST}}"
+        - match: UseWhitelist
+          replace_with: "{{env.WHITELIST}}"
+  startup:
+    done:
+      - " Server Launched"
+    strip_ansi: true
+  stop:
+    type: command
+    value: shutdown
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # RimWorld: Open World server installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=D12-Dev/OpenWorld
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## the server: the latest release, or a fixed tag
+      if [[ -z "${VERSION}" || "${VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          api="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up Open World ${VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '.assets[] | select(.name == "linux-x64.zip") | .browser_download_url' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "Open World ${VERSION} has no linux-x64 server"
+      echo "Downloading the Open World server ${tag}..."
+      curl -fsSL --retry 3 -o /tmp/openworld.zip "${url}" || fail "could not download Open World ${tag}"
+      unzip -o -q -j /tmp/openworld.zip 'linux-x64/*' -d /mnt/server < /dev/null || fail "could not extract Open World ${tag}"
+      rm -f /tmp/openworld.zip
+      [[ -f OpenWorldServer.dll ]] || fail "the Open World ${tag} archive has no OpenWorldServer.dll"
+      echo "${tag}" > .openworld-version
+
+      ## .NET runtime (the server targets .NET Core 3.1; it runs on .NET 8 through roll-forward)
+      echo "Installing the .NET 8 runtime into .dotnet/..."
+      curl -fsSL --retry 3 -o /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh || fail "could not download dotnet-install.sh"
+      rm -rf /mnt/server/.dotnet
+      bash /tmp/dotnet-install.sh --runtime dotnet --channel 8.0 --install-dir /mnt/server/.dotnet --no-path > /dev/null \
+          || fail "could not install the .NET 8 runtime"
+      [[ -x /mnt/server/.dotnet/dotnet ]] || fail "the .NET runtime is missing after installation"
+
+      ## Data/Config.json: written on the first start otherwise; created here so the panel's values
+      ## apply from the first start (existing settings are kept)
+      mkdir -p Data
+      if [[ ! -f Data/Config.json ]]; then
+          jq -n '{LocalAddress: "0.0.0.0", ServerPort: 25555, MaxPlayers: 10, PlayerVersion: "1.4",
+              EnforceMods: false, UseModBlacklist: false, UseCustomDifficulty: false, UseWhitelist: false,
+              AllowCustomScenarios: false}' > Data/Config.json || fail "could not create Data/Config.json"
+      fi
+
+      echo "-----------------------------------------"
+      echo "Open World ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Max Players
+    description: Maximum number of players.
+    order: 1
+    env_variable: MAX_PLAYERS
+    default_value: "10"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100"
+  - name: Enforce Mods
+    description: Players must run exactly the server's mod list (Data/Mods). (true / false)
+    order: 2
+    env_variable: ENFORCE_MODS
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Mod Blacklist
+    description: Refuse players who run a mod listed in the blacklist. (true / false)
+    order: 3
+    env_variable: USE_MOD_BLACKLIST
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Whitelist
+    description: Only players on the whitelist can join. (true / false)
+    order: 4
+    env_variable: WHITELIST
+    default_value: "false"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:true,false"
+  - name: Open World Version
+    description: Release tag of D12-Dev/OpenWorld (e.g. v1.0.4), or latest. Must match the players' mod. Applied on reinstall.
+    order: 5
+    env_variable: VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'

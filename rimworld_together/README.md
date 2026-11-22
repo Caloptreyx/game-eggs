@@ -37,3 +37,12 @@ With Public on, the server is listed in the in-game RimWorld Together server bro
 
 - About 100 MB of disk, plus the world and backups.
 - An empty server uses about 30 MB of RAM; usage grows with players and world size.
+
+## Open World
+
+`egg-rimworld-open-world.yml` runs the server of [Open World](https://github.com/D12-Dev/OpenWorld), an older RimWorld multiplayer mod (its last release, v1.0.4 from 2023, is for RimWorld 1.4; RimWorld Together above is its maintained successor). The installer takes the `linux-x64` server from the GitHub release and adds the .NET 8 runtime in `.dotnet/`; the server targets the end-of-life .NET Core 3.1 and runs on .NET 8 through roll-forward, with invariant globalization (the image has no ICU).
+
+- One TCP port (default 25555), the primary allocation; the panel writes it, the player limit and the mod and whitelist switches into `Data/Config.json` on every start (the installer creates that file).
+- Console lines are server commands (`help` lists them: `list`, `say`, `kick`, `ban`, `backup`, `wipe`, ...). Stopping sends `shutdown`.
+- Players, saves, settlements and backups are kept in the folders of the same names; mod lists in `Mods enforced/`, `Mods whitelisted/` and `Mods blacklisted/`.
+- About 70 MB of disk with the .NET runtime.
