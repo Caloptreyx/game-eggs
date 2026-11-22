@@ -204,3 +204,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - Tested: 26.3 build 1045 on Java 25, about 1.4 GB of memory after start and 230 MB of disk; `stop` saves all worlds ("Saved all worlds"), and the second start works.
 - Like the Paper egg it creates `server.properties` with the port keys.
+
+## VIAaaS
+
+`egg-viaaas.yml` runs [VIAaaS](https://github.com/ViaVersion/VIAaaS) (ViaVersion as a Service), a standalone proxy that lets players join servers of other Minecraft versions. Players connect to a virtual host name such as `mc.example.com._p25565._v1_8.via.example.com`, so it needs a wildcard DNS record pointing at the server and its domain under `host-name` in `config/viaaas.yml`. Without one, the server list shows "Missing parts in hostname".
+
+- Ports: the Minecraft port is the default allocation; the HTTPS web page (online-mode logins, self-signed certificate by default) needs a second allocation, set as Web Port. The installer takes `config/viaaas.yml` from the jar, and the panel writes the bind address and Max Players into it from the first start.
+- The installer takes a GitHub release (`latest` or a tag), checked against the release's SHA-256.
+- Tested: v0.5.2 on Java 21. The server list ping answered on the Minecraft port (max players 11 from the panel) and the web page answered on the Web Port. It used about 320 MB of memory and 40 MB of disk; `end` stops it cleanly, and the second start works.

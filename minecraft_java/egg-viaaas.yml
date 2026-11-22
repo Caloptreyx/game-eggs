@@ -1,0 +1,120 @@
+name: VIAaaS
+author: thexylo@pm.me
+description: >-
+  VIAaaS (ViaVersion as a Service), a standalone Minecraft: Java Edition proxy that lets players
+  join servers of other Minecraft versions, with a web page for online-mode logins. Installed from
+  the VIAaaS GitHub releases.
+features: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 17: ghcr.io/caloptreyx/java:17
+file_denylist: []
+startup_commands:
+  # -sslPort sets the HTTPS web page's port (self-signed certificate unless one is configured).
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} -sslPort={{WEBSERVER_PORT}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config/viaaas.yml:
+      parser: file
+      replace:
+        - match: "bind-addresses: "
+          replace_with: 'bind-addresses: ["0.0.0.0:{{server.build.default.port}}"]'
+        - match: "max-players: "
+          replace_with: "max-players: {{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "Application started in "
+    strip_ansi: true
+  stop:
+    type: command
+    value: end
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # VIAaaS installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=ViaVersion/VIAaaS
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server/config
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      if [[ -z "${VIAAAS_VERSION}" || "${VIAAAS_VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          api="https://api.github.com/repos/${REPO}/releases/tags/${VIAAAS_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up VIAaaS ${VIAAAS_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      asset=$(jq -c '[.assets[] | select(.name | endswith("-all.jar"))][0] // empty' <<< "${release}")
+      [[ -n "${tag}" && -n "${asset}" ]] || fail "VIAaaS ${VIAAAS_VERSION} has no -all.jar"
+      echo "Downloading VIAaaS ${tag}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "$(jq -r '.browser_download_url' <<< "${asset}")" || fail "could not download VIAaaS ${tag}"
+      digest=$(jq -r '.digest // empty' <<< "${asset}")
+      if [[ "${digest}" == sha256:* ]]; then
+          echo "${digest#sha256:}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet - || { rm -f "${SERVER_JARFILE}.download"; fail "the VIAaaS jar is corrupt (checksum mismatch)"; }
+      else
+          unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the VIAaaS jar is not valid"; }
+      fi
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${tag}" > .viaaas-version
+
+      ## config/viaaas.yml: VIAaaS writes it on the first start; it is taken from the jar here so the
+      ## panel's port applies from the first start
+      [[ -f config/viaaas.yml ]] || unzip -p "${SERVER_JARFILE}" viaaas.yml > config/viaaas.yml || fail "could not extract viaaas.yml"
+
+      echo "-----------------------------------------"
+      echo "VIAaaS ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Web Port
+    description: >-
+      HTTPS port of the VIAaaS web page (used for online-mode logins). Needs its own allocation.
+    order: 1
+    env_variable: WEBSERVER_PORT
+    default_value: "25543"
+    user_viewable: true
+    user_editable: false
+    rules: "required|integer|between:1024,65535"
+  - name: Max Players
+    description: Player limit shown in the server list.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,100000"
+  - name: VIAaaS Version
+    description: Release tag of ViaVersion/VIAaaS (e.g. v0.5.2), or latest. Applied on reinstall.
+    order: 3
+    env_variable: VIAAAS_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.+-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 4
+    env_variable: SERVER_JARFILE
+    default_value: viaaas.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
