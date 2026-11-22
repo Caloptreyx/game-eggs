@@ -47,3 +47,11 @@ Saved as `.pteroignore` in the server root, this limits backups to your config a
 # Except the Palworld saves and config
 !Pal/Saved/
 ```
+
+## Proton (Windows server)
+
+`egg-palworld-proton.yml` runs the Windows build of the same server (`PalServer-Win64-Shipping-Cmd.exe`) through Proton in the `ghcr.io/caloptreyx/steamcmd:proton` image, for Windows-only server mods such as [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) (copy it into `Pal/Binaries/Win64/`) and `.pak` mods (`Pal/Content/Paks/~mods/`). Variables, ports, RCON console and stop are the same as above; the settings live in `Pal/Saved/Config/WindowsServer/PalWorldSettings.ini`.
+
+- Under Proton the server needs a virtual display (Xvfb; without one it hangs before loading the world) and writes nothing to the console. The startup command waits until RCON answers and prints its `Welcome to Pal Server[v...] <name>` reply, which marks the server as started.
+- Stopping sends `Save` and then `Shutdown 1` over RCON; the world is saved before the server exits.
+- It uses about as much memory as the Linux server, plus Proton's overhead.
