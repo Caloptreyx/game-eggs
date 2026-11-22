@@ -1,0 +1,140 @@
+name: "Minecraft: Bedrock Edition (PowerNukkitX)"
+author: thexylo@pm.me
+description: >-
+  PowerNukkitX, a Java Minecraft: Bedrock Edition server (a maintained fork of Nukkit) with its own
+  plugin API and vanilla features such as world generation, entities and redstone. Installed from
+  the PowerNukkitX GitHub releases.
+features: []
+docker_images:
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 25: ghcr.io/caloptreyx/java:25
+file_denylist: []
+startup_commands:
+  # The first start would otherwise ask for the language and for accepting the LGPL license on the
+  # console; the panel's settings come from server.properties instead.
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}} --language eng --skip-setup --accept-license
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # PowerNukkitX 3 keeps its settings in pnx.yml (server.properties is no longer read).
+    pnx.yml:
+      parser: yaml
+      replace:
+        - match: settings.port
+          replace_with: "{{server.build.default.port}}"
+        - match: settings.motd
+          replace_with: "{{env.SERVER_NAME}}"
+        - match: settings.maxPlayers
+          replace_with: "{{env.MAX_PLAYERS}}"
+        - match: gameplay-settings.gamemode
+          replace_with: "{{env.GAMEMODE}}"
+        - match: gameplay-settings.difficulty
+          replace_with: "{{env.DIFFICULTY}}"
+  startup:
+    done:
+      - "Done ("
+    strip_ansi: true
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Bedrock Edition (PowerNukkitX) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      REPO=PowerNukkitX/PowerNukkitX
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      if [[ -z "${PNX_VERSION}" || "${PNX_VERSION}" == "latest" ]]; then
+          api="https://api.github.com/repos/${REPO}/releases/latest"
+      else
+          api="https://api.github.com/repos/${REPO}/releases/tags/${PNX_VERSION}"
+      fi
+      release=$(curl -fsSL --retry 3 "${api}") || fail "could not look up PowerNukkitX ${PNX_VERSION}"
+      tag=$(jq -r '.tag_name // empty' <<< "${release}")
+      url=$(jq -r '[.assets[] | select(.name | endswith(".jar"))][0].browser_download_url // empty' <<< "${release}")
+      [[ -n "${tag}" && -n "${url}" ]] || fail "PowerNukkitX ${PNX_VERSION} has no server jar"
+      echo "Downloading PowerNukkitX ${tag}..."
+      curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download PowerNukkitX ${tag}"
+      unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded PowerNukkitX jar is not valid"; }
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${tag}" > .powernukkitx-version
+
+      ## pnx.yml: written on the first start otherwise; the keys the panel sets are created here so
+      ## they apply from the first start (PowerNukkitX adds the rest)
+      if [[ ! -f pnx.yml ]]; then
+          printf '%s\n' "settings:" "  ip: 0.0.0.0" "  port: 19132" "  maxPlayers: 20" "  motd: PowerNukkitX Server" \
+              "gameplay-settings:" "  gamemode: 0" "  difficulty: 1" > pnx.yml
+      fi
+
+      echo "-----------------------------------------"
+      echo "PowerNukkitX ${tag} installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name (MOTD)
+    description: Name shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: PowerNukkitX Server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
+  - name: Game Mode
+    description: 0 = survival, 1 = creative, 2 = adventure, 3 = spectator.
+    order: 3
+    env_variable: GAMEMODE
+    default_value: "0"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: Difficulty
+    description: 0 = peaceful, 1 = easy, 2 = normal, 3 = hard.
+    order: 4
+    env_variable: DIFFICULTY
+    default_value: "1"
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:0,1,2,3"
+  - name: PowerNukkitX Version
+    description: Release tag of PowerNukkitX/PowerNukkitX (e.g. 3.0.6), or latest. Applied on reinstall.
+    order: 5
+    env_variable: PNX_VERSION
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Server Jar File
+    description: Name of the server jar file.
+    order: 6
+    env_variable: SERVER_JARFILE
+    default_value: powernukkitx.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

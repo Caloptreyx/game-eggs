@@ -41,3 +41,12 @@ About 1-2 GB of memory for a few players; more for large view or tick distances.
 - Each PocketMine-MP release supports specific Bedrock client versions (5.44.3: 1.26.30); reinstall to update when clients update.
 - Console lines are server commands (`version`, `op`, `whitelist`, ...); stop sends `stop`, which saves the worlds.
 - The installation takes about 45 MB of disk.
+
+## PowerNukkitX
+
+`egg-powernukkitx.yml` runs [PowerNukkitX](https://github.com/PowerNukkitX/PowerNukkitX), a Java Bedrock server (maintained fork of Nukkit) with its own plugin API (plugins in `plugins/`). The installer takes the jar from the GitHub release (latest, or the version set); it runs on the Java 21 or 25 image.
+
+- PowerNukkitX 3 keeps its settings in `pnx.yml`; the panel writes the port, MOTD, player limit, game mode and difficulty into it on every start (the installer creates the file with those keys; the server adds the rest). The first-start wizard (language, license) is skipped with `--language eng --skip-setup --accept-license`.
+- PowerNukkitX 3 talks to clients over NetherNet (the newer Bedrock transport) instead of RakNet: its signalling listens on TCP and its GameSpy4 query on UDP, both on the primary allocation's port. NetherNet media uses an ephemeral UDP port per player unless `network-settings.nethernet.udpPort` is set to a fixed port that is also allocated.
+- Console lines are server commands; stop sends `stop`, which saves the worlds.
+- The installation takes about 90 MB of disk.
