@@ -172,3 +172,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 
 - The first start downloads Sponge's libraries. Tested: 1.21.10-17.0.0 on Java 21, about 1.4 GB of memory after start and 170 MB of disk; `stop` saves the worlds, and the second start works.
 - Like the Paper egg it creates `server.properties` with the port keys.
+
+## Cuberite
+
+`egg-cuberite.yml` runs [Cuberite](https://cuberite.org/), a Minecraft-compatible server written in C++ with Lua plugins (`Plugins/`, enabled in `settings.ini`). Clients 1.8 to 1.12.2 can join. The installer takes the newest successful Linux x86-64 build from builds.cuberite.org (checked against its SHA-1); reinstalling updates the program and plugins and keeps existing `.ini` and `.txt` files.
+
+- The panel sets the port, Server Name (list description) and Max Players in `settings.ini` (checked with a server list ping). The installer creates `settings.ini` with these keys and the three default worlds (Cuberite only adds the Nether and the End when it creates the file itself).
+- The web admin is off (`webadmin.ini`, `Enabled=0`); to use it, add a user there, enable it and give it a port of an additional allocation.
+- Tested: about 150 MB of memory and 24 MB of disk after start; `stop` shuts down cleanly ("Shutdown successful"), and the second start works.

@@ -1,0 +1,108 @@
+name: Cuberite
+author: thexylo@pm.me
+description: >-
+  Cuberite, a lightweight Minecraft: Java Edition compatible server written in C++ with Lua
+  plugins. Clients 1.8 to 1.12.2 can join. Installed from the Cuberite build server.
+features: []
+docker_images:
+  Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  Default: ./Cuberite
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    # settings.ini lists [Worlds] World= twice, which an ini parser may merge, so its lines are
+    # replaced as text; these keys only occur once, in [Server].
+    settings.ini:
+      parser: file
+      replace:
+        - match: "Ports="
+          replace_with: "Ports={{server.build.default.port}}"
+        - match: "Description="
+          replace_with: "Description={{env.SERVER_NAME}}"
+        - match: "MaxPlayers="
+          replace_with: "MaxPlayers={{env.MAX_PLAYERS}}"
+  startup:
+    done:
+      - "Startup complete, took "
+    strip_ansi: true
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Cuberite installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs the newest successful Linux x86-64 build. On a reinstall the program, plugins and
+      # data files are updated; .ini and .txt files that already exist (settings, item and monster
+      # tables, motd) are kept.
+
+      BUILD=https://builds.cuberite.org/job/linux-x86_64/lastSuccessfulBuild/artifact
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          rm -rf /tmp/cuberite /tmp/cuberite.tar.gz
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      echo "Downloading Cuberite (build $(curl -fsSL https://builds.cuberite.org/job/linux-x86_64/lastSuccessfulBuild/buildNumber))..."
+      curl -fsSL --retry 3 -o /tmp/cuberite.tar.gz "${BUILD}/Cuberite.tar.gz" || fail "could not download Cuberite"
+      sha=$(curl -fsSL --retry 3 "${BUILD}/Cuberite.tar.gz.sha1" | awk '{print $1}') || fail "could not download the Cuberite checksum"
+      echo "${sha}  /tmp/cuberite.tar.gz" | sha1sum -c --quiet - || fail "the Cuberite download is corrupt (checksum mismatch)"
+      mkdir -p /tmp/cuberite && tar xzf /tmp/cuberite.tar.gz -C /tmp/cuberite || fail "could not extract Cuberite"
+      (
+          cd /tmp/cuberite || exit 1
+          find . -type f \( -name '*.ini' -o -name '*.txt' \) -path './*' ! -path './Plugins/*' | while read -r f; do
+              [[ -e "/mnt/server/${f}" ]] && rm -f "${f}"
+          done
+          cp -a . /mnt/server/
+      ) || fail "could not install Cuberite"
+      rm -rf /tmp/cuberite /tmp/cuberite.tar.gz
+      chmod +x Cuberite
+
+      ## settings.ini and webadmin.ini: Cuberite writes them on the first start; the keys the panel
+      ## sets are created here so they apply from the first start (Cuberite adds the other keys). Cuberite
+      ## only adds the Nether and the End when it creates settings.ini itself, so they are listed here.
+      ## The web admin is turned off: it has no users until some are added to webadmin.ini.
+      [[ -f settings.ini ]] || printf '%s\n' "[Server]" "Description=Cuberite" "MaxPlayers=100" "Ports=25565" "" \
+          "[Worlds]" "DefaultWorld=world" "World=world_nether" "World=world_the_end" "" \
+          "[WorldPaths]" "world=world" "world_nether=world_nether" "world_the_end=world_the_end" > settings.ini
+      [[ -f webadmin.ini ]] || printf '%s\n' "[WebAdmin]" "Ports=8080" "Enabled=0" > webadmin.ini
+
+      echo "-----------------------------------------"
+      echo "Cuberite installed."
+      echo "-----------------------------------------"
+variables:
+  - name: Server Name
+    description: Description shown in the server list.
+    order: 1
+    env_variable: SERVER_NAME
+    default_value: A Cuberite server
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64'
+  - name: Max Players
+    description: Maximum number of players.
+    order: 2
+    env_variable: MAX_PLAYERS
+    default_value: "20"
+    user_viewable: true
+    user_editable: true
+    rules: "required|integer|between:1,1000"
