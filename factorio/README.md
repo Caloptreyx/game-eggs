@@ -45,5 +45,4 @@ Add player names to `config/server-adminlist.json`, e.g. `["alice", "bob"]`, the
 - On every start the console prints a login token for the Admin Account (`Web interface login token for admin: ...`); paste it into the web interface. On the first start the host's pairing request is approved automatically (`Approved this host's pairing request`).
 - Console lines are `clusterioctl` commands, e.g. `instance create mymap`, `instance assign mymap local`, `instance start mymap`, `instance list`.
 - Stopping stops the host first (its instances save their maps), then the controller, which writes its database.
-- Plugins (e.g. Subspace Storage) are added with `npm install` in the server root and enabled in the web interface; Factorio mods for instances go through the web interface's mod packs.
 - The installation takes about 600 MB of disk (Factorio, Node.js and Clusterio).
