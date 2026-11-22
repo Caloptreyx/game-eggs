@@ -20,11 +20,15 @@ config:
   files:
     velocity.toml:
       parser: file
+      # The file parser matches the start of a line as written: the installer's seed has the query
+      # port at the line start, Velocity rewrites it indented with a tab.
       replace:
         - match: "bind = "
           replace_with: bind = "0.0.0.0:{{server.build.default.port}}"
         - match: "port = "
           replace_with: "port = {{server.build.default.port}}"
+        - match: "\tport = "
+          replace_with: "\tport = {{server.build.default.port}}"
   startup:
     done:
       - "Done ("

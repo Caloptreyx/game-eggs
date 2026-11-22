@@ -1,0 +1,134 @@
+name: "Minecraft: Java Edition (BungeeCord / Waterfall proxy)"
+author: thexylo@pm.me
+description: >-
+  BungeeCord, SpigotMC's Minecraft: Java Edition proxy, which links several backend servers so
+  players can move between them; optionally Waterfall, PaperMC's BungeeCord fork (end of life).
+  The matching Java version is selected through the Docker image.
+features:
+  - java_version
+docker_images:
+  Java 25: ghcr.io/caloptreyx/java:25
+  Java 21: ghcr.io/caloptreyx/java:21
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 8: ghcr.io/caloptreyx/java:8
+file_denylist: []
+startup_commands:
+  Default: java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -jar {{SERVER_JARFILE}}
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    config.yml:
+      parser: file
+      # The file parser matches the start of a line as written, indentation and list dash included.
+      replace:
+        - match: "- host: "
+          replace_with: "- host: 0.0.0.0:{{server.build.default.port}}"
+        - match: "  query_port: "
+          replace_with: "  query_port: {{server.build.default.port}}"
+  startup:
+    done:
+      - "Listening on /"
+    strip_ansi: true
+  stop:
+    type: command
+    value: end
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (BungeeCord / Waterfall proxy) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      case "${PROXY,,}" in
+          bungeecord)
+              ## BungeeCord: the GitHub release of the newest build (build/bNNNN), or a fixed build number
+              if [[ -z "${BUILD_NUMBER}" || "${BUILD_NUMBER,,}" == "latest" ]]; then
+                  tag=$(curl -fsSL --retry 3 https://api.github.com/repos/SpigotMC/BungeeCord/releases/latest | jq -r '.tag_name // empty')
+                  [[ -n "${tag}" ]] || fail "could not look up the newest BungeeCord build"
+              else
+                  tag="build/b${BUILD_NUMBER}"
+              fi
+              echo "Downloading BungeeCord ${tag}..."
+              curl -fsSL --retry 3 -o "${SERVER_JARFILE}.download" "https://github.com/SpigotMC/BungeeCord/releases/download/${tag}/BungeeCord.jar" \
+                  || fail "could not download BungeeCord ${tag}"
+              unzip -tq "${SERVER_JARFILE}.download" > /dev/null || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded BungeeCord jar is not valid"; }
+              installed="bungeecord ${tag}"
+              ;;
+          waterfall)
+              ## Waterfall: PaperMC's download service; the newest version's newest build, or a fixed build
+              API="https://fill.papermc.io/v3/projects/waterfall"
+              UA="calagopus-egg (https://github.com/Caloptreyx/game-eggs)"
+              version=$(curl -fsSL --retry 3 -A "${UA}" "${API}/versions" | jq -r '.versions[0].version.id // empty')
+              [[ -n "${version}" ]] || fail "could not look up the Waterfall versions"
+              if [[ -z "${BUILD_NUMBER}" || "${BUILD_NUMBER,,}" == "latest" ]]; then
+                  build=$(curl -fsSL --retry 3 -A "${UA}" "${API}/versions/${version}/builds/latest")
+              else
+                  build=$(curl -fsSL --retry 3 -A "${UA}" "${API}/versions/${version}/builds/${BUILD_NUMBER}")
+              fi
+              [[ -n "${build}" ]] || fail "Waterfall ${version} has no build ${BUILD_NUMBER}"
+              url=$(jq -r '.downloads["server:default"].url // empty' <<< "${build}")
+              sha256=$(jq -r '.downloads["server:default"].checksums.sha256 // empty' <<< "${build}")
+              echo "Downloading Waterfall ${version} build $(jq -r '.id' <<< "${build}")..."
+              curl -fsSL --retry 3 -A "${UA}" -o "${SERVER_JARFILE}.download" "${url}" || fail "could not download Waterfall"
+              echo "${sha256}  ${SERVER_JARFILE}.download" | sha256sum -c --quiet - \
+                  || { rm -f "${SERVER_JARFILE}.download"; fail "the downloaded Waterfall jar is corrupt (checksum mismatch)"; }
+              installed="waterfall ${version} $(jq -r '.id' <<< "${build}")"
+              ;;
+          *) fail "unknown proxy '${PROXY}'" ;;
+      esac
+      mv -f "${SERVER_JARFILE}.download" "${SERVER_JARFILE}"
+      echo "${installed}" > .server-version
+
+      ## config.yml: the proxy writes it on its first start; the listener lines the panel sets are
+      ## created here so the panel's port applies from the first start (the proxy adds the rest)
+      if [[ ! -f config.yml ]]; then
+          printf '%s\n' 'listeners:' '- host: 0.0.0.0:25577' '  query_port: 25577' '  query_enabled: true' > config.yml
+      fi
+
+      echo "-----------------------------------------"
+      echo "Installed ${installed}."
+      echo "-----------------------------------------"
+variables:
+  - name: Proxy
+    description: bungeecord (SpigotMC, maintained) or waterfall (PaperMC's fork, end of life since 2024).
+    order: 1
+    env_variable: PROXY
+    default_value: bungeecord
+    user_viewable: true
+    user_editable: true
+    rules: "required|in:bungeecord,waterfall"
+  - name: Build Number
+    description: latest for the newest build, or a build number of the selected proxy.
+    order: 2
+    env_variable: BUILD_NUMBER
+    default_value: latest
+    user_viewable: true
+    user_editable: true
+    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+  - name: Server Jar File
+    description: Name of the proxy jar file.
+    order: 3
+    env_variable: SERVER_JARFILE
+    default_value: proxy.jar
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'

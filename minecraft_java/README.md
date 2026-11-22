@@ -110,3 +110,11 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 |------|---------|----------|----------|
 | Proxy | 25577 | TCP | yes (primary allocation) |
 | Query | 25577 | UDP | same port; GameSpy4 query |
+
+## BungeeCord / Waterfall (proxy)
+
+`egg-minecraft-java-bungeecord.yml` runs [BungeeCord](https://www.spigotmc.org/wiki/bungeecord/), SpigotMC's proxy, downloaded from its GitHub releases (Build Number `latest` or a build such as `2114`). Set Proxy to `waterfall` for [Waterfall](https://papermc.io/software/waterfall), PaperMC's BungeeCord fork; it reached end of life in 2024 (last version 1.21), so prefer BungeeCord or the Velocity egg for new networks.
+
+- The panel writes the allocation's port into the first listener's `host` and `query_port` in `config.yml` on every start; the installer creates that listener so this works from the first start, and the proxy adds the rest of its settings. Backends are listed under `servers:`.
+- Backends need `bungeecord: true` in `spigot.yml` and `online-mode=false`, and should only be reachable by the proxy. Plugins go in `plugins/`. Stop sends `end`.
+- Same ports as Velocity (proxy TCP and query UDP on the primary allocation).
