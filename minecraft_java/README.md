@@ -180,3 +180,12 @@ Ports, EULA, memory and stop behave as described above. Paper adds `config/paper
 - The panel sets the port, Server Name (list description) and Max Players in `settings.ini` (checked with a server list ping). The installer creates `settings.ini` with these keys and the three default worlds (Cuberite only adds the Nether and the End when it creates the file itself).
 - The web admin is off (`webadmin.ini`, `Enabled=0`); to use it, add a user there, enable it and give it a port of an additional allocation.
 - Tested: about 150 MB of memory and 24 MB of disk after start; `stop` shuts down cleanly ("Shutdown successful"), and the second start works.
+
+## Technic modpacks (Tekkit and others)
+
+`egg-minecraft-java-technic.yml` installs the server pack of any [Technic Platform](https://www.technicpack.net/) modpack that publishes one (e.g. `tekkitmain`, `tekkit`, `hexxit`, `attack-of-the-bteam`, `blightfall`). Set Technic Pack to the slug from the pack's URL.
+
+- The server jar is the one the pack's start script runs (`.technic-jar`), and that script's `-D` options (such as Blightfall's log4j configuration) are kept (`.technic-java-args`); the memory flags come from the server's limit instead. `-Dlog4j2.formatMsgNoLookups=true` is always added; it only has an effect on log4j 2.10 and newer, so old packs depend on their own log4j configuration.
+- Most Technic packs are for Minecraft 1.4 to 1.12 and need the Java 8 image (the default).
+- Reinstall to update to the pack's newest server pack: files of the previous server pack (`.technic-files`) are removed first, files you added stay, and the world and `server.properties` are never replaced (some server packs ship a world; checked: world files and an edited `server.properties` survived a reinstall).
+- Tested: Tekkit (`tekkitmain`, Minecraft 1.6.4) with about 1.8 GB of memory after start and 100 MB of disk, and Blightfall (1.7.10) with about 2.6 GB and 440 MB; `stop` saves the worlds, and the second start works.

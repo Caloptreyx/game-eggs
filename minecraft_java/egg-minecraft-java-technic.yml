@@ -1,0 +1,140 @@
+name: "Minecraft: Java Edition (Technic modpack)"
+author: thexylo@pm.me
+description: >-
+  Any Technic Platform modpack that publishes a server pack (Tekkit, Hexxit, Attack of the B-Team,
+  Blightfall, ...). Most are for old Minecraft versions and need Java 8, selected through the
+  Docker image.
+features:
+  - eula
+  - java_version
+docker_images:
+  Java 8: ghcr.io/caloptreyx/java:8
+  Java 11: ghcr.io/caloptreyx/java:11
+  Java 17: ghcr.io/caloptreyx/java:17
+  Java 21: ghcr.io/caloptreyx/java:21
+file_denylist: []
+startup_commands:
+  # .technic-jar and .technic-java-args are written by the installer: the pack's server jar and the
+  # -D options of its own start script (e.g. its log4j configuration). Java 8 sets user.home to "?"
+  # when the container user has no passwd entry, and Minecraft then creates a "?" folder.
+  Default: >-
+    java -Xms128M -XX:MaxRAMPercentage=95.0 -Duser.home=/home/container -Dlog4j2.formatMsgNoLookups=true
+    $(cat .technic-java-args 2>/dev/null) -jar "$(cat .technic-jar)" nogui
+force_outgoing_ip: false
+separate_port: false
+config:
+  files:
+    server.properties:
+      parser: properties
+      replace:
+        - match: server-ip
+          replace_with: 0.0.0.0
+        - match: server-port
+          replace_with: "{{server.build.default.port}}"
+        - match: enable-query
+          replace_with: "true"
+        - match: query.port
+          replace_with: "{{server.build.default.port}}"
+  startup:
+    done:
+      - ")! For help, type "
+    strip_ansi: false
+  stop:
+    type: command
+    value: stop
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Minecraft: Java Edition (Technic modpack) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Downloads the server pack the Technic Platform API lists for the pack. On a reinstall the
+      # files of the previous server pack (.technic-files) are removed first; the world and
+      # server.properties are never replaced (some server packs ship a world).
+
+      UA="calagopus-egg (https://github.com/Caloptreyx/game-eggs)"
+      WORK=/mnt/server/.technic-install
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          rm -rf "${WORK}"
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      rm -rf "${WORK}" && mkdir -p "${WORK}/pack" || fail "cannot create ${WORK}"
+
+      info=$(curl -fsSL --retry 3 -A "${UA}" "https://api.technicpack.net/modpack/${TECHNIC_PACK}?build=999") \
+          || fail "the Technic Platform has no modpack '${TECHNIC_PACK}'"
+      url=$(jq -r '.serverPackUrl // empty' <<< "${info}")
+      [[ -n "${url}" ]] || fail "the modpack '${TECHNIC_PACK}' has no server pack on the Technic Platform"
+      echo "Downloading the $(jq -r '.displayName' <<< "${info}") server pack (Minecraft $(jq -r '.minecraft' <<< "${info}"))..."
+      curl -fsSL --retry 3 -A "${UA}" -o "${WORK}/pack.zip" "${url}" || fail "could not download ${url}"
+      unzip -q "${WORK}/pack.zip" -d "${WORK}/pack" < /dev/null || fail "could not extract the server pack"
+      cd "${WORK}/pack" || fail "cannot enter the extracted pack"
+      # some server packs have everything in one top-level folder
+      if [[ $(ls -A | wc -l) -eq 1 && -d "$(ls -A)" ]]; then cd "$(ls -A)" || fail "cannot enter the pack folder"; fi
+
+      ## the server jar: the pack's start script names it; otherwise the one jar in the root that is not
+      ## the vanilla server or an installer
+      script=$(ls launch.sh start.sh ServerStart.sh startserver.sh 2>/dev/null | head -n 1)
+      jar=""
+      [[ -n "${script}" ]] && jar=$(grep -oE -- '-jar +"?[^" ]+\.jar' "${script}" | head -n 1 | sed -E 's/-jar +"?//')
+      [[ -n "${jar}" && -f "${jar}" ]] || jar=$(ls *.jar 2>/dev/null | grep -viE '^minecraft_server|installer' | head -n 1)
+      [[ -n "${jar}" ]] || fail "the server pack has no server jar"
+      java_args=""
+      [[ -n "${script}" ]] && java_args=$(grep -oE -- '-D[^ "]+' "${script}" | sort -u | tr '\n' ' ')
+      echo "Server jar: ${jar}"
+
+      ## the world and server.properties belong to the server: a pack's copies are only installed when
+      ## the server has none, and are never listed in .technic-files (so never removed on a reinstall)
+      props=/mnt/server/server.properties
+      [[ -f "${props}" ]] || props=server.properties
+      level=$( (grep -E '^level-name=' "${props}" 2>/dev/null || echo level-name=world) | head -n 1 | cut -d= -f2 | tr -d '\r')
+      [[ -n "${level}" && "${level}" != *..* && "${level}" != /* ]] || level=world
+      [[ -e "/mnt/server/${level}" ]] && rm -rf "./${level}"
+      [[ -f /mnt/server/server.properties ]] && rm -f server.properties
+
+      ## remove the files of the previous server pack, then install this one
+      if [[ -f /mnt/server/.technic-files ]]; then
+          while IFS= read -r f; do [[ -n "${f}" && "${f}" != *..* ]] && rm -f -- "/mnt/server/${f}"; done < /mnt/server/.technic-files
+      fi
+      find . -type f | sed 's#^\./##' \
+          | awk -v l="${level}" '$0 != "server.properties" && $0 != l && index($0, l "/") != 1' > /mnt/server/.technic-files
+      cp -a . /mnt/server/ || fail "could not copy the server pack"
+      cd /mnt/server || fail "cannot enter /mnt/server"
+      rm -rf "${WORK}"
+      echo "${jar}" > .technic-jar
+      echo "${java_args}" > .technic-java-args
+
+      ## server.properties: the panel only replaces keys that exist
+      touch server.properties
+      for kv in server-ip=0.0.0.0 server-port=25565 enable-query=true query.port=25565; do
+          grep -q "^${kv%%=*}=" server.properties || echo "${kv}" >> server.properties
+      done
+
+      echo "-----------------------------------------"
+      echo "Server pack installed. Minecraft $(jq -r '.minecraft' <<< "${info}") modpacks before 1.17 need the Java 8 image."
+      echo "-----------------------------------------"
+variables:
+  - name: Technic Pack
+    description: >-
+      Slug of the modpack on the Technic Platform, from its URL technicpack.net/modpack/<slug>
+      (e.g. tekkitmain, hexxit, blightfall). Reinstall to update to the pack's newest server pack.
+    order: 1
+    env_variable: TECHNIC_PACK
+    default_value: tekkitmain
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:64|regex:/^[\w.-]+$/'
