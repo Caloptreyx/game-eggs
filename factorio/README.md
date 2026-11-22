@@ -36,3 +36,14 @@ Game files are replaced on reinstall; `saves/`, `mods/` and `config/` are kept.
 ## Admins
 
 Add player names to `config/server-adminlist.json`, e.g. `["alice", "bob"]`, then restart.
+
+## Clusterio (standalone)
+
+`egg-factorio-clusterio.yml` runs [Clusterio](https://github.com/clusterio/clusterio), the clustered Factorio server manager, as a standalone cluster: the controller (web interface) and one host (which runs Factorio server instances) in the same server. The installer adds Node.js (newest LTS, in `.node/`, with the `libatomic` library it needs), the Factorio headless server (`factorio/`, stable or the Factorio Version set) and Clusterio with `clusterioctl`. A reinstall updates all three and keeps the cluster.
+
+- Ports: the primary allocation is the controller's web interface (HTTP, TCP). Factorio instances get UDP ports from Factorio Ports (e.g. `34197-34200`); add those as allocations.
+- On every start the console prints a login token for the Admin Account (`Web interface login token for admin: ...`); paste it into the web interface. On the first start the host's pairing request is approved automatically (`Approved this host's pairing request`).
+- Console lines are `clusterioctl` commands, e.g. `instance create mymap`, `instance assign mymap local`, `instance start mymap`, `instance list`.
+- Stopping stops the host first (its instances save their maps), then the controller, which writes its database.
+- Plugins (e.g. Subspace Storage) are added with `npm install` in the server root and enabled in the web interface; Factorio mods for instances go through the web interface's mod packs.
+- The installation takes about 600 MB of disk (Factorio, Node.js and Clusterio).

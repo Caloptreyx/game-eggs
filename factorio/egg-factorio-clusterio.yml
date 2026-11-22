@@ -1,0 +1,204 @@
+name: "Factorio: Clusterio (standalone)"
+author: thexylo@pm.me
+description: >-
+  Clusterio, the clustered Factorio server manager: a controller with a web interface and a host
+  that runs Factorio server instances, with plugins for cross-server features. This egg runs a
+  standalone cluster (controller and host in one server) with Node.js and the Factorio headless
+  server installed into the server files.
+features: []
+docker_images:
+  SteamCMD Debian: ghcr.io/caloptreyx/steamcmd:debian
+file_denylist: []
+startup_commands:
+  # clusterio-start.sh (written by the installer) applies the panel's settings, starts the
+  # controller and then the host, approves the host's pairing request on its first start, prints a
+  # web interface login token and passes console lines to clusterioctl. On the stop signal
+  # (SIGINT, which the image's init passes to every process) the host stops its Factorio instances
+  # and the controller writes its database; the script waits for both.
+  Default: bash ./clusterio-start.sh
+force_outgoing_ip: false
+separate_port: false
+config:
+  files: {}
+  startup:
+    done:
+      - Started host
+    strip_ansi: true
+  stop:
+    type: signal
+    value: SIGINT
+scripts:
+  installation:
+    container: ghcr.io/caloptreyx/installers:debian
+    entrypoint: bash
+    content: |
+      #!/bin/bash
+      # Factorio: Clusterio (standalone) installation script
+      #
+      # Server files: /mnt/server
+      # Installer image: ghcr.io/caloptreyx/installers:debian
+      #
+      # Installs Node.js (.node/), the Factorio headless server (factorio/) and a standalone Clusterio
+      # cluster (controller + host + clusterioctl). A reinstall updates all three; the cluster's
+      # configs, database, instances and mods are kept.
+
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
+      mkdir -p /mnt/server
+      cd /mnt/server || fail "cannot enter /mnt/server"
+
+      ## Node.js: the newest LTS release
+      node_version=$(curl -fsSL --retry 3 https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)][0].version')
+      [[ "${node_version}" =~ ^v[0-9.]+$ ]] || fail "could not look up the Node.js LTS version"
+      echo "Installing Node.js ${node_version}..."
+      rm -rf .node && mkdir -p .node
+      curl -fsSL --retry 3 "https://nodejs.org/dist/${node_version}/node-${node_version}-linux-x64.tar.xz" \
+          | tar -xJ -C .node --strip-components=1 || fail "could not install Node.js ${node_version}"
+      # Node.js needs libatomic, which neither this image nor the runtime image has: it goes into .node/lib.
+      apt-get update -qq && apt-get install -y -qq --no-install-recommends libatomic1 > /dev/null || fail "could not install libatomic1"
+      cp -a /usr/lib/x86_64-linux-gnu/libatomic.so.1* .node/lib/ || fail "could not copy libatomic"
+      export PATH="/mnt/server/.node/bin:${PATH}" LD_LIBRARY_PATH="/mnt/server/.node/lib"
+      node --version > /dev/null || fail "Node.js does not run"
+
+      ## Factorio headless server (stable, or FACTORIO_VERSION)
+      echo "Installing the Factorio headless server (${FACTORIO_VERSION:-stable})..."
+      curl -fsSL --retry 3 -o /tmp/factorio.tar.xz "https://factorio.com/get-download/${FACTORIO_VERSION:-stable}/headless/linux64" \
+          || fail "could not download Factorio ${FACTORIO_VERSION}"
+      tar -xJf /tmp/factorio.tar.xz -C /mnt/server || fail "could not extract Factorio"
+      rm -f /tmp/factorio.tar.xz
+      [[ -x factorio/bin/x64/factorio ]] || fail "the Factorio download has no server binary"
+
+      ## Clusterio: a new standalone cluster, or an update of the installed one
+      if [[ ! -f config-controller.json ]]; then
+          echo "Creating a standalone Clusterio cluster..."
+          mkdir -p /tmp/clusterio && cd /tmp/clusterio || fail "cannot create /tmp/clusterio"
+          npx --yes @clusterio/create --allow-install-as-root --mode standalone --admin "${ADMIN_NAME}" \
+              --http-port 8080 --host-name "${HOST_NAME}" --public-address 127.0.0.1 \
+              --factorio-dir factorio --no-remote-npm --log-level warn --plugins < /dev/null \
+              || fail "could not create the Clusterio cluster"
+          cp -a /tmp/clusterio/. /mnt/server/ && rm -rf /tmp/clusterio
+          cd /mnt/server || fail "cannot enter /mnt/server"
+      else
+          echo "Updating Clusterio..."
+          npm update --no-audit --no-fund > /dev/null || fail "could not update Clusterio"
+      fi
+      npm install --no-audit --no-fund @clusterio/ctl > /dev/null || fail "could not install clusterioctl"
+      [[ -x node_modules/.bin/clusteriocontroller && -x node_modules/.bin/clusteriohost && -x node_modules/.bin/clusterioctl ]] \
+          || fail "Clusterio is incomplete"
+
+      ## the start script
+      cat > /mnt/server/clusterio-start.sh << 'EOF'
+      #!/bin/bash
+      # Starts the standalone Clusterio cluster (written by the egg's installer; reinstalling replaces it).
+      cd /home/container || exit 1
+      export PATH="/home/container/.node/bin:${PATH}" LD_LIBRARY_PATH="/home/container/.node/lib" NODE_OPTIONS="--enable-source-maps"
+      B=/home/container/node_modules/.bin
+
+      ## panel settings
+      "${B}/clusteriocontroller" config set controller.http_port "${SERVER_PORT}" > /dev/null
+      "${B}/clusteriocontroller" config set controller.name "${CLUSTER_NAME}" > /dev/null
+      "${B}/clusteriohost" config set host.public_address "${PUBLIC_ADDRESS:-${SERVER_IP}}" > /dev/null
+      "${B}/clusteriohost" config set host.factorio_port_range "${FACTORIO_PORTS}" > /dev/null
+      "${B}/clusteriohost" config set host.controller_url "http://127.0.0.1:${SERVER_PORT}/" > /dev/null
+      "${B}/clusteriohost" config set host.factorio_directory factorio > /dev/null
+      [[ -f config-ctl.json ]] || "${B}/clusteriocontroller" bootstrap create-ctl-config "${ADMIN_NAME}" > /dev/null
+      "${B}/clusterioctl" config set ctl.controller_url "http://127.0.0.1:${SERVER_PORT}/" > /dev/null 2>&1
+
+      ## controller, in its own session so the stop signal reaches it only after the host has stopped
+      setsid "${B}/clusteriocontroller" run & CTL=$!
+      for i in $(seq 1 60); do
+          (exec 3<> "/dev/tcp/127.0.0.1/${SERVER_PORT}") 2>/dev/null && break
+          kill -0 "${CTL}" 2>/dev/null || exit 1
+          sleep 1
+      done
+      echo "Web interface login token for ${ADMIN_NAME}: $("${B}/clusteriocontroller" bootstrap generate-user-token "${ADMIN_NAME}" 2>/dev/null | tail -n 1)"
+
+      ## host; its pairing request is approved automatically on the first start
+      "${B}/clusteriohost" run > >(while IFS= read -r l; do
+          echo "${l}"
+          if [[ "${l}" =~ with\ code\ ([A-Z0-9-]+), ]]; then
+              "${B}/clusterioctl" host approve "${BASH_REMATCH[1]}" > /dev/null 2>&1 && echo "Approved this host's pairing request"
+          fi
+      done) 2>&1 & HOST=$!
+
+      # The image's init (tini -g) passes the stop signal to the host and Factorio, which stop the
+      # instances (Factorio saves the map); a second SIGINT would make them quit immediately, so the
+      # script only waits for them. The controller (own session) is stopped afterwards, so the host
+      # keeps its connection while it shuts down; then the controller writes its database.
+      stop() {
+          while pgrep -f "clusteriohost run|bin/x64/factorio" > /dev/null; do sleep 0.5; done
+          kill -INT "${CTL}" 2>/dev/null
+          while kill -0 "${CTL}" 2>/dev/null; do sleep 0.5; done
+          exit 0
+      }
+      trap stop INT TERM
+      ## console lines are clusterioctl commands, e.g. "instance list"
+      while IFS= read -r line; do
+          [[ -n "${line}" ]] && "${B}/clusterioctl" ${line}
+      done <&0 &
+      while kill -0 "${CTL}" 2>/dev/null; do wait "${CTL}"; done
+      EOF
+      chmod +x /mnt/server/clusterio-start.sh
+
+      echo "-----------------------------------------"
+      echo "Installation completed. The web interface login token is printed on every start."
+      echo "-----------------------------------------"
+variables:
+  - name: Cluster Name
+    description: Name of the cluster in the web interface.
+    order: 1
+    env_variable: CLUSTER_NAME
+    default_value: Clusterio
+    user_viewable: true
+    user_editable: true
+    rules: "required|string|max:64"
+  - name: Admin Account
+    description: Name of the cluster admin, whose login token is printed on every start. Set at install time.
+    order: 2
+    env_variable: ADMIN_NAME
+    default_value: admin
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Host Name
+    description: Name of the host in the web interface. Set at install time.
+    order: 3
+    env_variable: HOST_NAME
+    default_value: local
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+  - name: Factorio Ports
+    description: >-
+      UDP port range the host gives its Factorio instances, e.g. 34197-34200. Each running instance
+      needs one port of the range as an additional allocation.
+    order: 4
+    env_variable: FACTORIO_PORTS
+    default_value: 34197-34200
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^\d{4,5}-\d{4,5}$/'
+  - name: Public Address
+    description: Address players use to join the instances (shown in the web interface). Leave empty for the allocation IP.
+    order: 5
+    env_variable: PUBLIC_ADDRESS
+    default_value: ""
+    user_viewable: true
+    user_editable: true
+    rules: 'nullable|string|max:255|regex:/^[\w.:-]*$/'
+  - name: Factorio Version
+    description: Factorio headless version to install, e.g. 2.0.72, or stable / latest. Applied on reinstall.
+    order: 6
+    env_variable: FACTORIO_VERSION
+    default_value: stable
+    user_viewable: true
+    user_editable: true
+    rules: 'required|string|max:16|regex:/^[\w.]+$/'
