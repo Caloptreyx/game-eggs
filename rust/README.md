@@ -38,3 +38,10 @@ Rust needs a lot of memory: about 8 GB for a 3000 m procedural map, more for lar
 ## Wiping
 
 Stop the server and delete the `.sav` and `.map` files in `server/rust/` for a map wipe; also delete `player.blueprints.*.db` for a blueprint wipe. Changing World Seed or World Size also starts a fresh map.
+
+## Staging branch
+
+`egg-rust-staging.yml` runs the same server on Facepunch's `staging` branch, the test build of the next update; players join it with the Rust Staging Branch client (a separate Steam app for game owners). Variables, ports, console and stop are the same as above, except:
+
+- The image's own update only knows the public branch, so it is turned off; the startup command updates the staging branch itself through SteamCMD when Auto Update is on (`Success! App '258550' already up to date.` in the console).
+- Vanilla only: the Oxide and Carbon builds follow the public branch and may not load on staging.
