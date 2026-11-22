@@ -53,3 +53,11 @@ About 2 GB of memory for a few players; more for large view distances, many play
 - Reinstall to change version or build. Worlds, plugins and their configs are kept.
 
 Ports, EULA, memory and stop behave as described above. Paper adds `config/paper-*.yml`, `bukkit.yml` and `spigot.yml` with its own settings.
+
+## Purpur
+
+`egg-minecraft-java-purpur.yml` runs [Purpur](https://purpurmc.org/), a fork of Paper with many extra gameplay and configuration options (`purpur.yml`); it loads the same plugins as Paper. It is downloaded from PurpurMC's API and checked against the published MD5.
+
+- Minecraft Version: `latest` for the newest version Purpur supports, or a version such as `1.21.10`. Build Number: `latest` for the newest successful build, or a build number.
+- The installer prints the Java version Mojang's metadata gives for the installed version; select that image.
+- Like the Paper egg, the installer creates `server.properties` with the port keys, and a reinstall keeps worlds, plugins and configs.
