@@ -143,7 +143,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._-]+$/'
   - name: NeoForge Version
     description: >-
       latest for the newest NeoForge release for that Minecraft version (betas excluded), or a
@@ -153,4 +157,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9.-]+$/'

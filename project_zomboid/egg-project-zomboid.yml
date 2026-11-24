@@ -129,7 +129,11 @@ variables:
     default_value: A Project Zomboid Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Description
     description: Description shown in the in-game server browser. Use <LINE> for a line break.
     order: 2
@@ -137,7 +141,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]*$/'
   - name: Public
     description: List the server in the in-game browser. (true or false)
     order: 3
@@ -145,7 +153,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 4
@@ -154,7 +164,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Admin Password
     description: >-
       Password of the in-game account "admin", set on every start. Log in with it to use the admin
@@ -165,7 +179,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Max Players
     description: Maximum number of players on the server.
     order: 6
@@ -173,7 +191,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Java Memory
     description: >-
       Maximum Java heap in MB. The server needs about 2 GB more than this on top, so keep it well
@@ -183,7 +204,10 @@ variables:
     default_value: "4096"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2048,65536"
+    rules:
+      - required
+      - integer
+      - between:2048,65536
   - name: Mods
     description: >-
       Mod IDs to load, separated by semicolons, e.g. ModA;ModB. Leave empty for no mods. Written to
@@ -193,7 +217,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:4096|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:4096
+      - 'regex:/^[^\r\n]*$/'
   - name: Workshop Items
     description: >-
       Steam Workshop item IDs to download, separated by semicolons, e.g. 2169435993;2392709985.
@@ -203,7 +231,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:4096|regex:/^(\d+(;\d+)*)?$/'
+    rules:
+      - nullable
+      - string
+      - max:4096
+      - 'regex:/^(\d+(;\d+)*)?$/'
   - name: UDP Port
     description: Second UDP game port. Needs its own allocation.
     order: 10
@@ -211,7 +243,10 @@ variables:
     default_value: "16262"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: Enables RCON for remote admin tools. Leave empty to keep RCON off.
     order: 11
@@ -220,7 +255,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: RCON Port
     description: TCP port for RCON. Needs its own allocation when RCON is enabled.
     order: 12
@@ -228,7 +267,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional server options, e.g. -debuglog=Network or -nosteam.
     order: 13
@@ -236,7 +278,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 14
@@ -244,7 +289,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. unstable or legacy41. Leave empty for the stable release.
@@ -254,7 +301,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Project Zomboid dedicated server.
     order: 16
@@ -262,4 +313,7 @@ variables:
     default_value: "380870"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:380870"
+    rules:
+      - required
+      - string
+      - in:380870

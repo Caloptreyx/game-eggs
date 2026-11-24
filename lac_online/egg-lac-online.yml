@@ -147,7 +147,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9.]+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9.]+)$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -155,7 +159,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Map
     description: Map, or a rotation separated by commas (City, Garage, RagdollParty, TrainFacility, ZombieSurvival, NewTerrainRamps, Island, CarSoccer, editor:<map>).
     order: 3
@@ -163,7 +170,11 @@ variables:
     default_value: TrainFacility
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:256|regex:/^[\w:,-]+$/'
+    rules:
+      - required
+      - string
+      - max:256
+      - 'regex:/^[\w:,-]+$/'
   - name: Server Password
     description: Password players need to join, or none.
     order: 4
@@ -172,7 +183,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Admin Code
     description: Players become admin by typing /<code> in the chat. Use a number nobody can guess.
     order: 5
@@ -181,7 +196,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Share To Community
     description: List the server in the community server list. (true or false)
     order: 6
@@ -189,7 +208,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Server Language
     description: Language shown in the server list.
     order: 7
@@ -197,4 +218,8 @@ variables:
     default_value: English
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[A-Za-z ]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z ]+$/'

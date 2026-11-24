@@ -161,7 +161,11 @@ variables:
     default_value: Luna Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^<>&\r\n]+$/'
   - name: Description
     description: Description shown in the server list.
     order: 2
@@ -169,7 +173,11 @@ variables:
     default_value: Luna Multiplayer server
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:200|regex:/^[^<>&\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:200
+      - 'regex:/^[^<>&\r\n]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -178,7 +186,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^<>&\s]*$/'
   - name: Admin Password
     description: Password for admin commands from the in-game admin window. Leave empty for none.
     order: 4
@@ -187,7 +199,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^<>&\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 5
@@ -195,7 +211,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Game Mode
     description: Sandbox, Science or Career. Applies to a new universe.
     order: 6
@@ -203,7 +222,9 @@ variables:
     default_value: Sandbox
     user_viewable: true
     user_editable: true
-    rules: "required|in:Sandbox,Science,Career"
+    rules:
+      - required
+      - in:Sandbox,Science,Career
   - name: Public
     description: Register with the LMP master servers (server list). (true / false)
     order: 7
@@ -211,7 +232,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Website
     description: Serve the server status as JSON over HTTP on the Website Port. (true / false)
     order: 8
@@ -219,7 +242,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Website Port
     description: TCP port of the status website. Needs its own allocation when Website is on.
     order: 9
@@ -227,7 +252,10 @@ variables:
     default_value: "8900"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: LMP Version
     description: latest, or a release tag such as 0.29.2. Players need the matching client mod. Reinstall to update.
     order: 10
@@ -235,4 +263,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|[0-9][\w.-]*)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|[0-9][\w.-]*)$/'

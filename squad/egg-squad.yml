@@ -117,7 +117,11 @@ variables:
     default_value: Squad Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:80|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:80
+      - 'regex:/^[^"\r\n]+$/'
   - name: Max Players
     description: Maximum number of players (FIXEDMAXPLAYERS and MaxPlayers in Server.cfg), up to 100.
     order: 2
@@ -125,7 +129,10 @@ variables:
     default_value: "80"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,100"
+    rules:
+      - required
+      - integer
+      - between:2,100
   - name: Reserved Slots
     description: Slots kept free for admins and members with the reserve permission (Admins.cfg).
     order: 3
@@ -133,7 +140,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,100"
+    rules:
+      - required
+      - integer
+      - between:0,100
   - name: Advertise
     description: List the server in the server browser (true), or keep it hidden (false).
     order: 4
@@ -141,7 +151,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Random Rotation
     description: >-
       Randomize the map rotation: NONE (in order), FIRST (random first layer, then in order) or
@@ -151,7 +163,9 @@ variables:
     default_value: NONE
     user_viewable: true
     user_editable: true
-    rules: "required|in:NONE,FIRST,ALWAYS"
+    rules:
+      - required
+      - in:NONE,FIRST,ALWAYS
   - name: RCON Password
     description: RCON password, also used by the panel console. No spaces.
     order: 6
@@ -160,7 +174,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Query Port
     description: >-
       UDP port for Steam server queries. Needs its own allocation.
@@ -169,7 +188,10 @@ variables:
     default_value: "27165"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Beacon Port
     description: UDP port of the server beacon. Needs its own allocation.
     order: 8
@@ -177,7 +199,10 @@ variables:
     default_value: "15000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -187,7 +212,10 @@ variables:
     default_value: "21114"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters, e.g. FIXEDMAXTICKRATE=50.
     order: 10
@@ -195,7 +223,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 11
@@ -203,7 +234,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
     order: 12
@@ -211,7 +244,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Squad dedicated server.
     order: 13
@@ -219,4 +256,7 @@ variables:
     default_value: "403240"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:403240"
+    rules:
+      - required
+      - string
+      - in:403240

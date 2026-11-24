@@ -151,7 +151,10 @@ variables:
     default_value: A Renown Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -160,7 +163,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Admin Password
     description: Password for in-game admin rights.
     order: 3
@@ -169,7 +175,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -177,7 +186,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: Region
     description: >-
       Region tag shown in the server list and usable as a filter, e.g. US East, Europe, Asia, or any
@@ -187,7 +199,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:32"
+    rules:
+      - nullable
+      - string
+      - max:32
   - name: Message of the Day
     description: Message shown to players when they join.
     order: 6
@@ -195,7 +210,10 @@ variables:
     default_value: Welcome to Renown!
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Save Name
     description: Name of the survival save to load or create.
     order: 7
@@ -203,7 +221,11 @@ variables:
     default_value: Save 1
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w -]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w -]+$/'
   - name: Query Port
     description: UDP port for Steam server queries and the server list. Needs its own allocation.
     order: 8
@@ -211,7 +233,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Beacon Port
     description: UDP beacon port used by the server queue and lobby. Needs its own allocation.
     order: 9
@@ -219,7 +244,10 @@ variables:
     default_value: "9999"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       TCP port of the RCON server. The panel console uses it locally; give it its own allocation
@@ -229,7 +257,10 @@ variables:
     default_value: "25575"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: Password of the RCON server, also used by the panel console. No spaces.
     order: 11
@@ -238,7 +269,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 12
@@ -246,7 +282,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 13
@@ -254,7 +293,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install: beta or experimental. Leave empty for the stable release.
@@ -264,7 +305,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|in:beta,experimental"
+    rules:
+      - nullable
+      - string
+      - in:beta,experimental
   - name: Steam App ID
     description: Steam app id of the Renown dedicated server.
     order: 15
@@ -272,4 +316,7 @@ variables:
     default_value: "1512690"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1512690"
+    rules:
+      - required
+      - string
+      - in:1512690

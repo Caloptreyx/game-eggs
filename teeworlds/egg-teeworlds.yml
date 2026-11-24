@@ -102,7 +102,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|\d+(\.\d+)*)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|\d+(\.\d+)*)$/'
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -110,7 +114,11 @@ variables:
     default_value: Teeworlds Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -119,7 +127,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: RCON Password
     description: Admin password for the in-game remote console. Leave empty and the server prints a random one on every start.
     order: 4
@@ -128,7 +140,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Game Type
     description: dm (deathmatch), tdm (team deathmatch), ctf (capture the flag), lms (last man standing) or lts (last team standing).
     order: 5
@@ -136,7 +152,9 @@ variables:
     default_value: dm
     user_viewable: true
     user_editable: true
-    rules: "required|in:dm,tdm,ctf,lms,lts"
+    rules:
+      - required
+      - in:dm,tdm,ctf,lms,lts
   - name: Map
     description: Map to start with (a .map file in teeworlds-data/teeworlds/maps/ or the built-in data/maps/, without .map), e.g. dm1, ctf2.
     order: 6
@@ -144,7 +162,11 @@ variables:
     default_value: dm1
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n\/]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\/]+$/'
   - name: Max Players
     description: Maximum number of players (1-64).
     order: 7
@@ -152,7 +174,10 @@ variables:
     default_value: "12"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Public
     description: Register the server in the Teeworlds server browser. (1 = listed, 0 = join by address only)
     order: 8
@@ -160,7 +185,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional console commands, separated by ; e.g. sv_scorelimit 30; sv_timelimit 10
     order: 9
@@ -168,4 +195,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

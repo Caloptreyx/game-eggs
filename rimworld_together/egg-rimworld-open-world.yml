@@ -114,7 +114,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Enforce Mods
     description: Players must run exactly the server's mod list (Data/Mods). (true / false)
     order: 2
@@ -122,7 +125,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Mod Blacklist
     description: Refuse players who run a mod listed in the blacklist. (true / false)
     order: 3
@@ -130,7 +135,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Whitelist
     description: Only players on the whitelist can join. (true / false)
     order: 4
@@ -138,7 +145,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Open World Version
     description: Release tag of D12-Dev/OpenWorld (e.g. v1.0.4), or latest. Must match the players' mod. Applied on reinstall.
     order: 5
@@ -146,4 +155,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'

@@ -90,7 +90,11 @@ variables:
     default_value: Colony Survival Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: World Name
     description: Name of the world (savegames/<name>). Created on start when missing.
     order: 2
@@ -98,7 +102,11 @@ variables:
     default_value: world
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -106,7 +114,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Server Password
     description: Password players need to join. Leave empty for no password. No spaces.
     order: 4
@@ -115,7 +126,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Network Type
     description: SteamOnline (listed, Steam networking), SteamLAN or LAN.
     order: 5
@@ -123,7 +138,9 @@ variables:
     default_value: SteamOnline
     user_viewable: true
     user_editable: true
-    rules: "required|in:SteamOnline,SteamLAN,LAN"
+    rules:
+      - required
+      - in:SteamOnline,SteamLAN,LAN
   - name: Steam Port
     description: UDP port for Steam (server list). Needs its own allocation.
     order: 6
@@ -131,7 +148,10 @@ variables:
     default_value: "27005"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional +server.* settings.
     order: 7
@@ -139,7 +159,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -147,7 +171,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Colony Survival dedicated server.
     order: 9
@@ -155,4 +181,7 @@ variables:
     default_value: "748090"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:748090"
+    rules:
+      - required
+      - string
+      - in:748090

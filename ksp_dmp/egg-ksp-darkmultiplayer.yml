@@ -126,7 +126,11 @@ variables:
     default_value: DMP Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n=]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n=]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -134,7 +138,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Game Mode
     description: SANDBOX, SCIENCE or CAREER.
     order: 3
@@ -142,7 +149,9 @@ variables:
     default_value: SANDBOX
     user_viewable: true
     user_editable: true
-    rules: "required|in:SANDBOX,SCIENCE,CAREER"
+    rules:
+      - required
+      - in:SANDBOX,SCIENCE,CAREER
   - name: Difficulty
     description: EASY, NORMAL, MODERATE or HARD.
     order: 4
@@ -150,7 +159,9 @@ variables:
     default_value: NORMAL
     user_viewable: true
     user_editable: true
-    rules: "required|in:EASY,NORMAL,MODERATE,HARD"
+    rules:
+      - required
+      - in:EASY,NORMAL,MODERATE,HARD
   - name: Warp Mode
     description: >-
       Time warp: SUBSPACE (each player warps on their own and can sync to others), MCW_FORCE,
@@ -160,7 +171,9 @@ variables:
     default_value: SUBSPACE
     user_viewable: true
     user_editable: true
-    rules: "required|in:SUBSPACE,MCW_FORCE,MCW_VOTE,MCW_LOWEST,NONE"
+    rules:
+      - required
+      - in:SUBSPACE,MCW_FORCE,MCW_VOTE,MCW_LOWEST,NONE
   - name: Modpack Mode
     description: NONE, CKAN or GAMEDATA (players get mods from the server, see the README).
     order: 6
@@ -168,7 +181,9 @@ variables:
     default_value: NONE
     user_viewable: true
     user_editable: true
-    rules: "required|in:NONE,CKAN,GAMEDATA"
+    rules:
+      - required
+      - in:NONE,CKAN,GAMEDATA
   - name: Whitelist
     description: Only players on the whitelist (/whitelist) can join. (True / False)
     order: 7
@@ -176,7 +191,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Cheats
     description: Allow cheats (the KSP debug menu). (True / False)
     order: 8
@@ -184,7 +201,9 @@ variables:
     default_value: "True"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: MOTD
     description: Message shown to players when they join; %name% is the player's name.
     order: 9
@@ -192,7 +211,11 @@ variables:
     default_value: "Welcome, %name%!"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:200|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:200
+      - 'regex:/^[^\r\n]+$/'
   - name: DMP Version
     description: DMP server version from d-mp.org (e.g. 0.3.8.5), or latest. Applied on reinstall.
     order: 10
@@ -200,4 +223,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|v?[0-9.]+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|v?[0-9.]+)$/'

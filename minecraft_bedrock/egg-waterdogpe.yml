@@ -80,7 +80,11 @@ variables:
     default_value: WaterdogPE Proxy
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Max Players
     description: Maximum number of players on the proxy.
     order: 2
@@ -88,7 +92,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,10000"
+    rules:
+      - required
+      - integer
+      - between:1,10000
   - name: Proxy Jar File
     description: Name of the proxy jar file.
     order: 3
@@ -96,4 +103,8 @@ variables:
     default_value: waterdog.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

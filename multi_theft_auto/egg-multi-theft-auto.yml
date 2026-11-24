@@ -113,7 +113,11 @@ variables:
     default_value: MTA:SA Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:96|regex:/^[^<>&\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:96
+      - 'regex:/^[^<>&\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -122,7 +126,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:32|regex:/^[^<>&\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[^<>&\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -130,7 +138,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,4096"
+    rules:
+      - required
+      - integer
+      - between:1,4096
   - name: Public
     description: >-
       List the server in the in-game server browser (All-Seeing Eye). Needs the game port + 123 (UDP)
@@ -140,7 +151,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Owner Email
     description: Contact address of the server owner (used by the MTA team for important notices). Optional.
     order: 5
@@ -148,4 +161,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|email|max:128'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^@\s]+@[^@\s]+\.[^@\s]+$/'

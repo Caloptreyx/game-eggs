@@ -138,7 +138,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._-]+$/'
   - name: Forge Version
     description: >-
       recommended for the recommended Forge build of that Minecraft version (or its latest build if
@@ -148,4 +152,8 @@ variables:
     default_value: recommended
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9.-]+$/'

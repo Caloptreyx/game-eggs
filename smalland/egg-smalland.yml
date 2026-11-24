@@ -104,7 +104,11 @@ variables:
     default_value: "Smalland Server"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"?\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"?\r\n]+$/'
   - name: World Name
     description: Name of the world save; a new name creates a new world.
     order: 2
@@ -112,7 +116,11 @@ variables:
     default_value: "World"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -121,7 +129,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"?\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"?\s]*$/'
   - name: Private
     description: Hide the server from the server browser. (1 = on, 0 = off)
     order: 4
@@ -129,7 +141,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: 'required|in:0,1'
+    rules:
+      - required
+      - in:0,1
   - name: Friendly Fire
     description: Players can hurt each other. (1 = on, 0 = off)
     order: 5
@@ -137,7 +151,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: 'required|in:0,1'
+    rules:
+      - required
+      - in:0,1
   - name: Peaceful Mode
     description: No hostile creatures. (1 = on, 0 = off)
     order: 6
@@ -145,7 +161,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: 'required|in:0,1'
+    rules:
+      - required
+      - in:0,1
   - name: Keep Inventory
     description: Players keep their inventory on death. (1 = on, 0 = off)
     order: 7
@@ -153,7 +171,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: 'required|in:0,1'
+    rules:
+      - required
+      - in:0,1
   - name: Deterioration
     description: Items and buildings deteriorate. (1 = on, 0 = off)
     order: 8
@@ -161,7 +181,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: 'required|in:0,1'
+    rules:
+      - required
+      - in:0,1
   - name: Day Length
     description: Length of a day in seconds.
     order: 9
@@ -169,7 +191,10 @@ variables:
     default_value: "1800"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:60,86400'
+    rules:
+      - required
+      - integer
+      - between:60,86400
   - name: Season Length
     description: Length of a season in seconds.
     order: 10
@@ -177,7 +202,10 @@ variables:
     default_value: "10800"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:60,864000'
+    rules:
+      - required
+      - integer
+      - between:60,864000
   - name: Creature Health
     description: Creature health in percent.
     order: 11
@@ -185,7 +213,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:1,1000'
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Creature Damage
     description: Creature damage in percent.
     order: 12
@@ -193,7 +224,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:0,1000'
+    rules:
+      - required
+      - integer
+      - between:0,1000
   - name: Nourishment Loss
     description: Hunger and thirst rate in percent.
     order: 13
@@ -201,7 +235,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:0,1000'
+    rules:
+      - required
+      - integer
+      - between:0,1000
   - name: Fall Damage
     description: Fall damage in percent.
     order: 14
@@ -209,7 +246,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: 'required|integer|between:0,1000'
+    rules:
+      - required
+      - integer
+      - between:0,1000
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 15
@@ -217,7 +257,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Smalland dedicated server.
     order: 16
@@ -225,4 +267,7 @@ variables:
     default_value: "808040"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:808040"
+    rules:
+      - required
+      - string
+      - in:808040

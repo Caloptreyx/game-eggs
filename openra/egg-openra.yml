@@ -109,7 +109,9 @@ variables:
     default_value: ra
     user_viewable: true
     user_editable: true
-    rules: "required|in:ra,cnc,d2k"
+    rules:
+      - required
+      - in:ra,cnc,d2k
   - name: Server Name
     description: Name shown in the multiplayer server list. Cannot contain double quotes.
     order: 2
@@ -117,7 +119,11 @@ variables:
     default_value: OpenRA Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -126,7 +132,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Public
     description: List the server on the OpenRA master server. (True / False)
     order: 4
@@ -134,7 +144,9 @@ variables:
     default_value: "True"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Require Authentication
     description: Only allow players signed in with an OpenRA forum account. (True / False)
     order: 5
@@ -142,7 +154,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Extra Arguments
     description: Additional settings, e.g. Server.Map=<map uid> Server.EnableSingleplayer=True Server.ShareAnonymizedIPs=False.
     order: 6
@@ -150,7 +164,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: OpenRA Version
     description: latest, or a release tag such as release-20250330. Players need the same version. Reinstall to update.
     order: 7
@@ -158,4 +176,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|(release|playtest)-\d{8})$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|(release|playtest)-\d{8})$/'

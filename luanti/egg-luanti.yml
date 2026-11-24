@@ -108,7 +108,11 @@ variables:
     default_value: Luanti/minetest_game
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_]+$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_]+$/'
   - name: Game ID
     description: Folder name of the game in luanti/games/ to run (shown by the installer), e.g. minetest_game.
     order: 2
@@ -116,7 +120,11 @@ variables:
     default_value: minetest_game
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9_]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_]+$/'
   - name: World Name
     description: World folder in luanti/worlds/; a new world is created when it does not exist.
     order: 3
@@ -124,7 +132,11 @@ variables:
     default_value: world
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Server Name
     description: Name shown in the server list.
     order: 4
@@ -132,7 +144,11 @@ variables:
     default_value: Luanti Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Description
     description: Description shown in the server list.
     order: 5
@@ -140,7 +156,11 @@ variables:
     default_value: A Luanti server
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]*$/'
   - name: Message of the Day
     description: Message shown to players when they join.
     order: 6
@@ -148,7 +168,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 7
@@ -156,7 +180,10 @@ variables:
     default_value: "15"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,1000"
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Default Password
     description: Password new players must use when they first join. Leave empty for none.
     order: 8
@@ -165,7 +192,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Admin Name
     description: Player name that gets all privileges (the server owner).
     order: 9
@@ -173,7 +204,11 @@ variables:
     default_value: admin
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:20|regex:/^[A-Za-z0-9_-]+$/'
+    rules:
+      - required
+      - string
+      - max:20
+      - 'regex:/^[A-Za-z0-9_-]+$/'
   - name: Announce
     description: List the server in the public server list. (true / false)
     order: 10
@@ -181,7 +216,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Damage
     description: Players can take damage and die. (true / false)
     order: 11
@@ -189,7 +226,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Creative Mode
     description: Creative mode (unlimited items, when the game supports it). (true / false)
     order: 12
@@ -197,7 +236,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Extra Arguments
     description: Additional luantiserver arguments.
     order: 13
@@ -205,4 +246,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

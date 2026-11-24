@@ -132,7 +132,11 @@ variables:
     default_value: Bedrock Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^;\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^;\r\n]+$/'
   - name: Game Mode
     description: Game mode for new players.
     order: 2
@@ -140,7 +144,9 @@ variables:
     default_value: survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:survival,creative,adventure"
+    rules:
+      - required
+      - in:survival,creative,adventure
   - name: Difficulty
     description: World difficulty.
     order: 3
@@ -148,7 +154,9 @@ variables:
     default_value: easy
     user_viewable: true
     user_editable: true
-    rules: "required|in:peaceful,easy,normal,hard"
+    rules:
+      - required
+      - in:peaceful,easy,normal,hard
   - name: Max Players
     description: Maximum number of players on the server.
     order: 4
@@ -156,7 +164,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: World Name
     description: Name of the world folder in worlds/. A new name creates a new world.
     order: 5
@@ -164,7 +175,11 @@ variables:
     default_value: Bedrock level
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:64", 'regex:/^[^\/\\:*?"<>|;\r\n]+$/']
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\/\\:*?"<>|;\r\n]+$/'
   - name: World Seed
     description: Seed for a new world. Leave empty for a random seed. Has no effect on existing worlds.
     order: 6
@@ -172,7 +187,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[^;\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^;\r\n]*$/'
   - name: Allow Cheats
     description: Allow commands such as /give for operators.
     order: 7
@@ -180,7 +199,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Allow List
     description: >-
       Only players in allowlist.json can join. Add players with the console command
@@ -190,7 +211,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Bedrock Version
     description: >-
       latest for the current release, preview for the preview build, or a version such as
@@ -200,7 +223,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|preview|\d+(\.\d+){2,3})$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|preview|\d+(\.\d+){2,3})$/'
   - name: Auto Update
     description: Update the server to the selected version on every start. (1 = on, 0 = off)
     order: 10
@@ -208,4 +235,6 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1

@@ -121,7 +121,11 @@ variables:
     default_value: Holdfast Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n#]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n#]+$/'
   - name: Region
     description: Server region shown in the browser, e.g. europe, usa, australia, china, russia.
     order: 2
@@ -129,7 +133,11 @@ variables:
     default_value: europe
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[a-z]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[a-z]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -138,7 +146,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s#]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s#]*$/'
   - name: Admin Password
     description: Password for the in-game admin login (rc login <password>).
     order: 4
@@ -147,7 +159,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^[^\s#]+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^[^\s#]+$/'
   - name: Welcome Message
     description: Message shown to players when they join.
     order: 5
@@ -155,7 +172,11 @@ variables:
     default_value: Welcome!
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n#]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n#]*$/'
   - name: Query Port
     description: UDP port for Steam server queries (server browser). Needs its own allocation.
     order: 6
@@ -163,7 +184,10 @@ variables:
     default_value: "27000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Frame Rate
     description: Server tick limit (frames per second).
     order: 7
@@ -171,7 +195,10 @@ variables:
     default_value: "120"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:30,240"
+    rules:
+      - required
+      - integer
+      - between:30,240
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 8
@@ -179,7 +206,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 9
@@ -187,7 +217,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Holdfast dedicated server.
     order: 10
@@ -195,4 +227,7 @@ variables:
     default_value: "1424230"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1424230"
+    rules:
+      - required
+      - string
+      - in:1424230

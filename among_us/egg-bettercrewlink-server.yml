@@ -99,7 +99,11 @@ variables:
     default_value: BetterCrewLink Server
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: HTTPS
     description: >-
       Serve HTTPS. Needs privkey.pem and fullchain.pem in the server root. (1 = on, 0 = off)
@@ -108,7 +112,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Public Address
     description: >-
       Public IP or DNS name of the server, announced by the built-in TURN relay (only used when the
@@ -118,7 +124,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:253|regex:/^[A-Za-z0-9.:-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:253
+      - 'regex:/^[A-Za-z0-9.:-]*$/'
   - name: Git Branch
     description: Branch of OhMyGuus/BetterCrewLink-server to build. Reinstall to update.
     order: 4
@@ -126,7 +136,11 @@ variables:
     default_value: master
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._\/-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._\/-]+$/'
   - name: Node.js Version
     description: Major Node.js version installed with the server. Reinstall to change.
     order: 5
@@ -134,4 +148,7 @@ variables:
     default_value: "22"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:18,30"
+    rules:
+      - required
+      - integer
+      - between:18,30

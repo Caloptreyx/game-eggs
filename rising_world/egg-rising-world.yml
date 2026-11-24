@@ -125,7 +125,11 @@ variables:
     default_value: Rising World Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -134,7 +138,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -142,7 +150,10 @@ variables:
     default_value: "64"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,256"
+    rules:
+      - required
+      - integer
+      - between:1,256
   - name: World Name
     description: World to load; a new name creates a new world.
     order: 4
@@ -150,7 +161,11 @@ variables:
     default_value: New World
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w .-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w .-]+$/'
   - name: Game Mode
     description: Game mode of a new world (Survival or Creative).
     order: 5
@@ -158,7 +173,9 @@ variables:
     default_value: Survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:Survival,Creative"
+    rules:
+      - required
+      - in:Survival,Creative
   - name: World Seed
     description: Seed of a new world. Leave empty for a random seed.
     order: 6
@@ -166,7 +183,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:32|regex:/^-?\d*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^-?\d*$/'
   - name: Visible
     description: List the server in the server browser. (True or False)
     order: 7
@@ -174,7 +195,9 @@ variables:
     default_value: "True"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -182,7 +205,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Rising World dedicated server.
     order: 9
@@ -190,4 +215,7 @@ variables:
     default_value: "339010"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:339010"
+    rules:
+      - required
+      - string
+      - in:339010

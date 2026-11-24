@@ -124,7 +124,11 @@ variables:
     default_value: Counter-Strike 2 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Game Mode
     description: Game mode the server runs (sets game_type and game_mode).
     order: 2
@@ -132,7 +136,9 @@ variables:
     default_value: competitive
     user_viewable: true
     user_editable: true
-    rules: "required|in:casual,competitive,wingman,deathmatch,armsrace,custom"
+    rules:
+      - required
+      - in:casual,competitive,wingman,deathmatch,armsrace,custom
   - name: Map
     description: Map to load on start, e.g. de_dust2, de_mirage, de_inferno, de_nuke or ar_shoots.
     order: 3
@@ -140,7 +146,11 @@ variables:
     default_value: de_dust2
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -148,7 +158,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,64"
+    rules:
+      - required
+      - integer
+      - between:2,64
   - name: Game Server Login Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 730). Required for
@@ -159,7 +172,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[A-F0-9]{32}$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 6
@@ -168,7 +184,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 7
@@ -177,7 +197,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: VAC
     description: Valve Anti-Cheat. (1 = on, 0 = off, the server runs -insecure)
     order: 8
@@ -185,7 +209,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +bot_quota 4 +mp_maxrounds 24.
     order: 9
@@ -193,7 +219,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -201,7 +230,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Counter-Strike 2 dedicated server.
     order: 11
@@ -209,4 +240,7 @@ variables:
     default_value: "730"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:730"
+    rules:
+      - required
+      - string
+      - in:730

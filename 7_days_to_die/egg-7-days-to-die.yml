@@ -67,12 +67,22 @@ scripts:
 
       SERVER_BINARY=/mnt/server/7DaysToDieServer.x86_64
 
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
       ## download and install steamcmd
-      cd /tmp || exit 1
+      cd /tmp || fail "cannot enter /tmp"
       mkdir -p /mnt/server/steamcmd /mnt/server/steamapps # steamapps: avoids a steamcmd disk write error
-      curl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
-      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd
-      cd /mnt/server/steamcmd || exit 1
+      curl -fsSL --retry 3 -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz || fail "could not download SteamCMD"
+      tar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd || fail "could not unpack SteamCMD"
+      cd /mnt/server/steamcmd || fail "cannot enter /mnt/server/steamcmd"
 
       # SteamCMD fails otherwise, even as root; ownership is fixed by the daemon after install.
       chown -R root:root /mnt
@@ -87,10 +97,7 @@ scripts:
           sleep 5
       done
 
-      if [[ ! -f "${SERVER_BINARY}" ]]; then
-          echo "Installation failed: ${SERVER_BINARY} is missing."
-          exit 1
-      fi
+      [[ -f "${SERVER_BINARY}" ]] || fail "SteamCMD did not install ${SERVER_BINARY}"
 
       ## steamclient libraries
       mkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64
@@ -100,7 +107,7 @@ scripts:
       ## server configuration
       # serverconfig.xml belongs to the Steam depot and is overwritten by updates and validation,
       # so the server runs from a copy that survives both.
-      cd /mnt/server || exit 1
+      cd /mnt/server || fail "cannot enter /mnt/server"
       mkdir -p logs
       if [[ ! -f serverconfig_custom.xml ]]; then
           cp -v serverconfig.xml serverconfig_custom.xml
@@ -117,7 +124,10 @@ variables:
     default_value: 7 Days to Die Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -126,7 +136,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of concurrent players.
     order: 3
@@ -134,7 +147,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Server Visibility
     description: 2 = public, 1 = friends only, 0 = not listed.
     order: 4
@@ -142,7 +158,9 @@ variables:
     default_value: "2"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2"
+    rules:
+      - required
+      - in:0,1,2
   - name: Game World
     description: >-
       RWG to generate a random world from the seed and size below, or the name of an existing world
@@ -152,7 +170,10 @@ variables:
     default_value: Navezgane
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: World Generation Seed
     description: Seed used when Game World is RWG. An existing world with the resulting name is loaded instead of generated.
     order: 6
@@ -160,7 +181,10 @@ variables:
     default_value: MyGame
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: World Generation Size
     description: >-
       Width and height of the generated world when Game World is RWG. Officially supported: 6144,
@@ -170,7 +194,9 @@ variables:
     default_value: "6144"
     user_viewable: true
     user_editable: true
-    rules: "required|in:6144,8192,10240"
+    rules:
+      - required
+      - in:6144,8192,10240
   - name: Game Name
     description: >-
       Name of the save game; changing it starts a new save. Also seeds decoration placement.
@@ -180,7 +206,11 @@ variables:
     default_value: MyGame
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64|regex:/^[A-Za-z0-9_. -]+$/"
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_. -]+$/'
   - name: Sandbox Code
     description: >-
       Difficulty and sandbox settings. Default is the Adventurer preset. To customize, open New Game
@@ -190,7 +220,10 @@ variables:
     default_value: AAAJABJACJADJARFBNC
     user_viewable: true
     user_editable: true
-    rules: "required|alpha_num|max:128"
+    rules:
+      - required
+      - alpha_num
+      - max:128
   - name: EasyAntiCheat
     description: Enable EasyAntiCheat. Must be false for most client-side mods.
     order: 10
@@ -198,7 +231,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Disabled Network Protocols
     description: >-
       Comma-separated protocols the server must NOT use (LiteNetLib, SteamNetworking). Disable
@@ -208,7 +243,10 @@ variables:
     default_value: SteamNetworking
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Telnet Port
     description: >-
       Telnet port. The panel console connects to it locally. Only needs its own allocation when a
@@ -218,7 +256,10 @@ variables:
     default_value: "8081"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Telnet Password
     description: >-
       Without a password telnet only listens on the loopback interface. Set one to expose telnet to
@@ -229,7 +270,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Auto Update
     description: Update the server through SteamCMD on every start. 1 = enabled, 0 = disabled.
     order: 14
@@ -237,7 +281,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. latest_experimental. Leave empty for the stable release.
@@ -247,7 +293,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Steam App ID
     description: Steam app id of the 7 Days to Die dedicated server.
     order: 16
@@ -255,7 +304,10 @@ variables:
     default_value: "294420"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:294420"
+    rules:
+      - required
+      - string
+      - in:294420
   - name: Library Path
     description: The server loads its bundled native libraries from the working directory.
     order: 17
@@ -263,4 +315,7 @@ variables:
     default_value: "."
     user_viewable: false
     user_editable: false
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64

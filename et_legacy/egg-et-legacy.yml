@@ -99,7 +99,11 @@ variables:
     default_value: ET Legacy Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -108,7 +112,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to turn rcon off.
     order: 3
@@ -117,7 +125,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -125,7 +137,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,64"
+    rules:
+      - required
+      - integer
+      - between:2,64
   - name: Map
     description: Map to start with, e.g. oasis, battery, goldrush, radar, railgun, fueldump.
     order: 5
@@ -133,7 +148,11 @@ variables:
     default_value: oasis
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Bots
     description: Fill the server with Omni-bot bots (shipped with ET Legacy). (1 = on, 0 = off)
     order: 6
@@ -141,7 +160,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional +set options, e.g. +set g_gametype 4 +set timelimit 20.
     order: 7
@@ -149,4 +170,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

@@ -135,7 +135,11 @@ variables:
     default_value: Mordhau Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -144,7 +148,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Admin Password
     description: >-
       Password for the in-game admin login (adminlogin <password> in the console). Leave empty to
@@ -155,7 +163,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -163,7 +175,10 @@ variables:
     default_value: "48"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Map
     description: >-
       Map to start on, e.g. FFA_Contraband, SKM_Grad, FL_Taiga, BR_Grad. Leave empty to start on the
@@ -173,7 +188,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w\/]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w\/]*$/'
   - name: Query Port
     description: UDP port for Steam server queries (server browser). Needs its own allocation.
     order: 6
@@ -181,7 +200,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Beacon Port
     description: UDP port for the server beacon (join requests). Needs its own allocation.
     order: 7
@@ -189,7 +211,10 @@ variables:
     default_value: "15000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 8
@@ -197,7 +222,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 9
@@ -205,7 +233,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
     order: 10
@@ -213,7 +243,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Mordhau dedicated server.
     order: 11
@@ -221,4 +255,7 @@ variables:
     default_value: "629800"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:629800"
+    rules:
+      - required
+      - string
+      - in:629800

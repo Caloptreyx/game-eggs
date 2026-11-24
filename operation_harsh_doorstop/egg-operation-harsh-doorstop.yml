@@ -90,7 +90,11 @@ variables:
     default_value: Harsh Doorstop Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: Map (and game mode options) to start with, e.g. AAS-TestMap.
     order: 2
@@ -98,7 +102,11 @@ variables:
     default_value: AAS-TestMap
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^[\w\-?=]+$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^[\w\-?=]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -106,7 +114,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,100"
+    rules:
+      - required
+      - integer
+      - between:2,100
   - name: RCON Password
     description: RCON password, also used by the panel console. No spaces or double quotes.
     order: 4
@@ -115,7 +126,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^[^\s"]+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^[^\s"]+$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 5
@@ -123,7 +139,10 @@ variables:
     default_value: "27005"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: TCP port for RCON. The panel console uses it locally; it needs its own allocation only for remote tools.
     order: 6
@@ -131,7 +150,10 @@ variables:
     default_value: "7779"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 7
@@ -139,7 +161,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -147,7 +173,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: "Steam app id of the Operation: Harsh Doorstop dedicated server."
     order: 9
@@ -155,4 +183,7 @@ variables:
     default_value: "950900"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:950900"
+    rules:
+      - required
+      - string
+      - in:950900

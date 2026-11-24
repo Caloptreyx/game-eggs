@@ -96,7 +96,11 @@ variables:
     default_value: 1.20.1
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^[0-9][0-9.]*$/'
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^[0-9][0-9.]*$/'
   - name: Build Number
     description: latest, or a Mohist build number for that Minecraft version.
     order: 2
@@ -104,7 +108,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9]+)$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 3
@@ -112,4 +120,8 @@ variables:
     default_value: mohist.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

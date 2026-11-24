@@ -97,7 +97,11 @@ variables:
     default_value: BATTALION Legacy Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Queue
     description: Playlist the server runs, e.g. Wartide (the default playlist).
     order: 2
@@ -105,7 +109,11 @@ variables:
     default_value: Wartide
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Admin Password
     description: Password for the in-game admin login. No spaces or double quotes.
     order: 3
@@ -114,7 +122,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^[^\s"]+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^[^\s"]+$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 4
@@ -122,7 +135,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 5
@@ -130,7 +146,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 6
@@ -138,7 +158,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: "Steam app id of the BATTALION: Legacy dedicated server."
     order: 7
@@ -146,4 +168,7 @@ variables:
     default_value: "805140"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:805140"
+    rules:
+      - required
+      - string
+      - in:805140

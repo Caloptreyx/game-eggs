@@ -104,7 +104,11 @@ variables:
     default_value: Wurm Unlimited Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -113,7 +117,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\s]*$/'
   - name: Admin Password
     description: Password that unlocks the in-game admin commands.
     order: 3
@@ -122,7 +130,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -130,7 +142,10 @@ variables:
     default_value: "25"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,500"
+    rules:
+      - required
+      - integer
+      - between:1,500
   - name: World
     description: World folder in worlds/ (Adventure and Creative are installed; copy a map folder there to add one).
     order: 5
@@ -138,7 +153,11 @@ variables:
     default_value: Adventure
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: PvP
     description: Allow player versus player combat. (true or false)
     order: 6
@@ -146,7 +165,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Epic Settings
     description: Follow the rules of the Epic servers of Wurm Online. (true or false)
     order: 7
@@ -154,7 +175,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 8
@@ -162,7 +185,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 9
@@ -170,7 +196,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Wurm Unlimited dedicated server.
     order: 10
@@ -178,4 +206,7 @@ variables:
     default_value: "402370"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:402370"
+    rules:
+      - required
+      - string
+      - in:402370

@@ -236,7 +236,9 @@ variables:
     default_value: vanilla
     user_viewable: true
     user_editable: true
-    rules: "required|in:vanilla,tshock"
+    rules:
+      - required
+      - in:vanilla,tshock
   - name: Terraria Version
     description: >-
       Vanilla server version: latest, or a version such as 1.4.4.9. Players need the same version.
@@ -246,7 +248,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|\d+(\.\d+){2,3})$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|\d+(\.\d+){2,3})$/'
   - name: TShock Version
     description: >-
       TShock release: latest, or a release tag such as v6.2.1. Each TShock release supports one
@@ -256,7 +262,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v?\d+(\.\d+)*(-[\w.]+)?)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v?\d+(\.\d+)*(-[\w.]+)?)$/'
   - name: World Name
     description: >-
       World to load from worlds/<name>.wld; a new world is created when it does not exist. Letters,
@@ -266,7 +276,11 @@ variables:
     default_value: world
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+( [\w-]+)*$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+( [\w-]+)*$/'
   - name: World Size
     description: Size of a new world. (1 = small, 2 = medium, 3 = large)
     order: 5
@@ -274,7 +288,9 @@ variables:
     default_value: "2"
     user_viewable: true
     user_editable: true
-    rules: "required|in:1,2,3"
+    rules:
+      - required
+      - in:1,2,3
   - name: Difficulty
     description: Difficulty of a new world. (0 = classic, 1 = expert, 2 = master, 3 = journey)
     order: 6
@@ -282,7 +298,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: World Seed
     description: >-
       Seed for a new world, also secret seeds such as "for the worthy". Leave empty for a random
@@ -292,7 +310,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 8
@@ -300,7 +322,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,255"
+    rules:
+      - required
+      - integer
+      - between:1,255
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 9
@@ -309,7 +334,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Message of the Day
     description: Message shown to players when they join (vanilla server; TShock uses tshock/motd.txt).
     order: 10
@@ -317,7 +346,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]*$/'
   - name: Anti-Cheat
     description: Terraria's built-in cheat protection. (1 = on, 0 = off)
     order: 11
@@ -325,7 +358,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: >-
       Additional launch parameters, e.g. -lang 2 (vanilla), -worldevil crimson or -ip 0.0.0.0
@@ -335,4 +370,7 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512

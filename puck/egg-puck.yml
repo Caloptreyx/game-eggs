@@ -122,7 +122,11 @@ variables:
     default_value: Puck Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -131,7 +135,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -139,7 +147,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,40"
+    rules:
+      - required
+      - integer
+      - between:2,40
   - name: Public
     description: List the server in the public server browser. (true / false)
     order: 4
@@ -147,7 +158,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 5
@@ -155,7 +168,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Puck dedicated server.
     order: 6
@@ -163,4 +178,7 @@ variables:
     default_value: "3481440"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3481440"
+    rules:
+      - required
+      - string
+      - in:3481440

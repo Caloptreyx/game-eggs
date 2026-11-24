@@ -131,7 +131,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._ -]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._ -]+$/'
   - name: Quilt Loader Version
     description: latest for the newest Quilt loader release (betas excluded), or a loader version such as 0.29.2.
     order: 2
@@ -139,4 +143,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.+-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9.+-]+$/'

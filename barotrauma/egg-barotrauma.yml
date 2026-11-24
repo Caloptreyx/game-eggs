@@ -97,7 +97,11 @@ variables:
     default_value: A Barotrauma Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:60|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:60
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for an open server.
     order: 2
@@ -106,7 +110,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players (1-16).
     order: 3
@@ -114,7 +122,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,16"
+    rules:
+      - required
+      - integer
+      - between:1,16
   - name: Public
     description: >-
       List the server in the in-game server browser. Steam queries on the Query Port only answer
@@ -124,7 +135,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: >-
       Additional launch parameters, e.g. -playstyle Serious -karmaenabled true -language German
@@ -133,7 +146,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 6
@@ -141,7 +158,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install. Leave empty for the stable release. Reinstall after changing
@@ -151,7 +170,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Query Port
     description: >-
       UDP port for Steam server queries (server list). Must differ from the game port and needs its
@@ -161,7 +184,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Steam App ID
     description: Steam app id of the Barotrauma dedicated server.
     order: 9
@@ -169,4 +195,7 @@ variables:
     default_value: "1026340"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1026340"
+    rules:
+      - required
+      - string
+      - in:1026340

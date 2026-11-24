@@ -137,7 +137,11 @@ variables:
     default_value: FOUNDRY Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -146,7 +150,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -154,7 +162,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: World Name
     description: World (save folder in saves/save/); a new name creates a new world.
     order: 4
@@ -162,7 +173,11 @@ variables:
     default_value: MyFoundry
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Map Seed
     description: Seed of a new world.
     order: 5
@@ -170,7 +185,10 @@ variables:
     default_value: "42938743982"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,18446744073709551615"
+    rules:
+      - required
+      - integer
+      - between:0,18446744073709551615
   - name: Public
     description: List the server in the Steam server browser. (true or false)
     order: 6
@@ -178,7 +196,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Pause When Empty
     description: Pause the world while nobody is connected. (true or false)
     order: 7
@@ -186,7 +206,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Autosave Interval
     description: Seconds between autosaves.
     order: 8
@@ -194,7 +216,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:30,86400"
+    rules:
+      - required
+      - integer
+      - between:30,86400
   - name: Query Port
     description: UDP port for Steam server queries (used when public). Needs its own allocation.
     order: 9
@@ -202,7 +227,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -210,7 +238,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Windows Install
     description: Download the Windows build through SteamCMD.
     order: 11
@@ -218,7 +248,9 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1
   - name: Steam App ID
     description: Steam app id of the FOUNDRY dedicated server.
     order: 12
@@ -226,4 +258,7 @@ variables:
     default_value: "2915550"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2915550"
+    rules:
+      - required
+      - string
+      - in:2915550

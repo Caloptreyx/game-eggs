@@ -104,7 +104,11 @@ variables:
     default_value: AssaultCube Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Message of the Day
     description: Shown to players when they join. Cannot contain double quotes.
     order: 2
@@ -112,7 +116,11 @@ variables:
     default_value: Welcome!
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\r\n]*$/'
   - name: Max Players
     description: Maximum number of players. The master server only lists servers with 16 or fewer.
     order: 3
@@ -120,7 +128,10 @@ variables:
     default_value: "12"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,16"
+    rules:
+      - required
+      - integer
+      - between:1,16
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 4
@@ -129,7 +140,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"]*$/'
   - name: Admin Password
     description: Password for /setadmin 1 <password> in game. Leave empty for none (config/serverpwd.cfg also works).
     order: 5
@@ -138,7 +153,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"]*$/'
   - name: Master Server
     description: Master server to register with; localhost hides the server from the public list.
     order: 6
@@ -146,7 +165,11 @@ variables:
     default_value: ms.cubers.net
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:253|regex:/^[A-Za-z0-9.-]+$/'
+    rules:
+      - required
+      - string
+      - max:253
+      - 'regex:/^[A-Za-z0-9.-]+$/'
   - name: AssaultCube Version
     description: latest, or a release tag such as v1.3.0.2. Reinstall to update.
     order: 7
@@ -154,4 +177,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v?[\w.-]+)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v?[\w.-]+)$/'

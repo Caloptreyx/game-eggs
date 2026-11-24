@@ -136,7 +136,11 @@ variables:
     default_value: Garry's Mod Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: Map to load on start, e.g. gm_construct or gm_flatgrass.
     order: 2
@@ -144,7 +148,11 @@ variables:
     default_value: gm_construct
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Gamemode
     description: Gamemode folder name, e.g. sandbox, terrortown, darkrp.
     order: 3
@@ -152,7 +160,11 @@ variables:
     default_value: sandbox
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -160,7 +172,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Workshop Collection
     description: Steam Workshop collection ID whose addons are downloaded and mounted. Leave empty for none.
     order: 5
@@ -168,7 +183,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|integer|min:1"
+    rules:
+      - nullable
+      - integer
+      - min:1
   - name: Game Server Login Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 4000). Required for
@@ -179,7 +197,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[A-F0-9]{32}$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 7
@@ -188,7 +209,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 8
@@ -197,7 +222,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Loading Screen URL
     description: URL of a custom loading screen. Leave empty for the default.
     order: 9
@@ -205,7 +234,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|url|max:512|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - url
+      - max:512
+      - 'regex:/^[^"\r\n]*$/'
   - name: Tickrate
     description: Server ticks per second. Higher values need more CPU.
     order: 10
@@ -213,7 +246,10 @@ variables:
     default_value: "22"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:10,128"
+    rules:
+      - required
+      - integer
+      - between:10,128
   - name: Lua Refresh
     description: Reload Lua files automatically when they change. Useful for development, costs performance. (1 = on, 0 = off)
     order: 11
@@ -221,7 +257,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +sv_allowcslua 1.
     order: 12
@@ -229,7 +267,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 13
@@ -237,7 +278,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Branch
     description: >-
       Steam branch: leave empty for the 32-bit public build, or x86-64 for the 64-bit build (more
@@ -247,7 +290,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:x86-64,prerelease,dev"
+    rules:
+      - nullable
+      - in:x86-64,prerelease,dev
   - name: Steam App ID
     description: Steam app id of the Garry's Mod dedicated server.
     order: 15
@@ -255,4 +300,7 @@ variables:
     default_value: "4020"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:4020"
+    rules:
+      - required
+      - string
+      - in:4020

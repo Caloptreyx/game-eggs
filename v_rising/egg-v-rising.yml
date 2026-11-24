@@ -100,7 +100,10 @@ variables:
     default_value: V Rising Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Description
     description: Short description shown in the server list and in chat when players connect.
     order: 2
@@ -108,7 +111,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -117,7 +123,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players at once (at most 128).
     order: 4
@@ -125,7 +134,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Save Name
     description: >-
       Name of the world save (a folder in save-data/Saves/v4/). A new name starts a new world.
@@ -135,7 +147,11 @@ variables:
     default_value: world1
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Game Settings Preset
     description: >-
       Game settings preset (a file in VRisingServer_Data/StreamingAssets/GameSettingPresets), e.g.
@@ -146,7 +162,11 @@ variables:
     default_value: StandardPvE
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w-]*$/'
   - name: Difficulty Preset
     description: Difficulty preset. Leave empty for the game's default.
     order: 7
@@ -154,7 +174,9 @@ variables:
     default_value: Difficulty_Normal
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:Difficulty_Easy,Difficulty_Normal,Difficulty_Brutal"
+    rules:
+      - nullable
+      - in:Difficulty_Easy,Difficulty_Normal,Difficulty_Brutal
   - name: Query Port
     description: UDP port for Steam server queries (server list). Needs its own allocation.
     order: 8
@@ -162,7 +184,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: List on Steam
     description: List the server in the Steam server list. (true / false)
     order: 9
@@ -170,7 +195,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: List on EOS
     description: >-
       List the server in the Epic Online Services list, which the game searches by default.
@@ -180,7 +207,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Secure (VAC)
     description: Turn on VAC protection; VAC-banned players cannot connect. (true / false)
     order: 11
@@ -188,7 +217,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Auto Save Interval
     description: Seconds between automatic saves.
     order: 12
@@ -196,7 +227,10 @@ variables:
     default_value: "120"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:30,3600"
+    rules:
+      - required
+      - integer
+      - between:30,3600
   - name: Auto Save Count
     description: Number of automatic saves to keep.
     order: 13
@@ -204,7 +238,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: RCON Password
     description: >-
       Password for the remote console (RCON). Leave empty to turn RCON off. RCON uses the RCON Port.
@@ -214,7 +251,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: RCON Port
     description: TCP port for RCON. Needs its own allocation when RCON is on.
     order: 15
@@ -222,7 +262,10 @@ variables:
     default_value: "25575"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -lowerFPSWhenEmpty true -resetDaysInterval 14.
     order: 16
@@ -230,7 +273,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 17
@@ -238,7 +284,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the V Rising dedicated server.
     order: 18
@@ -246,7 +294,10 @@ variables:
     default_value: "1829350"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1829350"
+    rules:
+      - required
+      - string
+      - in:1829350
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 19
@@ -254,4 +305,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

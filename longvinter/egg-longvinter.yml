@@ -127,7 +127,11 @@ variables:
     default_value: Unnamed Island
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server MOTD
     description: Message of the day, shown on signs around the island.
     order: 2
@@ -135,7 +139,11 @@ variables:
     default_value: Welcome to Longvinter Island!
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:256|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]+$/'
   - name: Community Website
     description: Website promoted with the server message.
     order: 3
@@ -143,7 +151,11 @@ variables:
     default_value: www.longvinter.com
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[^\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^\s]*$/'
   - name: Server Tag
     description: One tag for server searches (for example PVE), or none.
     order: 4
@@ -151,7 +163,11 @@ variables:
     default_value: none
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^\w+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^\w+$/'
   - name: Server Password
     description: Password players need to join (letters and numbers only). Leave empty for no password.
     order: 5
@@ -160,7 +176,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 6
@@ -168,7 +188,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Admin EOS IDs
     description: EOS IDs (shown in the game settings) of the admins, separated by single spaces.
     order: 7
@@ -176,7 +199,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[0-9a-f ]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[0-9a-f ]*$/'
   - name: PvP
     description: Allow player versus player damage and raiding. (true or false)
     order: 8
@@ -184,7 +211,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Tent Decay
     description: Abandoned tents decay. (true or false)
     order: 9
@@ -192,7 +221,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Max Tents
     description: Houses a player can place without prestige.
     order: 10
@@ -200,7 +231,10 @@ variables:
     default_value: "3"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,20"
+    rules:
+      - required
+      - integer
+      - between:1,20
   - name: Hardcore
     description: Hardcore mode (no house codes, destructible turrets). (true or false)
     order: 11
@@ -208,7 +242,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Daily Restart Hour
     description: Hour (0-23, server time) of the server's own daily restart.
     order: 12
@@ -216,7 +252,10 @@ variables:
     default_value: "6"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,23"
+    rules:
+      - required
+      - integer
+      - between:0,23
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 13
@@ -224,7 +263,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Longvinter dedicated server.
     order: 14
@@ -232,4 +273,7 @@ variables:
     default_value: "1639880"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1639880"
+    rules:
+      - required
+      - string
+      - in:1639880

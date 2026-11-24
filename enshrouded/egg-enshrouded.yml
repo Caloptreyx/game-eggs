@@ -111,7 +111,10 @@ variables:
     default_value: Enshrouded Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -119,7 +122,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,16"
+    rules:
+      - required
+      - integer
+      - between:1,16
   - name: Difficulty Preset
     description: >-
       Gameplay difficulty: Default, Relaxed, Hard, Survival, or Custom to use the gameSettings
@@ -129,7 +135,9 @@ variables:
     default_value: Default
     user_viewable: true
     user_editable: true
-    rules: "required|in:Default,Relaxed,Hard,Survival,Custom"
+    rules:
+      - required
+      - in:Default,Relaxed,Hard,Survival,Custom
   - name: Admin Password
     description: >-
       Password for the Admin group (build, chests, kick and ban). Leave empty to keep the one in
@@ -140,7 +148,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Friend Password
     description: >-
       Password for the Friend group (build and chests). Leave empty to keep the one in
@@ -151,7 +162,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Guest Password
     description: >-
       Password for the Guest group (no building or chests in bases). Leave empty to keep the one in
@@ -162,7 +176,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Visitor Password
     description: >-
       Password for the Visitor group (no changes to bases or the world). Leave empty to keep the
@@ -173,7 +190,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -181,7 +201,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Enshrouded dedicated server.
     order: 9
@@ -189,7 +211,10 @@ variables:
     default_value: "2278520"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2278520"
+    rules:
+      - required
+      - string
+      - in:2278520
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 10
@@ -197,4 +222,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

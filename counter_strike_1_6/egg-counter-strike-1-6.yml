@@ -142,7 +142,11 @@ variables:
     default_value: "Counter-Strike 1.6 Server"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: Map to load on start, e.g. de_dust2, de_inferno, cs_office, de_nuke.
     order: 2
@@ -150,7 +154,11 @@ variables:
     default_value: de_dust2
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -158,7 +166,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,32"
+    rules:
+      - required
+      - integer
+      - between:2,32
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 4
@@ -167,7 +178,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 5
@@ -176,7 +191,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +sys_ticrate 1000 -pingboost 2.
     order: 6
@@ -184,7 +203,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 7
@@ -192,7 +214,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: "Steam app id of the Half-Life dedicated server (HLDS)."
     order: 8
@@ -200,4 +224,7 @@ variables:
     default_value: "90"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:90"
+    rules:
+      - required
+      - string
+      - in:90

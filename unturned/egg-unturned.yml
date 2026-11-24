@@ -104,7 +104,12 @@ variables:
     default_value: An Unturned Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|min:5|max:50|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - min:5
+      - max:50
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. No spaces.
     order: 2
@@ -113,7 +118,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Game Server Login Token
     description: >-
       GSLT for Unturned (app 304930), from steamcommunity.com/dev/managegameservers. Without it the
@@ -124,7 +133,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Map
     description: >-
       Map to load: PEI, Washington, Yukon, Russia, Germany, Alpha Valley, Monolith, ... Workshop maps
@@ -134,7 +147,11 @@ variables:
     default_value: PEI
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64|regex:/^[\\w .'-]+$/"
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w .''-]+$/'
   - name: Max Players
     description: Maximum number of players on the server.
     order: 5
@@ -142,7 +159,10 @@ variables:
     default_value: "24"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: Difficulty
     description: Easy, Normal or Hard. Selects the matching section defaults of Config.txt.
     order: 6
@@ -150,7 +170,9 @@ variables:
     default_value: Normal
     user_viewable: true
     user_editable: true
-    rules: "required|in:Easy,Normal,Hard"
+    rules:
+      - required
+      - in:Easy,Normal,Hard
   - name: Perspective
     description: Camera perspective players may use. Vehicle = first person on foot, third person in vehicles.
     order: 7
@@ -158,7 +180,9 @@ variables:
     default_value: Both
     user_viewable: true
     user_editable: true
-    rules: "required|in:First,Third,Both,Vehicle"
+    rules:
+      - required
+      - in:First,Third,Both,Vehicle
   - name: PvE
     description: Disable player versus player damage. (1 = on, 0 = off)
     order: 8
@@ -166,7 +190,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Cheats
     description: Allow admins to use cheat commands such as give and vehicle. (1 = on, 0 = off)
     order: 9
@@ -174,7 +200,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Owner Steam ID
     description: SteamID64 of the server owner, who gets admin rights in game. Leave empty for none.
     order: 10
@@ -182,7 +210,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|regex:/^\d{17}$/'
+    rules:
+      - nullable
+      - 'regex:/^\d{17}$/'
   - name: Server Folder
     description: >-
       Folder under Servers/ with this server's config and saves. Changing it starts a new world with
@@ -192,7 +222,11 @@ variables:
     default_value: Default
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 12
@@ -200,7 +234,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install, e.g. preview. Leave empty for the stable release. Reinstall after changing it.
     order: 13
@@ -208,7 +244,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Unturned dedicated server.
     order: 14
@@ -216,4 +256,7 @@ variables:
     default_value: "1110390"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1110390"
+    rules:
+      - required
+      - string
+      - in:1110390

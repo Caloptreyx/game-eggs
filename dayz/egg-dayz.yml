@@ -230,7 +230,10 @@ variables:
     default_value: ""
     user_viewable: false
     user_editable: false
-    rules: "required|string|not_in:anonymous"
+    rules:
+      - required
+      - string
+      - not_in:anonymous
   - name: "[Host] Steam Password"
     description: >-
       Password of the Steam account. Steam Guard must be off for installs and updates to work.
@@ -241,7 +244,9 @@ variables:
     user_viewable: false
     user_editable: false
     secret: true
-    rules: "required|string"
+    rules:
+      - required
+      - string
   - name: "[Host] Disable Mod Downloads/Updates"
     description: >-
       Workshop mod downloads need a Steam account that owns the DayZ game. Set to 1 to turn them off
@@ -251,7 +256,9 @@ variables:
     default_value: "0"
     user_viewable: false
     user_editable: false
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Host] SteamCMD Attempts"
     description: How often SteamCMD retries a server or mod download after a recoverable error.
     order: 4
@@ -259,7 +266,10 @@ variables:
     default_value: "3"
     user_viewable: false
     user_editable: false
-    rules: "required|integer|between:1,10"
+    rules:
+      - required
+      - integer
+      - between:1,10
   - name: "[Host] Skip Game Server Install"
     description: >-
       Install only SteamCMD, not the game server. Only for Steam accounts with Steam Guard enabled;
@@ -269,7 +279,9 @@ variables:
     default_value: "0"
     user_viewable: false
     user_editable: false
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Server Name
     description: Name shown in the server list. Cannot contain double quotes.
     order: 6
@@ -277,7 +289,11 @@ variables:
     default_value: DayZ Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:100|regex:/^[^\"]+$/"
+    rules:
+      - required
+      - string
+      - max:100
+      - 'regex:/^[^"]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 7
@@ -286,7 +302,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64|regex:/^[^\"]*$/"
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"]*$/'
   - name: Admin Password
     description: Password to log in as admin in game (#login). Cannot contain double quotes.
     order: 8
@@ -295,7 +315,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64|regex:/^[^\"]*$/"
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"]*$/'
   - name: Max Players
     description: Maximum number of players allowed on the server.
     order: 9
@@ -303,7 +327,10 @@ variables:
     default_value: "60"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,127"
+    rules:
+      - required
+      - integer
+      - between:1,127
   - name: Steam Query Port
     description: >-
       UDP port for the Steam server list. Needs its own allocation for the server to be listed in the
@@ -313,7 +340,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCon Port
     description: BattlEye RCon port for remote admin tools. Needs its own allocation only when used remotely.
     order: 11
@@ -321,7 +351,10 @@ variables:
     default_value: "2305"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCon Password
     description: BattlEye RCon password for remote admin tools. No spaces.
     order: 12
@@ -330,7 +363,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "required|string|max:20|regex:/^\\S+$/"
+    rules:
+      - required
+      - string
+      - max:20
+      - 'regex:/^\S+$/'
   - name: Automatic Updates
     description: Check for server and Workshop mod updates on every start. (1 = on, 0 = off)
     order: 13
@@ -338,7 +375,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Modlist File
     description: >-
       Mod list exported from the DayZ Launcher (HTML), uploaded to the server root. Its mods are
@@ -348,7 +387,10 @@ variables:
     default_value: modlist.html
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:128"
+    rules:
+      - nullable
+      - string
+      - max:128
   - name: Additional Mods
     description: >-
       Semicolon-separated mod folders in the server root to load, e.g. @1559212036;@mymod; Mods in
@@ -358,7 +400,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:1024"
+    rules:
+      - nullable
+      - string
+      - max:1024
   - name: Server-Side Mods
     description: >-
       Semicolon-separated mod folders loaded with -serverMod: server only, not required by clients.
@@ -368,7 +413,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:1024"
+    rules:
+      - nullable
+      - string
+      - max:1024
   - name: Verify Signatures
     description: Kick clients whose mods or addons do not match the server's. (2 = on, 0 = off)
     order: 17
@@ -376,7 +424,9 @@ variables:
     default_value: "2"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,2"
+    rules:
+      - required
+      - in:0,2
   - name: Enforce Game Version
     description: Only allow clients with the same game version as the server. (1 = on, 0 = off)
     order: 18
@@ -384,7 +434,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Disable Voice Chat
     description: Disable voice over network. (1 = on, 0 = off)
     order: 19
@@ -392,7 +444,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Voice Chat Quality
     description: Voice over network codec quality, higher is better (0-30).
     order: 20
@@ -400,7 +454,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,30"
+    rules:
+      - required
+      - integer
+      - between:0,30
   - name: Disable Third Person
     description: Force first-person view. (1 = on, 0 = off)
     order: 21
@@ -408,7 +465,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Disable Crosshair
     description: Hide the crosshair. (1 = on, 0 = off)
     order: 22
@@ -416,7 +475,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Disable Personal Light
     description: Disable the light above players at night. (1 = on, 0 = off)
     order: 23
@@ -424,7 +485,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Darker Nights
     description: Use the darker night lighting setup. (1 = on, 0 = off)
     order: 24
@@ -432,7 +495,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Persistent Time
     description: Save the in-game time and continue from it on the next start. (1 = on, 0 = off)
     order: 25
@@ -440,7 +505,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Time Multiplier
     description: How much faster in-game time runs, e.g. 12 makes a full day last 2 real hours (0-24).
     order: 26
@@ -448,7 +515,10 @@ variables:
     default_value: "12"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,24"
+    rules:
+      - required
+      - integer
+      - between:0,24
   - name: Night Multiplier
     description: Extra multiplier for night time speed, multiplied with the Time Multiplier (0.1-64).
     order: 27
@@ -456,7 +526,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.1,64"
+    rules:
+      - required
+      - numeric
+      - between:0.1,64
   - name: "[Repair] Make Mod Files Lowercase"
     description: >-
       Rename every loaded mod's files and folders to lowercase on start. Enable for one start after
@@ -466,7 +539,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Repair] Validate Server Files"
     description: >-
       Validate all server files during Automatic Updates. Makes starts much slower; enable only when
@@ -476,7 +551,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Advanced] Extra Startup Parameters"
     description: Additional DayZ launch parameters, see https://community.bistudio.com/wiki/DayZ:Server_Configuration
     order: 30
@@ -484,7 +561,10 @@ variables:
     default_value: -dologs -adminlog -netlog -freezecheck
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: "[Advanced] Server Binary"
     description: DayZ server executable.
     order: 31
@@ -492,7 +572,10 @@ variables:
     default_value: DayZServer
     user_viewable: true
     user_editable: false
-    rules: "required|string|in:DayZServer"
+    rules:
+      - required
+      - string
+      - in:DayZServer
   - name: "[Advanced] Steam App ID"
     description: >-
       223350 = stable branch, 1042420 = experimental branch. Switching branches may require deleting
@@ -502,4 +585,7 @@ variables:
     default_value: "223350"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|in:223350,1042420"
+    rules:
+      - required
+      - integer
+      - in:223350,1042420

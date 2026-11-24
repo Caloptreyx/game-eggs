@@ -126,7 +126,11 @@ variables:
     default_value: "Half-Life Server"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Game
     description: >-
       Game folder to install and run: valve (Half-Life Deathmatch), cstrike (Counter-Strike), czero
@@ -137,7 +141,9 @@ variables:
     default_value: valve
     user_viewable: true
     user_editable: true
-    rules: "required|in:valve,cstrike,czero,dod,tfc,gearbox,dmc,ricochet"
+    rules:
+      - required
+      - in:valve,cstrike,czero,dod,tfc,gearbox,dmc,ricochet
   - name: Map
     description: >-
       Map to load on start; it must exist in the chosen game, e.g. crossfire (valve), de_dust2
@@ -147,7 +153,11 @@ variables:
     default_value: crossfire
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -155,7 +165,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,32"
+    rules:
+      - required
+      - integer
+      - between:2,32
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 5
@@ -164,7 +177,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 6
@@ -173,7 +190,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +sys_ticrate 1000 -pingboost 2.
     order: 7
@@ -181,7 +202,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -189,7 +213,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: "Steam app id of the Half-Life dedicated server (HLDS)."
     order: 9
@@ -197,4 +223,7 @@ variables:
     default_value: "90"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:90"
+    rules:
+      - required
+      - string
+      - in:90

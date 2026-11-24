@@ -174,7 +174,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9][0-9.]*)$/'
   - name: SpongeForge Version
     description: latest to follow Minecraft Version, or an exact SpongeForge version such as 1.21.10-60.0.1-17.0.0. Reinstall to switch.
     order: 2
@@ -182,4 +186,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:48|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:48
+      - 'regex:/^[\w.-]+$/'

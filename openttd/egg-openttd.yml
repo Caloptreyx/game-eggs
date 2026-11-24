@@ -157,7 +157,11 @@ variables:
     default_value: stable
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(stable|testing|\d+\.\d+(-(beta|RC)\d+)?)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(stable|testing|\d+\.\d+(-(beta|RC)\d+)?)$/'
   - name: Server Name
     description: Name shown in the server list.
     order: 2
@@ -165,7 +169,11 @@ variables:
     default_value: OpenTTD Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -174,7 +182,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: RCON Password
     description: Password for remote console commands from game clients (rcon). Leave empty to turn rcon off.
     order: 4
@@ -183,7 +195,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Admin Password
     description: >-
       Password of the admin port (for admin tools such as bots). Leave empty to turn the admin port
@@ -194,7 +210,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Visibility
     description: public (listed in the server list), invite-only (join by invite code) or local (LAN and direct connect only).
     order: 6
@@ -202,7 +222,9 @@ variables:
     default_value: public
     user_viewable: true
     user_editable: true
-    rules: "required|in:public,invite-only,local"
+    rules:
+      - required
+      - in:public,invite-only,local
   - name: Max Clients
     description: Maximum number of connected players.
     order: 7
@@ -210,7 +232,10 @@ variables:
     default_value: "25"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,255"
+    rules:
+      - required
+      - integer
+      - between:1,255
   - name: Max Companies
     description: Maximum number of companies.
     order: 8
@@ -218,7 +243,10 @@ variables:
     default_value: "15"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,240"
+    rules:
+      - required
+      - integer
+      - between:1,240
   - name: Map Width
     description: Width of a new map as a power of two (6 = 64 tiles ... 12 = 4096 tiles). Only for new maps.
     order: 9
@@ -226,7 +254,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:6,12"
+    rules:
+      - required
+      - integer
+      - between:6,12
   - name: Map Height
     description: Height of a new map as a power of two (6 = 64 tiles ... 12 = 4096 tiles). Only for new maps.
     order: 10
@@ -234,7 +265,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:6,12"
+    rules:
+      - required
+      - integer
+      - between:6,12
   - name: Starting Year
     description: Starting year of a new map.
     order: 11
@@ -242,7 +276,10 @@ variables:
     default_value: "1950"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,5000000"
+    rules:
+      - required
+      - integer
+      - between:1,5000000
   - name: Admin Port
     description: TCP port of the admin port, used by admin tools. Needs its own allocation when the Admin Password is set.
     order: 12
@@ -250,7 +287,10 @@ variables:
     default_value: "3977"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 13
@@ -258,4 +298,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

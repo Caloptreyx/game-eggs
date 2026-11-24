@@ -130,7 +130,10 @@ variables:
     default_value: BeamMP Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:128"
+    rules:
+      - required
+      - string
+      - max:128
   - name: Description
     description: Description shown in the server list.
     order: 2
@@ -138,7 +141,10 @@ variables:
     default_value: BeamMP Default Description
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Auth Key
     description: >-
       Server key from keymaster.beammp.com (Keys). Required for the server to start and to be
@@ -149,7 +155,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9-]+$/'
   - name: Private
     description: Hide the server from the public server list; players join by IP.
     order: 4
@@ -157,7 +167,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Max Players
     description: Maximum number of players.
     order: 5
@@ -165,7 +177,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Max Cars
     description: Maximum number of cars per player.
     order: 6
@@ -173,7 +188,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,20"
+    rules:
+      - required
+      - integer
+      - between:1,20
   - name: Map
     description: >-
       Map to load, e.g. /levels/gridmap_v2/info.json, /levels/west_coast_usa/info.json,
@@ -183,7 +201,11 @@ variables:
     default_value: /levels/gridmap_v2/info.json
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^\/levels\/[\w.\/-]+$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^\/levels\/[\w.\/-]+$/'
   - name: Tags
     description: Comma-separated tags for the server list, e.g. Freeroam,Racing.
     order: 8
@@ -191,7 +213,10 @@ variables:
     default_value: Freeroam
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:128"
+    rules:
+      - nullable
+      - string
+      - max:128
   - name: Log Chat
     description: Log chat messages in the console.
     order: 9
@@ -199,7 +224,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: BeamMP Version
     description: latest, or a release tag such as v3.9.3. Reinstall to change versions.
     order: 10
@@ -207,4 +234,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v\d+(\.\d+)*)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v\d+(\.\d+)*)$/'

@@ -92,7 +92,11 @@ variables:
     default_value: SuperTuxKart Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -101,7 +105,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"]*$/'
   - name: Max Players
     description: Maximum number of players (more than 8 can hurt performance).
     order: 3
@@ -109,7 +117,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,32"
+    rules:
+      - required
+      - integer
+      - between:1,32
   - name: Message of the Day
     description: Shown in the lobby. Cannot contain double quotes.
     order: 4
@@ -117,7 +128,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\r\n]*$/'
   - name: SuperTuxKart Version
     description: latest, or a release tag such as 1.5. Players need the same major version. Reinstall to update.
     order: 5
@@ -125,4 +140,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|[\w.-]+)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|[\w.-]+)$/'

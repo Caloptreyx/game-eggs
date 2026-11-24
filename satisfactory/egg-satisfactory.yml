@@ -106,7 +106,10 @@ variables:
     default_value: "4"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,127"
+    rules:
+      - required
+      - integer
+      - between:1,127
   - name: Reliable Port
     description: TCP port for reliable messaging (the game's second port). Needs its own allocation.
     order: 2
@@ -114,7 +117,10 @@ variables:
     default_value: "8888"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -DisableSeasonalEvents
     order: 3
@@ -122,7 +128,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 4
@@ -130,7 +139,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. experimental. Leave empty for the stable release; use
@@ -140,7 +151,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Satisfactory dedicated server.
     order: 6
@@ -148,4 +163,7 @@ variables:
     default_value: "1690800"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1690800"
+    rules:
+      - required
+      - string
+      - in:1690800

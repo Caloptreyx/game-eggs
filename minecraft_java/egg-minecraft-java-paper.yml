@@ -133,7 +133,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._-]+$/'
   - name: Build Number
     description: latest for the newest stable build, or a Paper build number such as 130.
     order: 2
@@ -141,7 +145,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9]+)$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 3
@@ -149,4 +157,8 @@ variables:
     default_value: server.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

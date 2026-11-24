@@ -117,7 +117,11 @@ variables:
     default_value: A Palworld Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\]+$/'
   - name: Server Description
     description: Description shown in the server list. Cannot contain " or \.
     order: 2
@@ -125,7 +129,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[^"\\]*$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^"\\]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain " or \.
     order: 3
@@ -134,7 +142,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\]*$/'
   - name: Admin Password
     description: >-
       Password for admin commands in game (/AdminPassword) and for RCON, which the panel console
@@ -145,7 +157,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^[^"\\\s]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]+$/'
   - name: Max Players
     description: Maximum number of players on the server (1-32).
     order: 5
@@ -153,7 +169,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,32"
+    rules:
+      - required
+      - integer
+      - between:1,32
   - name: Community Server
     description: List the server in the in-game community server browser. (1 = on, 0 = off)
     order: 6
@@ -161,7 +180,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Public IP
     description: >-
       IP address advertised in the community server list. Leave empty to let the server detect it;
@@ -171,7 +192,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: false
-    rules: "nullable|ip"
+    rules:
+      - nullable
+      - ip
   - name: RCON Port
     description: >-
       TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -181,7 +204,10 @@ variables:
     default_value: "25575"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: EXP Rate
     description: Experience multiplier (0.1-20).
     order: 9
@@ -189,7 +215,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.1,20"
+    rules:
+      - required
+      - numeric
+      - between:0.1,20
   - name: Pal Capture Rate
     description: Capture chance multiplier (0.5-2).
     order: 10
@@ -197,7 +226,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.5,2"
+    rules:
+      - required
+      - numeric
+      - between:0.5,2
   - name: Pal Spawn Rate
     description: Pal spawn amount multiplier (0.5-3). Higher values cost performance.
     order: 11
@@ -205,7 +237,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.5,3"
+    rules:
+      - required
+      - numeric
+      - between:0.5,3
   - name: Work Speed Rate
     description: Work speed multiplier of Pals at bases (0.1-5).
     order: 12
@@ -213,7 +248,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.1,5"
+    rules:
+      - required
+      - numeric
+      - between:0.1,5
   - name: Day Speed
     description: Day time speed multiplier (0.1-5).
     order: 13
@@ -221,7 +259,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.1,5"
+    rules:
+      - required
+      - numeric
+      - between:0.1,5
   - name: Night Speed
     description: Night time speed multiplier (0.1-5).
     order: 14
@@ -229,7 +270,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.1,5"
+    rules:
+      - required
+      - numeric
+      - between:0.1,5
   - name: Death Penalty
     description: >-
       What players drop on death: None, Item (items only), ItemAndEquipment, or All (items,
@@ -239,7 +283,9 @@ variables:
     default_value: Item
     user_viewable: true
     user_editable: true
-    rules: "required|in:None,Item,ItemAndEquipment,All"
+    rules:
+      - required
+      - in:None,Item,ItemAndEquipment,All
   - name: PvP
     description: Allow players to damage each other. (1 = on, 0 = off)
     order: 16
@@ -247,7 +293,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Auto Save Interval
     description: Seconds between automatic world saves.
     order: 17
@@ -255,7 +303,10 @@ variables:
     default_value: "30"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:10,3600"
+    rules:
+      - required
+      - integer
+      - between:10,3600
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 18
@@ -263,7 +314,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Startup Flags
     description: Extra server launch flags. The defaults improve performance on multi-core CPUs.
     order: 19
@@ -271,7 +324,10 @@ variables:
     default_value: -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
     order: 20
@@ -279,7 +335,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Windows Install
     description: Download the Windows build through SteamCMD.
     order: 21
@@ -287,7 +346,9 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1
   - name: Steam App ID
     description: Steam app id of the Palworld dedicated server.
     order: 22
@@ -295,4 +356,7 @@ variables:
     default_value: "2394010"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2394010"
+    rules:
+      - required
+      - string
+      - in:2394010

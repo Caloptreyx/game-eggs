@@ -98,7 +98,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Autosave Interval
     description: Seconds between automatic saves of the universe.
     order: 2
@@ -106,7 +110,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:30,86400"
+    rules:
+      - required
+      - integer
+      - between:30,86400
   - name: Allow Server Reset
     description: Let players vote to reset the universe. (1 = on, 0 = off)
     order: 3
@@ -114,4 +121,6 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1

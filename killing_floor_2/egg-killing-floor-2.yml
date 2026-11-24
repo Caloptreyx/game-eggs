@@ -151,7 +151,11 @@ variables:
     default_value: Killing Floor 2 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Map
     description: Map to start on, e.g. KF-BioticsLab, KF-BurningParis, KF-Outpost, KF-Prison.
     order: 2
@@ -159,7 +163,11 @@ variables:
     default_value: KF-BioticsLab
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Game Mode
     description: >-
       KFGameInfo_Survival (co-op, 6 players), KFGameInfo_VersusSurvival (players vs. player Zeds, 12
@@ -170,7 +178,9 @@ variables:
     default_value: KFGameContent.KFGameInfo_Survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:KFGameContent.KFGameInfo_Survival,KFGameContent.KFGameInfo_VersusSurvival,KFGameContent.KFGameInfo_WeeklySurvival,KFGameContent.KFGameInfo_Endless,KFGameContent.KFGameInfo_Objective"
+    rules:
+      - required
+      - in:KFGameContent.KFGameInfo_Survival,KFGameContent.KFGameInfo_VersusSurvival,KFGameContent.KFGameInfo_WeeklySurvival,KFGameContent.KFGameInfo_Endless,KFGameContent.KFGameInfo_Objective
   - name: Difficulty
     description: 0 = Normal, 1 = Hard, 2 = Suicidal, 3 = Hell on Earth.
     order: 4
@@ -178,7 +188,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: Game Length
     description: 0 = Short (4 waves), 1 = Medium (7 waves), 2 = Long (10 waves).
     order: 5
@@ -186,7 +198,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2"
+    rules:
+      - required
+      - in:0,1,2
   - name: Max Players
     description: Maximum number of players. The game modes are made for 6 (Versus Survival 12).
     order: 6
@@ -194,7 +208,10 @@ variables:
     default_value: "6"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 7
@@ -203,7 +220,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s]*$/'
   - name: Admin Password
     description: >-
       Password for WebAdmin (user Admin) and for in-game admin login (console: AdminLogin
@@ -214,7 +235,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s]*$/'
   - name: WebAdmin
     description: Enable the WebAdmin web interface on the WebAdmin Port.
     order: 9
@@ -222,7 +247,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: WebAdmin Port
     description: TCP port of the WebAdmin web interface. Needs its own allocation.
     order: 10
@@ -230,7 +257,10 @@ variables:
     default_value: "8080"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Query Port
     description: UDP port for Steam server queries and the server browser. Needs its own allocation.
     order: 11
@@ -238,7 +268,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Allow Takeover
     description: >-
       Let matchmaking players take over the server while it is empty and play a private match with
@@ -248,7 +281,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Extra Arguments
     description: Additional launch switches, appended after the map URL.
     order: 13
@@ -256,7 +291,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 14
@@ -264,7 +302,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
     order: 15
@@ -272,7 +312,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Killing Floor 2 dedicated server.
     order: 16
@@ -280,4 +324,7 @@ variables:
     default_value: "232130"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:232130"
+    rules:
+      - required
+      - string
+      - in:232130

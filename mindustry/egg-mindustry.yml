@@ -95,7 +95,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|v?\d+(\.\d+)?)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|v?\d+(\.\d+)?)$/'
   - name: Server Name
     description: Name shown in the server list. Cannot contain commas.
     order: 2
@@ -103,7 +107,11 @@ variables:
     default_value: A Mindustry Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^,]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^,]+$/'
   - name: Server Description
     description: Description shown under the name in the server list. Cannot contain commas.
     order: 3
@@ -111,7 +119,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:100|regex:/^[^,]*$/'
+    rules:
+      - nullable
+      - string
+      - max:100
+      - 'regex:/^[^,]*$/'
   - name: Max Players
     description: Maximum number of players; 0 for unlimited.
     order: 4
@@ -119,7 +131,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,1000"
+    rules:
+      - required
+      - integer
+      - between:0,1000
   - name: Map
     description: >-
       Map hosted when there is no save yet, e.g. Ancient_Caldera, Fortress, Glacier, Veins. Use _
@@ -129,7 +144,11 @@ variables:
     default_value: Ancient_Caldera
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^,\s"\\]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^,\s"\\]+$/'
   - name: Game Mode
     description: >-
       Mode for the hosted map: survival (waves), attack (destroy enemy cores), pvp or sandbox. The
@@ -139,7 +158,9 @@ variables:
     default_value: survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:survival,attack,pvp,sandbox"
+    rules:
+      - required
+      - in:survival,attack,pvp,sandbox
   - name: Save Slot
     description: >-
       Save written when the server stops and loaded on the next start (config/saves/<slot>.msav).
@@ -149,7 +170,11 @@ variables:
     default_value: server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Autosave
     description: Save periodically while playing, into config/saves/auto_*.msav. (1 = on, 0 = off)
     order: 8
@@ -157,7 +182,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Autosave Interval
     description: Seconds between autosaves.
     order: 9
@@ -165,7 +192,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,86400"
+    rules:
+      - required
+      - integer
+      - between:60,86400
   - name: Autosave Slots
     description: Number of autosave files kept; older ones are replaced.
     order: 10
@@ -173,4 +203,7 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100

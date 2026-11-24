@@ -122,7 +122,11 @@ variables:
     default_value: Plains of Pain Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -131,7 +135,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -139,7 +147,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: World ID
     description: Save slot of the world. A new ID starts a new world.
     order: 4
@@ -147,7 +158,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,999"
+    rules:
+      - required
+      - integer
+      - between:0,999
   - name: Map ID
     description: Map of a new world.
     order: 5
@@ -155,7 +169,10 @@ variables:
     default_value: "768"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,65535"
+    rules:
+      - required
+      - integer
+      - between:0,65535
   - name: Seed
     description: Seed of a new world.
     order: 6
@@ -163,7 +180,10 @@ variables:
     default_value: "23456"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,2147483647"
+    rules:
+      - required
+      - integer
+      - between:0,2147483647
   - name: Difficulty
     description: Difficulty of a new world.
     order: 7
@@ -171,7 +191,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,5"
+    rules:
+      - required
+      - integer
+      - between:0,5
   - name: World Size
     description: Size of a new world.
     order: 8
@@ -179,7 +202,10 @@ variables:
     default_value: "21"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 9
@@ -187,7 +213,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -195,7 +224,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Plains of Pain dedicated server.
     order: 11
@@ -203,4 +234,7 @@ variables:
     default_value: "2227360"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2227360"
+    rules:
+      - required
+      - string
+      - in:2227360

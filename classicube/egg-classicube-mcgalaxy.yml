@@ -143,7 +143,11 @@ variables:
     default_value: "[MCGalaxy] Default"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: MOTD
     description: Message shown while players join.
     order: 2
@@ -151,7 +155,11 @@ variables:
     default_value: Welcome!
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -159,7 +167,10 @@ variables:
     default_value: "12"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Public
     description: List the server on classicube.net. (true / false)
     order: 4
@@ -167,7 +178,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: MCGalaxy Version
     description: latest, or a release tag such as 1.9.5.4. Reinstall to update.
     order: 5
@@ -175,4 +188,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|[\w.-]+)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|[\w.-]+)$/'

@@ -135,7 +135,11 @@ variables:
     default_value: Empyrion Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"#:\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"#:\r\n]+$/'
   - name: Server Description
     description: Description shown in the server browser.
     order: 2
@@ -143,7 +147,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[^"#:\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^"#:\r\n]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -152,7 +160,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_-]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -160,7 +172,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Public
     description: List the server in the server browser. (true or false)
     order: 5
@@ -168,7 +183,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Game Name
     description: Name of the save game (folder in Saves/Games/); a new name starts a new game.
     order: 6
@@ -176,7 +193,11 @@ variables:
     default_value: DediGame
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Game Mode
     description: Survival or Creative (new games only).
     order: 7
@@ -184,7 +205,9 @@ variables:
     default_value: Survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:Survival,Creative"
+    rules:
+      - required
+      - in:Survival,Creative
   - name: Seed
     description: Seed of a new game.
     order: 8
@@ -192,7 +215,10 @@ variables:
     default_value: "1011345"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,2147483647"
+    rules:
+      - required
+      - integer
+      - between:0,2147483647
   - name: Scenario
     description: Scenario of a new game (folder name in Content/Scenarios).
     order: 9
@@ -200,7 +226,11 @@ variables:
     default_value: Default Multiplayer
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w .-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w .-]+$/'
   - name: EasyAntiCheat
     description: Enable EasyAntiCheat. (true or false)
     order: 10
@@ -208,7 +238,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Telnet Port
     description: Local port of the server's telnet console (used by the panel console and stop; not exposed).
     order: 11
@@ -216,7 +248,10 @@ variables:
     default_value: "30010"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 12
@@ -224,7 +259,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Windows Install
     description: Download the Windows build through SteamCMD.
     order: 13
@@ -232,7 +269,9 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1
   - name: Steam App ID
     description: Steam app id of the Empyrion dedicated server.
     order: 14
@@ -240,4 +279,7 @@ variables:
     default_value: "530870"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:530870"
+    rules:
+      - required
+      - string
+      - in:530870

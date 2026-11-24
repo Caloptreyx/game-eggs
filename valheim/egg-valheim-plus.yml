@@ -127,7 +127,10 @@ variables:
     default_value: A Valheim Plus Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Server Password
     description: >-
       Password players need to join. Required by the server: at least 5 characters, and it must
@@ -138,7 +141,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "required|string|min:5|max:64"
+    rules:
+      - required
+      - string
+      - min:5
+      - max:64
   - name: World Name
     description: >-
       World to load, created on first start. Letters, digits, _ and -, words separated by single
@@ -148,7 +155,11 @@ variables:
     default_value: Dedicated
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+( [\w-]+)*$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+( [\w-]+)*$/'
   - name: Public
     description: List the server in the community server browser. (1 = on, 0 = join by IP only)
     order: 4
@@ -156,7 +167,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Crossplay
     description: >-
       Use the crossplay backend (PlayFab) so players on every platform can join, also by join code.
@@ -166,7 +179,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Save Interval
     description: Seconds between world saves.
     order: 6
@@ -174,7 +189,10 @@ variables:
     default_value: "1800"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,86400"
+    rules:
+      - required
+      - integer
+      - between:60,86400
   - name: Backups
     description: >-
       Automatic world backups to keep: one after 2 hours of play, the others 12 hours apart
@@ -184,7 +202,10 @@ variables:
     default_value: "4"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Extra Arguments
     description: >-
       Additional launch parameters, e.g. -preset hard -modifier raids none -setkey nomap
@@ -194,7 +215,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Valheim Plus Version
     description: >-
       Release tag of Grantapher/ValheimPlus on GitHub (e.g. 10.4.0.0), or latest. It must match the
@@ -204,7 +228,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -212,7 +240,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. public-test. Leave empty for the stable release. Reinstall
@@ -222,7 +252,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Valheim dedicated server.
     order: 12
@@ -230,4 +264,7 @@ variables:
     default_value: "896660"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:896660"
+    rules:
+      - required
+      - string
+      - in:896660

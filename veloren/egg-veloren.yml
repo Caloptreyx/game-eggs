@@ -145,7 +145,9 @@ variables:
     default_value: weekly
     user_viewable: true
     user_editable: true
-    rules: "required|in:weekly,nightly"
+    rules:
+      - required
+      - in:weekly,nightly
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -153,7 +155,11 @@ variables:
     default_value: Veloren Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Message of the Day
     description: Message shown to players when they join.
     order: 3
@@ -161,7 +167,11 @@ variables:
     default_value: Welcome!
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -169,7 +179,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,1000"
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Battle Mode
     description: PvP (players can fight each other) or PvE (players cannot hurt each other).
     order: 5
@@ -177,7 +190,9 @@ variables:
     default_value: PvP
     user_viewable: true
     user_editable: true
-    rules: "required|in:PvP,PvE"
+    rules:
+      - required
+      - in:PvP,PvE
   - name: Authentication
     description: >-
       1 = players log in with a Veloren account (auth.veloren.net). 0 = no authentication, anyone can
@@ -187,7 +202,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Query Port
     description: UDP port for server information queries (server browser). Needs its own allocation.
     order: 7
@@ -195,7 +212,10 @@ variables:
     default_value: "14006"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 8
@@ -203,4 +223,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

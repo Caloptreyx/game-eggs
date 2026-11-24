@@ -103,7 +103,11 @@ variables:
     default_value: GTA Connected Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^<>&\r\n]+$/'
   - name: Game
     description: "Game the server hosts: gta:iii, gta:vc (Vice City), gta:sa (San Andreas) or gta:iv."
     order: 2
@@ -111,7 +115,9 @@ variables:
     default_value: "gta:iii"
     user_viewable: true
     user_editable: true
-    rules: "required|in:gta:iii,gta:vc,gta:sa,gta:iv"
+    rules:
+      - required
+      - in:gta:iii,gta:vc,gta:sa,gta:iv
   - name: Game Mode
     description: Game mode name shown in the server browser.
     order: 3
@@ -119,7 +125,11 @@ variables:
     default_value: Free Roam
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^<>&\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^<>&\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -127,7 +137,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 5
@@ -136,7 +149,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^<>&\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^<>&\s]*$/'
   - name: Server Browser
     description: List the server in the GTA Connected server browser. (true / false)
     order: 6
@@ -144,7 +161,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: GTA Connected Version
     description: latest, or a version listed on gtaconnected.com/downloads such as 1.7.3. Reinstall to update.
     order: 7
@@ -152,4 +171,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9][0-9.]*)$/'

@@ -115,7 +115,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v?\d+(\.\d+)*)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v?\d+(\.\d+)*)$/'
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -123,7 +127,11 @@ variables:
     default_value: open.mp server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -132,7 +140,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Max Players
     description: Maximum number of players (1-1000).
     order: 4
@@ -140,7 +152,10 @@ variables:
     default_value: "50"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,1000"
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Announce
     description: List the server in the open.mp and SA-MP server lists. (true / false)
     order: 5
@@ -148,7 +163,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: RCON
     description: Enable remote console logins from game clients (/rcon login). (true / false)
     order: 6
@@ -156,7 +173,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: RCON Password
     description: Remote console password (at least 4 characters; the server refuses the default changeme1).
     order: 7
@@ -165,4 +184,8 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n\s]*$/'

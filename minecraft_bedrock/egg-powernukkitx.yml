@@ -97,7 +97,11 @@ variables:
     default_value: PowerNukkitX Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -105,7 +109,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,1000"
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Game Mode
     description: 0 = survival, 1 = creative, 2 = adventure, 3 = spectator.
     order: 3
@@ -113,7 +120,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: Difficulty
     description: 0 = peaceful, 1 = easy, 2 = normal, 3 = hard.
     order: 4
@@ -121,7 +130,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: PowerNukkitX Version
     description: Release tag of PowerNukkitX/PowerNukkitX (e.g. 3.0.6), or latest. Applied on reinstall.
     order: 5
@@ -129,7 +140,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 6
@@ -137,4 +152,8 @@ variables:
     default_value: powernukkitx.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

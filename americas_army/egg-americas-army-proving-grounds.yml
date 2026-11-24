@@ -112,7 +112,11 @@ variables:
     default_value: America's Army Proving Grounds Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -121,7 +125,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]*$/'
   - name: Admin Password
     description: Password for the in-game admin login. Leave empty to disable admin logins.
     order: 3
@@ -130,7 +138,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]*$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 4
@@ -138,7 +150,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auth Port
     description: UDP port for Steam authentication. Needs its own allocation.
     order: 5
@@ -146,7 +161,10 @@ variables:
     default_value: "8778"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 6
@@ -154,7 +172,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the America's Army Proving Grounds dedicated server.
     order: 7
@@ -162,4 +182,7 @@ variables:
     default_value: "203300"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:203300"
+    rules:
+      - required
+      - string
+      - in:203300

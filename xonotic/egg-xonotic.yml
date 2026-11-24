@@ -95,7 +95,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|\d+(\.\d+)+)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|\d+(\.\d+)+)$/'
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -103,7 +107,11 @@ variables:
     default_value: Xonotic Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -111,7 +119,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,64"
+    rules:
+      - required
+      - integer
+      - between:2,64
   - name: Game Type
     description: Game type, e.g. dm (deathmatch), tdm, ctf, ca (clan arena), duel, ft (freeze tag), kh, ons.
     order: 4
@@ -119,7 +130,9 @@ variables:
     default_value: dm
     user_viewable: true
     user_editable: true
-    rules: "required|in:dm,tdm,ctf,ca,duel,ft,kh,ons,dom,lms,ka,nb,as,inv,race,cts"
+    rules:
+      - required
+      - in:dm,tdm,ctf,ca,duel,ft,kh,ons,dom,lms,ka,nb,as,inv,race,cts
   - name: RCON Password
     description: Remote console password. Leave empty to turn rcon off.
     order: 5
@@ -128,7 +141,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Public
     description: List the server in the public server browser. (1 = listed, 0 = join by address only)
     order: 6
@@ -136,7 +153,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional +commands without quotes, e.g. +timelimit_override 15 +fraglimit_override 30. Put anything else in .xonotic/data/server.cfg.
     order: 7
@@ -144,4 +163,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

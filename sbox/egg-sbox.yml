@@ -94,7 +94,10 @@ variables:
     default_value: s&box Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:63"
+    rules:
+      - required
+      - string
+      - max:63
   - name: Game
     description: >-
       Package ident of the game to run, from its sbox.game page (e.g. facepunch.sandbox). Append
@@ -104,7 +107,11 @@ variables:
     default_value: facepunch.sandbox
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^[a-z0-9_-]+\.[a-z0-9_-]+(#\d+)?$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^[a-z0-9_-]+\.[a-z0-9_-]+(#\d+)?$/'
   - name: Map
     description: >-
       Package ident of the map to load (e.g. facepunch.flatgrass). Leave empty for the game's
@@ -114,7 +121,11 @@ variables:
     default_value: facepunch.flatgrass
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[a-z0-9_-]+\.[a-z0-9_-]+(#\d+)?$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[a-z0-9_-]+\.[a-z0-9_-]+(#\d+)?$/'
   - name: Steam Relay
     description: >-
       1 = players connect through Steam's relay network, which hides the server's IP and needs no
@@ -124,7 +135,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Query Port
     description: UDP port for Steam server queries (server list). Needs its own allocation.
     order: 5
@@ -132,7 +145,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Game Server Login Token
     description: >-
       Optional Steam game server token (steamcommunity.com/dev/managegameservers, app ID 590830). Gives
@@ -143,7 +159,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]+$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]+$/'
   - name: Extra Arguments
     description: Additional console variables or commands, e.g. +net_max_outgoing 2048.
     order: 7
@@ -151,7 +171,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -159,7 +182,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install: staging (builds before live; players on the live branch may not
@@ -169,7 +194,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|in:staging"
+    rules:
+      - nullable
+      - string
+      - in:staging
   - name: Steam App ID
     description: Steam app id of the s&box dedicated server.
     order: 10
@@ -177,4 +205,7 @@ variables:
     default_value: "1892930"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1892930"
+    rules:
+      - required
+      - string
+      - in:1892930

@@ -103,7 +103,11 @@ variables:
     default_value: A Soulmask Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. No spaces or ".
     order: 2
@@ -112,7 +116,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:32|regex:/^[^"\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[^"\s]*$/'
   - name: Admin Password
     description: >-
       Password to open the admin (GM) panel in game with the console command "gm key <password>".
@@ -123,7 +131,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:32|regex:/^[^"\s]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[^"\s]+$/'
   - name: Map
     description: Map to host. Level01_Main = Cloud Mist Forest, DLC_Level01_Main = Shifting Sands.
     order: 4
@@ -131,7 +143,9 @@ variables:
     default_value: Level01_Main
     user_viewable: true
     user_editable: true
-    rules: "required|in:Level01_Main,DLC_Level01_Main"
+    rules:
+      - required
+      - in:Level01_Main,DLC_Level01_Main
   - name: Max Players
     description: Maximum number of players on the server.
     order: 5
@@ -139,7 +153,10 @@ variables:
     default_value: "50"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,70"
+    rules:
+      - required
+      - integer
+      - between:1,70
   - name: Game Mode
     description: pve or pvp. Applies the matching preset to the gameplay settings on start.
     order: 6
@@ -147,7 +164,9 @@ variables:
     default_value: pve
     user_viewable: true
     user_editable: true
-    rules: "required|in:pve,pvp"
+    rules:
+      - required
+      - in:pve,pvp
   - name: Save Interval
     description: Seconds between saves of the world state to the in-memory database.
     order: 7
@@ -155,7 +174,10 @@ variables:
     default_value: "600"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,3600"
+    rules:
+      - required
+      - integer
+      - between:60,3600
   - name: Disk Write Interval
     description: Seconds between writes of the in-memory database to world.db on disk.
     order: 8
@@ -163,7 +185,10 @@ variables:
     default_value: "900"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,3600"
+    rules:
+      - required
+      - integer
+      - between:60,3600
   - name: Server ID
     description: >-
       Numeric server id, unique within a cluster. Player characters are tied to it: changing it
@@ -173,7 +198,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,9999"
+    rules:
+      - required
+      - integer
+      - between:0,9999
   - name: Cluster Role
     description: >-
       none for a standalone server, main for the server that holds the player accounts of a
@@ -184,7 +212,9 @@ variables:
     default_value: none
     user_viewable: true
     user_editable: true
-    rules: "required|in:none,main,client"
+    rules:
+      - required
+      - in:none,main,client
   - name: Cluster Port
     description: >-
       Main server only: TCP port the client servers connect to. Needs its own allocation reachable
@@ -194,7 +224,10 @@ variables:
     default_value: "20000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Cluster Main Address
     description: Client servers only, as ip:port of the main server's Cluster Port, e.g. 10.0.0.5:20000.
     order: 12
@@ -202,7 +235,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[\w.-]+:\d{1,5}$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[\w.-]+:\d{1,5}$/'
   - name: Query Port
     description: UDP port for the Steam server list. Needs its own allocation.
     order: 13
@@ -210,7 +247,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Echo Port
     description: >-
       Local telnet port the panel console uses. It only listens inside the container and needs no
@@ -220,7 +260,10 @@ variables:
     default_value: "18888"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: Enables RCON for remote admin tools. Leave empty to keep RCON off. No spaces or ".
     order: 15
@@ -229,7 +272,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\s]*$/'
   - name: RCON Port
     description: TCP port for RCON. Needs its own allocation when RCON is enabled.
     order: 16
@@ -237,7 +284,10 @@ variables:
     default_value: "19000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -initbackup -backupinterval=60 -GongHuiMaxMember=10
     order: 17
@@ -245,7 +295,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 18
@@ -253,7 +306,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
     order: 19
@@ -261,7 +316,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Soulmask Linux dedicated server.
     order: 20
@@ -269,4 +328,7 @@ variables:
     default_value: "3017300"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3017300"
+    rules:
+      - required
+      - string
+      - in:3017300

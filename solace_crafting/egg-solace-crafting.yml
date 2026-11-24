@@ -136,7 +136,11 @@ variables:
     default_value: Solace Crafting Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Description
     description: Description shown in the server browser.
     order: 2
@@ -144,7 +148,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -153,7 +161,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -161,7 +173,10 @@ variables:
     default_value: "12"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Private
     description: Hide the server from the server browser. (true or false)
     order: 5
@@ -169,7 +184,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Allow Admin
     description: Let players become admin with the admin password. (true or false)
     order: 6
@@ -177,7 +194,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Admin Password
     description: Admin password (only used when Allow Admin is true).
     order: 7
@@ -186,7 +205,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^[^"\\\s]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\s]+$/'
   - name: World Save
     description: World save to use; a new name creates a new world.
     order: 8
@@ -194,7 +217,11 @@ variables:
     default_value: MultiplayerWorld
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 9
@@ -202,7 +229,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -210,7 +240,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Solace Crafting dedicated server.
     order: 11
@@ -218,4 +250,7 @@ variables:
     default_value: "1086950"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1086950"
+    rules:
+      - required
+      - string
+      - in:1086950

@@ -170,7 +170,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|stable|unstable|\d+\.\d+\.\d+(-(rc|pre)\.\d+)?)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|stable|unstable|\d+\.\d+\.\d+(-(rc|pre)\.\d+)?)$/'
   - name: Server Name
     description: Name shown in the server list.
     order: 2
@@ -178,7 +182,10 @@ variables:
     default_value: Vintage Story Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Server Description
     description: Description shown in the public server list.
     order: 3
@@ -186,7 +193,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Welcome Message
     description: Message shown to players when they join; {0} is replaced with the player name.
     order: 4
@@ -194,7 +204,10 @@ variables:
     default_value: Welcome {0}, may you survive well and prosper
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 5
@@ -203,7 +216,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players connected at the same time.
     order: 6
@@ -211,7 +227,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,256"
+    rules:
+      - required
+      - integer
+      - between:1,256
   - name: Public
     description: List the server in the public server list. (true = listed, false = join by IP only)
     order: 7
@@ -219,7 +238,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Whitelist Mode
     description: >-
       Who may join: Default (dedicated servers: whitelisted players only), On (whitelisted players
@@ -229,7 +250,9 @@ variables:
     default_value: Default
     user_viewable: true
     user_editable: true
-    rules: "required|in:Default,On,Off"
+    rules:
+      - required
+      - in:Default,On,Off
   - name: Allow PvP
     description: Allow players to hurt each other.
     order: 9
@@ -237,7 +260,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Save Name
     description: >-
       Save file in data/Saves/ to load (without .vcdbs); a new world is created when it does not
@@ -247,7 +272,11 @@ variables:
     default_value: default
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: World Name
     description: Name of a new world, shown in the server list. Has no effect on existing worlds.
     order: 11
@@ -255,7 +284,10 @@ variables:
     default_value: A new world
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: World Seed
     description: Seed for a new world. Leave empty for a random seed. Has no effect on existing worlds.
     order: 12
@@ -263,7 +295,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Play Style
     description: >-
       Game mode preset for a new world: surviveandbuild (standard survival), exploration (no
@@ -274,7 +309,9 @@ variables:
     default_value: surviveandbuild
     user_viewable: true
     user_editable: true
-    rules: "required|in:surviveandbuild,exploration,wildernesssurvival,creativebuilding"
+    rules:
+      - required
+      - in:surviveandbuild,exploration,wildernesssurvival,creativebuilding
   - name: Extra Arguments
     description: Additional launch parameters, e.g. --reducedthreads or --archiveLogFileCount 10.
     order: 14
@@ -282,4 +319,7 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512

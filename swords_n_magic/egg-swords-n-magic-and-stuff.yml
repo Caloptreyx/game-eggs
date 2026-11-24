@@ -102,7 +102,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z]+( [A-Za-z]+){1,4}$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z]+( [A-Za-z]+){1,4}$/'
   - name: Owner Steam ID
     description: SteamID64 of the server owner, who gets the admin panel. Required; the server refuses to start without a valid one.
     order: 2
@@ -110,7 +114,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'required|string|regex:/^7656119\d{10}$/'
+    rules:
+      - required
+      - string
+      - 'regex:/^7656119\d{10}$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -119,7 +126,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Max Players
     description: Maximum number of players (the developer has tested up to 16).
     order: 4
@@ -127,7 +138,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,16"
+    rules:
+      - required
+      - integer
+      - between:1,16
   - name: Days Until Reset
     description: Days between world resets (1 is strongly recommended by the developer).
     order: 5
@@ -135,7 +149,10 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,30"
+    rules:
+      - required
+      - integer
+      - between:1,30
   - name: Reset Time Of Day
     description: Local time of the daily reset, HH:MM in 24 hour format.
     order: 6
@@ -143,7 +160,10 @@ variables:
     default_value: "00:00"
     user_viewable: true
     user_editable: true
-    rules: [required, string, 'regex:/^([01]\d|2[0-3]):[0-5]\d$/']
+    rules:
+      - required
+      - string
+      - 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 7
@@ -151,7 +171,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -159,7 +182,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Windows Install
     description: Download the Windows build through SteamCMD.
     order: 9
@@ -167,7 +192,9 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1
   - name: Steam App ID
     description: Steam app id of the Swords 'n Magic and Stuff dedicated server.
     order: 10
@@ -175,4 +202,7 @@ variables:
     default_value: "2058450"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2058450"
+    rules:
+      - required
+      - string
+      - in:2058450

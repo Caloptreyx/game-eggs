@@ -112,7 +112,11 @@ variables:
     default_value: Automobilista 2 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 2
@@ -121,7 +125,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -129,7 +137,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,64"
+    rules:
+      - required
+      - integer
+      - between:2,64
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 4
@@ -137,7 +148,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Steam Port
     description: UDP port for Steam. Needs its own allocation.
     order: 5
@@ -145,7 +159,10 @@ variables:
     default_value: "8766"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 6
@@ -153,7 +170,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Automobilista 2 dedicated server.
     order: 7
@@ -161,7 +180,10 @@ variables:
     default_value: "1338040"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1338040"
+    rules:
+      - required
+      - string
+      - in:1338040
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 8
@@ -169,4 +191,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

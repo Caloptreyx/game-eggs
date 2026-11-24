@@ -125,7 +125,10 @@ variables:
     default_value: Astroneer Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:60"
+    rules:
+      - required
+      - string
+      - max:60
   - name: Public IP
     description: >-
       The server's public IP address. Required: Astroneer registers this address, and players
@@ -135,7 +138,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "required|ip"
+    rules:
+      - required
+      - ip
   - name: Owner Name
     description: Steam name of the server owner, who gets owner rights. Cannot contain double quotes.
     order: 3
@@ -143,7 +148,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"]+$/'
   - name: Owner Steam ID
     description: >-
       64-bit Steam ID of the server owner (17 digits, e.g. from steamid.io). Required together with
@@ -153,7 +162,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'required|string|regex:/^\d{17}$/'
+    rules:
+      - required
+      - string
+      - 'regex:/^\d{17}$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 5
@@ -162,7 +174,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players.
     order: 6
@@ -170,7 +185,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,8"
+    rules:
+      - required
+      - integer
+      - between:1,8
   - name: Network Encryption
     description: >-
       Encrypt game traffic. Must be False for players to connect to a server running through Proton
@@ -180,7 +198,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: false
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -188,7 +208,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Astroneer dedicated server.
     order: 9
@@ -196,7 +218,10 @@ variables:
     default_value: "728470"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:728470"
+    rules:
+      - required
+      - string
+      - in:728470
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 10
@@ -204,4 +229,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

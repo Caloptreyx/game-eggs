@@ -159,7 +159,10 @@ variables:
     default_value: Clusterio
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Admin Account
     description: Name of the cluster admin, whose login token is printed on every start. Set at install time.
     order: 2
@@ -167,7 +170,11 @@ variables:
     default_value: admin
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Host Name
     description: Name of the host in the web interface. Set at install time.
     order: 3
@@ -175,7 +182,11 @@ variables:
     default_value: local
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Factorio Ports
     description: >-
       UDP port range the host gives its Factorio instances, e.g. 34197-34200. Each running instance
@@ -185,7 +196,11 @@ variables:
     default_value: 34197-34200
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^\d{4,5}-\d{4,5}$/'
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^\d{4,5}-\d{4,5}$/'
   - name: Public Address
     description: Address players use to join the instances (shown in the web interface). Leave empty for the allocation IP.
     order: 5
@@ -193,7 +208,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:255|regex:/^[\w.:-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:255
+      - 'regex:/^[\w.:-]*$/'
   - name: Factorio Version
     description: Factorio headless version to install, e.g. 2.0.72, or stable / latest. Applied on reinstall.
     order: 6
@@ -201,4 +220,8 @@ variables:
     default_value: stable
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^[\w.]+$/'
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^[\w.]+$/'

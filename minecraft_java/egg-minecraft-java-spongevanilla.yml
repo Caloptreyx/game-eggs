@@ -101,7 +101,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9][0-9.]*)$/'
   - name: SpongeVanilla Version
     description: latest to follow Minecraft Version, or an exact SpongeVanilla version such as 1.21.10-17.0.0. Reinstall to switch.
     order: 2
@@ -109,7 +113,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:48|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:48
+      - 'regex:/^[\w.-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 3
@@ -117,4 +125,8 @@ variables:
     default_value: spongevanilla.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

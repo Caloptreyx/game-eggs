@@ -85,7 +85,9 @@ variables:
     default_value: authenticated
     user_viewable: true
     user_editable: true
-    rules: "required|in:authenticated,offline"
+    rules:
+      - required
+      - in:authenticated,offline
   - name: Patchline
     description: release for the stable server, pre-release for the pre-release version.
     order: 2
@@ -93,7 +95,9 @@ variables:
     default_value: release
     user_viewable: true
     user_editable: true
-    rules: "required|in:release,pre-release"
+    rules:
+      - required
+      - in:release,pre-release
   - name: Auto Update
     description: Check for a new server version on every start. (1 = on, 0 = off)
     order: 3
@@ -101,7 +105,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Allow OP
     description: Allow the /op command for server operators. (1 = on, 0 = off)
     order: 4
@@ -109,7 +115,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Accept Early Plugins
     description: Load plugins built for early server APIs. (1 = on, 0 = off)
     order: 5
@@ -117,7 +125,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Use AOT Cache
     description: Use the server's ahead-of-time cache for faster starts. (1 = on, 0 = off)
     order: 6
@@ -125,7 +135,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional HytaleServer.jar arguments.
     order: 7
@@ -133,4 +145,7 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512

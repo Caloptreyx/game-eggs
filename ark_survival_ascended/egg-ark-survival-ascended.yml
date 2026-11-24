@@ -117,7 +117,11 @@ variables:
     default_value: An ARK Server
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:128", 'regex:/^[^|]+$/']
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^[^|]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for a public server.
     order: 2
@@ -126,7 +130,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Admin Password
     description: Password for admin commands in game (enablecheats) and for RCON, which the panel console uses.
     order: 3
@@ -135,7 +142,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Map
     description: >-
       Map to load, e.g. TheIsland_WP, ScorchedEarth_WP, TheCenter_WP, Aberration_WP, Extinction_WP,
@@ -145,7 +156,11 @@ variables:
     default_value: TheIsland_WP
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^\w+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^\w+$/'
   - name: Max Players
     description: Maximum number of players on the server.
     order: 5
@@ -153,7 +168,10 @@ variables:
     default_value: "70"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: PvE
     description: Player versus environment only; players cannot damage each other or their structures. (True or False)
     order: 6
@@ -161,7 +179,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: BattlEye
     description: Enable the BattlEye anti-cheat. (1 = on, 0 = off)
     order: 7
@@ -169,7 +189,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Mods
     description: >-
       Comma-separated CurseForge project IDs of the mods to load, e.g. 927090,929420. The server
@@ -179,7 +201,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^\d+(,\d+)*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^\d+(,\d+)*$/'
   - name: RCON Port
     description: >-
       TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -189,7 +215,10 @@ variables:
     default_value: "27020"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -197,7 +226,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Additional Options
     description: >-
       Extra ?Option=Value settings appended to the map, without spaces, e.g.
@@ -207,7 +238,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^(\?[^\s"''`$\\?]+)*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^(\?[^\s"''`$\\?]+)*$/'
   - name: Additional Flags
     description: Extra -Flag launch parameters, e.g. -ForceAllowCaveFlyers -ServerPlatform=ALL
     order: 12
@@ -215,7 +250,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:1024"
+    rules:
+      - nullable
+      - string
+      - max:1024
   - name: Steam App ID
     description: Steam app id of the ARK Survival Ascended dedicated server.
     order: 13
@@ -223,7 +261,10 @@ variables:
     default_value: "2430930"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2430930"
+    rules:
+      - required
+      - string
+      - in:2430930
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 14
@@ -231,4 +272,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

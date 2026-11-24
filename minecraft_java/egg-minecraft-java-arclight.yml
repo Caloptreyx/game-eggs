@@ -108,7 +108,11 @@ variables:
     default_value: 1.21.1
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^[0-9][0-9.]*$/'
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^[0-9][0-9.]*$/'
   - name: Mod Loader
     description: Which mods Arclight runs next to the plugins (builds differ per Minecraft version).
     order: 2
@@ -116,7 +120,10 @@ variables:
     default_value: neoforge
     user_viewable: true
     user_editable: true
-    rules: 'required|string|in:neoforge,forge,fabric'
+    rules:
+      - required
+      - string
+      - in:neoforge,forge,fabric
   - name: Arclight Release
     description: latest for the newest stable release with a matching build, or a release tag such as FeudalKings/1.0.1.
     order: 3
@@ -124,7 +131,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.\/-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.\/-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 4
@@ -132,4 +143,8 @@ variables:
     default_value: arclight.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

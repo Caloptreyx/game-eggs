@@ -117,7 +117,11 @@ variables:
     default_value: StarMade Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n\/]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n\/]+$/'
   - name: Server Description
     description: Description in the StarMade server list (up to 128 characters).
     order: 2
@@ -125,7 +129,11 @@ variables:
     default_value: A StarMade server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^[^\r\n\/]+$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^[^\r\n\/]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -133,7 +141,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,500"
+    rules:
+      - required
+      - integer
+      - between:1,500
   - name: Announce To Server List
     description: Announce the server to the StarMade server list. (true or false)
     order: 4
@@ -141,7 +152,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Announced Host
     description: Public host name or IP the server list gives to players.
     order: 5
@@ -149,7 +162,11 @@ variables:
     default_value: localhost
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:255|regex:/^[A-Za-z0-9.-]+$/'
+    rules:
+      - required
+      - string
+      - max:255
+      - 'regex:/^[A-Za-z0-9.-]+$/'
   - name: Use Super Admin Password
     description: Allow players to become admin with the super admin password. (true or false)
     order: 6
@@ -157,7 +174,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Super Admin Password
     description: Super admin password (only used when enabled above).
     order: 7
@@ -166,7 +185,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:64|regex:/^[^\s\/]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\s\/]+$/'
   - name: Autosave Interval
     description: Seconds between autosaves (-1 for never).
     order: 8
@@ -174,7 +197,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:-1,86400"
+    rules:
+      - required
+      - integer
+      - between:-1,86400
   - name: World Name
     description: World (universe) to load; a new name creates a new one.
     order: 9
@@ -182,7 +208,11 @@ variables:
     default_value: world0
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Auto Update
     description: Update StarMade with the official starter on every start. (1 = on, 0 = off)
     order: 10
@@ -190,4 +220,6 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1

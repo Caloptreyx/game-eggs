@@ -159,7 +159,11 @@ variables:
     default_value: American Truck Simulator server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:63|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:63
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Description
     description: Session description, up to 63 characters.
     order: 2
@@ -167,7 +171,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:63|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:63
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Welcome Message
     description: Message shown to players when they join, up to 127 characters.
     order: 3
@@ -175,7 +183,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:127|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:127
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Password
     description: Password players need to join, up to 63 characters. Leave empty for no password.
     order: 4
@@ -184,7 +196,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:63|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:63
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Max Players
     description: Maximum number of players (up to 8).
     order: 5
@@ -192,7 +208,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,8"
+    rules:
+      - required
+      - integer
+      - between:1,8
   - name: Query Port
     description: >-
       Steam query port for the server browser; needs its own allocation (TCP and UDP). For LAN
@@ -202,7 +221,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Logon Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 270880) for a
@@ -213,7 +235,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Player Damage
     description: Players can damage each other.
     order: 8
@@ -221,7 +247,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Traffic
     description: AI traffic on the roads.
     order: 9
@@ -229,7 +257,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -237,7 +267,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the American Truck Simulator dedicated server.
     order: 11
@@ -245,4 +277,7 @@ variables:
     default_value: "2239530"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2239530"
+    rules:
+      - required
+      - string
+      - in:2239530

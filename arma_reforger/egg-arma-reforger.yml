@@ -171,7 +171,10 @@ variables:
     default_value: Arma Reforger Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:100"
+    rules:
+      - required
+      - string
+      - max:100
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -180,7 +183,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Admin Password
     description: Password to log in as admin in game (#login). No spaces.
     order: 3
@@ -189,7 +196,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Scenario
     description: >-
       Scenario to load, e.g. {ECC61978EDCC2B5A}Missions/23_Campaign.conf (Conflict - Everon). Start
@@ -199,7 +210,11 @@ variables:
     default_value: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:256|regex:/^\{[0-9A-F]{16}\}[\w\/.-]+\.conf$/'
+    rules:
+      - required
+      - string
+      - max:256
+      - 'regex:/^\{[0-9A-F]{16}\}[\w\/.-]+\.conf$/'
   - name: Max Players
     description: Maximum number of players.
     order: 5
@@ -207,7 +222,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Visible
     description: List the server in the server browser.
     order: 6
@@ -215,7 +233,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Cross-Platform
     description: Allow Xbox and PlayStation players. Only works without mods that are not console-compatible.
     order: 7
@@ -223,7 +243,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: BattlEye
     description: Enable the BattlEye anti-cheat.
     order: 8
@@ -231,7 +253,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Disable Third Person
     description: Force first-person view.
     order: 9
@@ -239,7 +263,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Steam Query Port
     description: UDP port for the Steam server browser (A2S). Needs its own allocation.
     order: 10
@@ -247,7 +273,10 @@ variables:
     default_value: "17777"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       UDP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -257,7 +286,10 @@ variables:
     default_value: "19999"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: RCON password, also used by the panel console. At least 3 characters, no spaces.
     order: 12
@@ -266,7 +298,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:3|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - min:3
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Max FPS
     description: Server frame limit. Lower values use less CPU.
     order: 13
@@ -274,7 +311,10 @@ variables:
     default_value: "60"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:10,240"
+    rules:
+      - required
+      - integer
+      - between:10,240
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -listScenarios or -loadSessionSave.
     order: 14
@@ -282,7 +322,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 15
@@ -290,7 +333,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install, e.g. experimental. Leave empty for the stable release.
     order: 16
@@ -298,7 +343,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Arma Reforger dedicated server.
     order: 17
@@ -306,4 +355,7 @@ variables:
     default_value: "1874900"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1874900"
+    rules:
+      - required
+      - string
+      - in:1874900

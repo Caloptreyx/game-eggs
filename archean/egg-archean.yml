@@ -145,7 +145,11 @@ variables:
     default_value: Archean Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Listed Online
     description: List the server in the public server list. (yes or no)
     order: 2
@@ -153,7 +157,9 @@ variables:
     default_value: "no"
     user_viewable: true
     user_editable: true
-    rules: "required|in:yes,no"
+    rules:
+      - required
+      - in:yes,no
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -162,7 +168,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Max Players
     description: Maximum number of concurrent players.
     order: 4
@@ -170,7 +180,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: World Name
     description: World save in Archean-data/server/worlds; a new name creates a new world.
     order: 5
@@ -178,7 +191,11 @@ variables:
     default_value: world
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Spawn
     description: Celestial body players spawn on (earth or moon).
     order: 6
@@ -186,7 +203,9 @@ variables:
     default_value: earth
     user_viewable: true
     user_editable: true
-    rules: "required|in:earth,moon"
+    rules:
+      - required
+      - in:earth,moon
   - name: Autosave Interval
     description: Seconds between automatic world saves.
     order: 7
@@ -194,7 +213,10 @@ variables:
     default_value: "30"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:5,86400"
+    rules:
+      - required
+      - integer
+      - between:5,86400
   - name: Updates Per Second
     description: Server tick rate. Only change this if you know why.
     order: 8
@@ -202,7 +224,10 @@ variables:
     default_value: "25"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Physics Steps Per Update
     description: Physics simulation steps per tick. Only change this if you know why.
     order: 9
@@ -210,7 +235,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -218,7 +246,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Archean dedicated server.
     order: 11
@@ -226,4 +256,7 @@ variables:
     default_value: "3557220"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3557220"
+    rules:
+      - required
+      - string
+      - in:3557220

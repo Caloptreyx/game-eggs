@@ -88,7 +88,11 @@ variables:
     default_value: Urban Terror Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -97,7 +101,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to turn RCON off.
     order: 3
@@ -106,7 +114,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -114,7 +126,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,64"
+    rules:
+      - required
+      - integer
+      - between:2,64
   - name: Map
     description: Map to start with, e.g. ut4_turnpike, ut4_abbey, ut4_casa, ut4_algiers.
     order: 5
@@ -122,7 +137,11 @@ variables:
     default_value: ut4_turnpike
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Extra Arguments
     description: Additional +set options, e.g. +set g_gametype 7 (CTF).
     order: 6
@@ -130,4 +149,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

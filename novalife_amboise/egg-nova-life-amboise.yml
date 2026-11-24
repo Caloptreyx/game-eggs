@@ -142,7 +142,11 @@ variables:
     default_value: Nova-Life Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Max Players
     description: Number of player slots.
     order: 2
@@ -150,7 +154,10 @@ variables:
     default_value: "25"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: Public
     description: List the server in the public server list. (true or false)
     order: 3
@@ -158,7 +165,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Admin PIN Authentication
     description: Admins must confirm with a PIN. (true or false)
     order: 4
@@ -166,7 +175,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Whitelisted
     description: Only whitelisted players can join. (true or false)
     order: 5
@@ -174,7 +185,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Autosave Interval
     description: Seconds between autosaves.
     order: 6
@@ -182,7 +195,10 @@ variables:
     default_value: "1800"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,86400"
+    rules:
+      - required
+      - integer
+      - between:60,86400
   - name: Map ID
     description: Map to load (0 is Amboise).
     order: 7
@@ -190,7 +206,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,100"
+    rules:
+      - required
+      - integer
+      - between:0,100
   - name: Frame Rate
     description: Server frame rate.
     order: 8
@@ -198,7 +217,10 @@ variables:
     default_value: "60"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:10,240"
+    rules:
+      - required
+      - integer
+      - between:10,240
   - name: Query Port
     description: UDP port for Steam server queries (A2S). Needs its own allocation.
     order: 9
@@ -206,7 +228,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Steam Port
     description: UDP port of the Steam game server. Needs its own allocation.
     order: 10
@@ -214,7 +239,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 11
@@ -222,7 +250,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Nova-Life dedicated server.
     order: 12
@@ -230,4 +260,7 @@ variables:
     default_value: "1665030"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1665030"
+    rules:
+      - required
+      - string
+      - in:1665030

@@ -131,7 +131,11 @@ variables:
     default_value: Left 4 Dead Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Game Mode
     description: Game mode (mp_gamemode).
     order: 2
@@ -139,7 +143,9 @@ variables:
     default_value: coop
     user_viewable: true
     user_editable: true
-    rules: "required|in:coop,versus,survival"
+    rules:
+      - required
+      - in:coop,versus,survival
   - name: Map
     description: >-
       Map to load on start, e.g. l4d_hospital01_apartment (No Mercy), l4d_smalltown01_caves
@@ -149,7 +155,11 @@ variables:
     default_value: l4d_hospital01_apartment
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players (4 in co-op, 8 in versus).
     order: 4
@@ -157,7 +167,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,32"
+    rules:
+      - required
+      - integer
+      - between:1,32
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 5
@@ -166,7 +179,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 6
@@ -175,7 +192,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +sv_steamgroup 123456 +z_difficulty Hard.
     order: 7
@@ -183,7 +204,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -191,7 +215,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Left 4 Dead dedicated server.
     order: 9
@@ -199,4 +225,7 @@ variables:
     default_value: "222840"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:222840"
+    rules:
+      - required
+      - string
+      - in:222840

@@ -137,7 +137,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'required|string|regex:/^[A-Za-z0-9]{32}$/'
+    rules:
+      - required
+      - string
+      - 'regex:/^[A-Za-z0-9]{32}$/'
   - name: Server Name
     description: Shown in the "Created By" column of the Worlds list.
     order: 2
@@ -145,7 +148,10 @@ variables:
     default_value: Dragonwilds Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:32"
+    rules:
+      - required
+      - string
+      - max:32
   - name: World Name
     description: >-
       Name of the world created on the first start. Players find the server by searching this name
@@ -155,7 +161,10 @@ variables:
     default_value: Dragonwilds World
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:32"
+    rules:
+      - required
+      - string
+      - max:32
   - name: World Password
     description: Password players need to join. Overrides the password stored in the world. Leave empty for none.
     order: 4
@@ -164,7 +173,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Admin Password
     description: >-
       Players who enter this password in Pause Menu > Settings > Server Management become admins and
@@ -175,7 +187,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Admins
     description: Comma-separated Player IDs that always have admin rights. Leave empty for none.
     order: 6
@@ -183,7 +198,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[A-Za-z0-9]{32}(,[A-Za-z0-9]{32})*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[A-Za-z0-9]{32}(,[A-Za-z0-9]{32})*$/'
   - name: Beacon Port
     description: UDP beacon port, the server's second port. Needs its own allocation.
     order: 7
@@ -191,7 +210,10 @@ variables:
     default_value: "8888"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional server launch parameters.
     order: 8
@@ -199,7 +221,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 9
@@ -207,7 +232,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the RuneScape Dragonwilds dedicated server.
     order: 10
@@ -215,4 +242,7 @@ variables:
     default_value: "4019830"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:4019830"
+    rules:
+      - required
+      - string
+      - in:4019830

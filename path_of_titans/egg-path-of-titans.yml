@@ -115,7 +115,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:2048"
+    secret: true
+    rules:
+      - required
+      - string
+      - max:2048
   - name: Server Name
     description: The name in the server list. Use underscores for spaces; they show as spaces.
     order: 2
@@ -123,7 +127,11 @@ variables:
     default_value: My_Path_of_Titans_Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\s"''`\\$]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\s"''`\\$]+$/'
   - name: Server Map
     description: >-
       Panjura, Island (Gondwa) or Riparia, or a modded map's name (its mod must also be listed under
@@ -133,7 +141,11 @@ variables:
     default_value: Panjura
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9_-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_-]+$/'
   - name: Max Players
     description: How many players can be on the server at once.
     order: 4
@@ -141,7 +153,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: Server Password
     description: Password to join the server. Empty for none.
     order: 5
@@ -149,7 +164,12 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
+    secret: true
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
   - name: Whitelist
     description: >-
       true lets in only the Alderon IDs (such as 525-053-709) listed one per line in
@@ -159,7 +179,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Paid Users Only
     description: true keeps free-to-play accounts out.
     order: 7
@@ -167,7 +189,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Discord Invite
     description: >-
       The code of a permanent Discord invite shown with the server (aY5CzgZk for
@@ -177,7 +201,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9-]*$/'
   - name: Database
     description: >-
       Local keeps characters in PathOfTitans/Saved/DatabaseCache on this server (covered by backups).
@@ -188,7 +216,9 @@ variables:
     default_value: Local
     user_viewable: true
     user_editable: true
-    rules: "required|in:Local,Remote"
+    rules:
+      - required
+      - in:Local,Remote
   - name: Beta Branch
     description: production, or demo-public-test for the public test branch (the account needs access to it).
     order: 10
@@ -196,7 +226,9 @@ variables:
     default_value: production
     user_viewable: true
     user_editable: true
-    rules: "required|in:production,demo-public-test"
+    rules:
+      - required
+      - in:production,demo-public-test
   - name: Auto Update
     description: Update the server on every start. (1 = on, 0 = off)
     order: 11
@@ -204,7 +236,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Server GUID
     description: >-
       The server's unique ID in Alderon's server list. Empty generates one on the first start and keeps
@@ -214,7 +248,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|regex:/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/'
   - name: RCON Port
     description: >-
       Source RCON port. Empty uses the game port + 2, Path of Titans' default. Add it as an allocation
@@ -224,7 +261,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|integer|between:1024,65535"
+    rules:
+      - nullable
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: >-
       Password for RCON tools from outside (8 or more characters). Empty generates a random one on each
@@ -234,7 +274,13 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|min:8|max:64|regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
+    secret: true
+    rules:
+      - nullable
+      - string
+      - min:8
+      - max:64
+      - 'regex:/^[A-Za-z0-9!#%&()*+,.\/:;<>?@^_{}~\[\]-]*$/'
   - name: Server List IP
     description: >-
       The address the server advertises in the server list. Empty for the default; set it when the list
@@ -244,7 +290,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9.:-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9.:-]*$/'
   - name: Extra Arguments
     description: Additional server command line arguments.
     order: 16
@@ -252,4 +302,7 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512

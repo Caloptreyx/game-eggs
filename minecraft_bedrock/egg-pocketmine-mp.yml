@@ -120,7 +120,11 @@ variables:
     default_value: PocketMine-MP Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -128,7 +132,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,1000"
+    rules:
+      - required
+      - integer
+      - between:1,1000
   - name: Game Mode
     description: survival, creative, adventure or spectator.
     order: 3
@@ -136,7 +143,9 @@ variables:
     default_value: survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:survival,creative,adventure,spectator"
+    rules:
+      - required
+      - in:survival,creative,adventure,spectator
   - name: Difficulty
     description: 0 = peaceful, 1 = easy, 2 = normal, 3 = hard.
     order: 4
@@ -144,7 +153,9 @@ variables:
     default_value: "2"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: Whitelist
     description: Only players on the whitelist (white-list.txt) can join. (on / off)
     order: 5
@@ -152,7 +163,9 @@ variables:
     default_value: "off"
     user_viewable: true
     user_editable: true
-    rules: "required|in:on,off"
+    rules:
+      - required
+      - in:on,off
   - name: PocketMine-MP Version
     description: Release tag of pmmp/PocketMine-MP (e.g. 5.44.3), or latest. Applied on reinstall.
     order: 6
@@ -160,4 +173,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'

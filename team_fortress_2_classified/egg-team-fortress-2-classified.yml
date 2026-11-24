@@ -145,7 +145,11 @@ variables:
     default_value: Team Fortress 2 Classified Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: Map to load on start, e.g. ctf_2fort, pl_badwater, koth_harvest_final or vip_harbor.
     order: 2
@@ -153,7 +157,11 @@ variables:
     default_value: ctf_2fort
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -161,7 +169,10 @@ variables:
     default_value: "24"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:2,100"
+    rules:
+      - required
+      - integer
+      - between:2,100
   - name: Game Server Login Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 3545060). Required for
@@ -172,7 +183,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[A-F0-9]{32}$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 5
@@ -181,7 +195,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to disable RCON. Cannot contain double quotes.
     order: 6
@@ -190,7 +208,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Extra Arguments
     description: Additional launch parameters or convars, e.g. +mp_timelimit 30.
     order: 7
@@ -198,7 +220,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -206,7 +231,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: "Steam app id of the Team Fortress 2 Classified dedicated server."
     order: 9
@@ -214,4 +241,7 @@ variables:
     default_value: "3557020"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3557020"
+    rules:
+      - required
+      - string
+      - in:3557020

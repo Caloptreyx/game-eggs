@@ -111,7 +111,11 @@ variables:
     default_value: SRB2 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password for admin rights in game (login command). Leave empty for none. No spaces or double quotes.
     order: 2
@@ -120,7 +124,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -128,7 +136,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,32"
+    rules:
+      - required
+      - integer
+      - between:1,32
   - name: Master Server Room
     description: >-
       Master server room to list the server in (33 = Standard, 28 = Casual), or 0 to stay unlisted.
@@ -139,7 +150,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,1000"
+    rules:
+      - required
+      - integer
+      - between:0,1000
   - name: Extra Arguments
     description: Additional parameters, e.g. -file addon.pk3 or +map MAP01.
     order: 5
@@ -147,7 +161,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: SRB2 Version
     description: latest, or a version such as 2.2.15. Players need the same version. Reinstall to update.
     order: 6
@@ -155,7 +173,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|\d+(\.\d+)*)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|\d+(\.\d+)*)$/'
   - name: Proton Prefix
     description: >-
       Name of the Proton prefix the image creates (the image's SRCDS_APPID). SRB2 is not on Steam,
@@ -165,7 +187,10 @@ variables:
     default_value: srb2
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:srb2"
+    rules:
+      - required
+      - string
+      - in:srb2
   - name: Auto Update
     description: Off; SRB2 updates by reinstalling with a newer SRB2 Version.
     order: 8
@@ -173,4 +198,6 @@ variables:
     default_value: "0"
     user_viewable: false
     user_editable: false
-    rules: "required|in:0"
+    rules:
+      - required
+      - in:0

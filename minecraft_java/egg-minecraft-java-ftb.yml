@@ -5,9 +5,9 @@ description: >-
   server installer, which also sets up the mod loader and a matching Java runtime.
 features:
   - eula
-file_denylist: []
 docker_images:
   Java 21: ghcr.io/caloptreyx/java:21
+file_denylist: []
 startup_commands:
   # FTB's installer writes run.sh, which starts the server with the Java runtime it installed
   # (jre/), so the image's Java version does not matter. The memory limit from FTB's recommendation
@@ -125,7 +125,10 @@ variables:
     default_value: "135"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|min:1"
+    rules:
+      - required
+      - integer
+      - min:1
   - name: FTB Version ID
     description: latest for the newest version, or the ID of a version of the pack. Reinstall to update the pack.
     order: 2
@@ -133,4 +136,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9]+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9]+)$/'

@@ -175,7 +175,10 @@ variables:
     default_value: Conan Exiles Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:100"
+    rules:
+      - required
+      - string
+      - max:100
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -184,7 +187,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Admin Password
     description: Password to become admin in game (Settings > Server Settings > Make Me Admin).
     order: 3
@@ -193,7 +199,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players, admins included.
     order: 4
@@ -201,7 +210,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,70"
+    rules:
+      - required
+      - integer
+      - between:1,70
   - name: PvP
     description: Allow players to fight each other.
     order: 5
@@ -209,7 +221,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: BattlEye
     description: Enable the BattlEye anti-cheat.
     order: 6
@@ -217,7 +231,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Region
     description: Server browser region number (serverRegion in ServerSettings.ini). 0 is the default.
     order: 7
@@ -225,7 +241,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,20"
+    rules:
+      - required
+      - integer
+      - between:0,20
   - name: Workshop Mods
     description: >-
       Steam Workshop IDs of the mods to load, in load order, separated by commas, e.g.
@@ -236,7 +255,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^[0-9, ]*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^[0-9, ]*$/'
   - name: Update Mods
     description: Download and update the Workshop mods on every start. (1 = on, 0 = use the downloaded copies)
     order: 9
@@ -244,7 +267,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Query Port
     description: UDP port for the Steam server browser. Needs its own allocation.
     order: 10
@@ -252,7 +277,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -262,7 +290,10 @@ variables:
     default_value: "25575"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: RCON password, also used by the panel console. No spaces.
     order: 12
@@ -271,7 +302,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:3|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - min:3
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -MULTIHOME=1.2.3.4.
     order: 13
@@ -279,7 +315,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 14
@@ -287,7 +326,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the current release (the legacy branch has no Linux build).
     order: 15
@@ -295,7 +336,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Conan Exiles dedicated server.
     order: 16
@@ -303,4 +348,7 @@ variables:
     default_value: "443030"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:443030"
+    rules:
+      - required
+      - string
+      - in:443030

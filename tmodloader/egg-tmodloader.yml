@@ -127,7 +127,11 @@ variables:
     default_value: world
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: World Size
     description: Size of a new world. (1 = small, 2 = medium, 3 = large)
     order: 2
@@ -135,7 +139,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:1,2,3"
+    rules:
+      - required
+      - in:1,2,3
   - name: Difficulty
     description: Difficulty of a new world. (0 = classic, 1 = expert, 2 = master, 3 = journey)
     order: 3
@@ -143,7 +149,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3"
+    rules:
+      - required
+      - in:0,1,2,3
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -151,7 +159,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,255"
+    rules:
+      - required
+      - integer
+      - between:1,255
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 5
@@ -160,7 +171,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Message of the Day
     description: Shown to players when they join. Cannot contain double quotes.
     order: 6
@@ -168,7 +183,11 @@ variables:
     default_value: Welcome!
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\r\n]*$/'
   - name: tModLoader Version
     description: latest, or a release tag such as v2026.09.3.1. Players need the same version. Reinstall to update.
     order: 7
@@ -176,4 +195,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v[\d.]+)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v[\d.]+)$/'

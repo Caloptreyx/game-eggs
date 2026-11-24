@@ -93,7 +93,10 @@ variables:
     default_value: "25543"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Max Players
     description: Player limit shown in the server list.
     order: 2
@@ -101,7 +104,10 @@ variables:
     default_value: "20"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100000"
+    rules:
+      - required
+      - integer
+      - between:1,100000
   - name: VIAaaS Version
     description: Release tag of ViaVersion/VIAaaS (e.g. v0.5.2), or latest. Applied on reinstall.
     order: 3
@@ -109,7 +115,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.+-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.+-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 4
@@ -117,4 +127,8 @@ variables:
     default_value: viaaas.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

@@ -101,7 +101,11 @@ variables:
     default_value: Insurgency Sandstorm Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: First map, e.g. Canyon (Crossing), Town (Hideout), Farmhouse, Mountain (Summit), Oilfield (Refinery).
     order: 2
@@ -109,7 +113,11 @@ variables:
     default_value: Canyon
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^\w+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^\w+$/'
   - name: Scenario
     description: >-
       Scenario on that map; it picks the game mode and side, e.g.
@@ -120,7 +128,11 @@ variables:
     default_value: Scenario_Crossing_Checkpoint_Security
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:96|regex:/^Scenario_\w+$/'
+    rules:
+      - required
+      - string
+      - max:96
+      - 'regex:/^Scenario_\w+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -128,7 +140,10 @@ variables:
     default_value: "28"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Letters and digits only.
     order: 5
@@ -137,7 +152,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Game Server Login Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 581320). Required
@@ -148,7 +167,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|regex:/^[A-F0-9]{32}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[A-F0-9]{32}$/'
   - name: Game Stats Token
     description: >-
       Game stats token from gamestats.sandstorm.game (lets players earn XP on the server). Leave
@@ -159,7 +181,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Query Port
     description: UDP port for Steam server queries (server browser). Needs its own allocation.
     order: 8
@@ -167,7 +193,10 @@ variables:
     default_value: "27131"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters, e.g. -ruleset=CompetitiveFirefight -Mods.
     order: 9
@@ -175,7 +204,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 10
@@ -183,7 +215,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Insurgency Sandstorm dedicated server.
     order: 11
@@ -191,4 +225,7 @@ variables:
     default_value: "581330"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:581330"
+    rules:
+      - required
+      - string
+      - in:581330

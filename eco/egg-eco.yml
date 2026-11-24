@@ -141,7 +141,10 @@ variables:
     default_value: Eco Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:100"
+    rules:
+      - required
+      - string
+      - max:100
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -150,7 +153,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Public Server
     description: >-
       List the server in the in-game server browser. Needs a Server Token. (true = listed, false =
@@ -160,7 +166,10 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|string|in:true,false"
+    rules:
+      - required
+      - string
+      - in:true,false
   - name: Server Token
     description: >-
       Server authentication token from your account page on https://play.eco (Server
@@ -172,7 +181,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:256|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^\S*$/'
   - name: RCON Password
     description: >-
       Password of the RCON interface (game port + 2). The console uses it to pass commands to the
@@ -183,7 +196,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:8|max:64|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - min:8
+      - max:64
+      - 'regex:/^\S+$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 6
@@ -191,7 +209,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install. Leave empty for the stable release. Reinstall after changing
@@ -201,7 +221,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Eco dedicated server.
     order: 8
@@ -209,4 +233,7 @@ variables:
     default_value: "739590"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:739590"
+    rules:
+      - required
+      - string
+      - in:739590

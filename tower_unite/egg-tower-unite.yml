@@ -116,7 +116,11 @@ variables:
     default_value: Tower Unite Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -124,7 +128,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,200"
+    rules:
+      - required
+      - integer
+      - between:1,200
   - name: Admin Steam ID
     description: SteamID64 of the server admin. Leave empty for none.
     order: 3
@@ -132,7 +139,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|regex:/^(\d{17})?$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^(\d{17})?$/'
   - name: Game Server Login Token
     description: >-
       Steam game server token (steamcommunity.com/dev/managegameservers, app ID 394690) for the
@@ -143,7 +153,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|regex:/^([A-F0-9]{32})?$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^([A-F0-9]{32})?$/'
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 5
@@ -151,7 +164,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional launch parameters.
     order: 6
@@ -159,7 +175,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 7
@@ -167,7 +187,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Tower Unite dedicated server.
     order: 8
@@ -175,4 +197,7 @@ variables:
     default_value: "439660"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:439660"
+    rules:
+      - required
+      - string
+      - in:439660

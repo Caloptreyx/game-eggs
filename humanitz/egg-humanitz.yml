@@ -134,7 +134,11 @@ variables:
     default_value: HumanitZ Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 2
@@ -143,7 +147,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"]*$/'
   - name: Admin Password
     description: >-
       Players get admin rights in game with /AdminAccess <password>. Leave empty to turn this off.
@@ -154,7 +162,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -162,7 +174,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Save Name
     description: >-
       Name of the world save. A new name starts a new world; the old one is kept in
@@ -172,7 +187,11 @@ variables:
     default_value: DedicatedSaveMP
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Search ID
     description: >-
       Server list pool. HumanitZ_Dedicated is the public list; with any other ID players only find the
@@ -182,7 +201,11 @@ variables:
     default_value: HumanitZ_Dedicated
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: PvP
     description: Players can damage each other and each other's cars and containers.
     order: 7
@@ -190,7 +213,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Save Interval
     description: Seconds between automatic world saves. 0 turns them off.
     order: 8
@@ -198,7 +223,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,86400"
+    rules:
+      - required
+      - integer
+      - between:0,86400
   - name: Query Port
     description: UDP port for the Steam server list. Needs its own allocation.
     order: 9
@@ -206,7 +234,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       TCP port for RCON. The panel console uses it locally; it needs its own allocation only for
@@ -216,7 +247,10 @@ variables:
     default_value: "8888"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: RCON password, also used by the panel console. No spaces or double quotes.
     order: 11
@@ -225,7 +259,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:3|max:64|regex:/^[^\s"]+$/'
+    rules:
+      - required
+      - string
+      - min:3
+      - max:64
+      - 'regex:/^[^\s"]+$/'
   - name: Extra Arguments
     description: Additional server launch parameters.
     order: 12
@@ -233,7 +272,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 13
@@ -241,7 +283,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the HumanitZ dedicated server.
     order: 14
@@ -249,7 +293,10 @@ variables:
     default_value: "2728330"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2728330"
+    rules:
+      - required
+      - string
+      - in:2728330
   - name: Steam Branch
     description: The native Linux server is only on the linuxbranch branch; the public branch is the Windows build.
     order: 15
@@ -257,4 +304,7 @@ variables:
     default_value: linuxbranch
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:linuxbranch"
+    rules:
+      - required
+      - string
+      - in:linuxbranch

@@ -111,7 +111,10 @@ variables:
     default_value: Avorion Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Server Password
     description: Password players need to join. Leave empty for no password. No spaces.
     order: 2
@@ -120,7 +123,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Admin SteamID64
     description: >-
       SteamID64 of a player to add as server administrator, e.g. 76561198000000000. Admins are kept
@@ -130,7 +137,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|regex:/^\d{17}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^\d{17}$/'
   - name: Galaxy Name
     description: >-
       Galaxy to load from galaxies/, created on first start. Letters, digits, _ and -. Changing it
@@ -140,7 +150,11 @@ variables:
     default_value: avorion_galaxy
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players online at the same time.
     order: 5
@@ -148,7 +162,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,250"
+    rules:
+      - required
+      - integer
+      - between:1,250
   - name: Difficulty
     description: >-
       -3 = Beginner, -2 = Easy, -1 = Normal, 0 = Veteran, 1 = Expert, 2 = Hardcore, 3 = Insane.
@@ -157,7 +174,10 @@ variables:
     default_value: "-1"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|in:-3,-2,-1,0,1,2,3"
+    rules:
+      - required
+      - integer
+      - in:-3,-2,-1,0,1,2,3
   - name: Scenario
     description: normal or creative. Only applies when a new galaxy is created.
     order: 7
@@ -165,7 +185,10 @@ variables:
     default_value: normal
     user_viewable: true
     user_editable: true
-    rules: "required|string|in:normal,creative"
+    rules:
+      - required
+      - string
+      - in:normal,creative
   - name: Seed
     description: >-
       Galaxy seed, letters and digits. Leave empty for a random seed. Only applies when a new galaxy
@@ -175,7 +198,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Listed
     description: >-
       List the server in the public server browser. Unlisted servers can only be joined directly,
@@ -185,7 +212,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Save Interval
     description: Seconds between automatic galaxy saves.
     order: 10
@@ -193,7 +222,10 @@ variables:
     default_value: "600"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:60,86400"
+    rules:
+      - required
+      - integer
+      - between:60,86400
   - name: Extra Arguments
     description: >-
       Additional server parameters, e.g. --collision-damage 0.5 --same-start-sector false
@@ -203,7 +235,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 12
@@ -211,7 +246,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. beta. Leave empty for the stable release. Reinstall after
@@ -221,7 +258,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Avorion dedicated server.
     order: 14
@@ -229,4 +270,7 @@ variables:
     default_value: "565060"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:565060"
+    rules:
+      - required
+      - string
+      - in:565060

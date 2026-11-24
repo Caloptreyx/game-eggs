@@ -109,7 +109,11 @@ variables:
     default_value: Rising World Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -118,7 +122,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -126,7 +134,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: World Name
     description: World to load; a new name creates a new world.
     order: 4
@@ -134,7 +145,11 @@ variables:
     default_value: World
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w -]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w -]+$/'
   - name: RCON Enabled
     description: Enable RCON. (true or false)
     order: 5
@@ -142,7 +157,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: RCON Port
     description: TCP port for RCON. Needs its own allocation when RCON is enabled.
     order: 6
@@ -150,7 +167,10 @@ variables:
     default_value: "4253"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: Password for RCON (at least 6 characters).
     order: 7
@@ -159,4 +179,8 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'

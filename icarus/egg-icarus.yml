@@ -143,7 +143,11 @@ variables:
     default_value: Icarus Server
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:64", 'regex:/^[^"\\]+$/']
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for a public server. Cannot contain " or \.
     order: 2
@@ -152,7 +156,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: [nullable, string, "max:64", 'regex:/^[^"\\]*$/']
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\]*$/'
   - name: Admin Password
     description: >-
       Password for admin commands in the in-game chat (/AdminLogin <password>). If empty, anyone can
@@ -163,7 +171,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: [nullable, string, "max:64", 'regex:/^[^\s"\\]*$/']
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"\\]*$/'
   - name: Max Players
     description: Maximum number of players on the server.
     order: 4
@@ -171,7 +183,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,8"
+    rules:
+      - required
+      - integer
+      - between:1,8
   - name: Resume Prospect
     description: Resume the last prospect on start. (True or False)
     order: 5
@@ -179,7 +194,9 @@ variables:
     default_value: "True"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Load Prospect
     description: >-
       Save name of a prospect to load on start, from Icarus/Saved/PlayerData/DedicatedServer/Prospects/
@@ -189,7 +206,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Non-Admins Launch Prospects
     description: Players who are not logged in as admin may create and load prospects in the lobby. (True or False)
     order: 7
@@ -197,7 +218,9 @@ variables:
     default_value: "True"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Non-Admins Delete Prospects
     description: Players who are not logged in as admin may delete prospects in the lobby. (True or False)
     order: 8
@@ -205,7 +228,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Query Port
     description: UDP port for Steam server queries (server browser). Needs its own allocation.
     order: 9
@@ -213,7 +238,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: 'Additional server launch parameters, e.g. -CreateProspect="Tier1_Forest_Recon_0 2 false MyProspect".'
     order: 10
@@ -221,7 +249,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 11
@@ -229,7 +260,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Icarus dedicated server.
     order: 12
@@ -237,7 +270,10 @@ variables:
     default_value: "2089300"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:2089300"
+    rules:
+      - required
+      - string
+      - in:2089300
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 13
@@ -245,4 +281,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

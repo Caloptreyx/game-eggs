@@ -171,7 +171,10 @@ variables:
     default_value: Space Engineers Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: World Name
     description: >-
       Name of the world to load from instance/Saves. When it does not exist, a new world with this
@@ -181,7 +184,11 @@ variables:
     default_value: World
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9 _.-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9 _.-]+$/'
   - name: World Template
     description: Built-in world a new world is created from (only used when the world does not exist yet).
     order: 3
@@ -189,7 +196,9 @@ variables:
     default_value: Star System
     user_viewable: true
     user_editable: true
-    rules: "required|in:Star System,Empty World,Earth Planet,Mars Planet,Alien Planet,Moon Base,Home System,Alien System,Distant Moons,Lone Survivor,Crashed Red Ship,Red Ship,Red Ship 2,Pertam Orbiter,Green Station,Asteroid Armory,Rival Platforms,Dead Drop Arena"
+    rules:
+      - required
+      - 'in:Star System,Empty World,Earth Planet,Mars Planet,Alien Planet,Moon Base,Home System,Alien System,Distant Moons,Lone Survivor,Crashed Red Ship,Red Ship,Red Ship 2,Pertam Orbiter,Green Station,Asteroid Armory,Rival Platforms,Dead Drop Arena'
   - name: Game Mode
     description: Game mode of a new world (Survival or Creative). Existing worlds keep their own.
     order: 4
@@ -197,7 +206,9 @@ variables:
     default_value: Survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:Survival,Creative"
+    rules:
+      - required
+      - in:Survival,Creative
   - name: Max Players
     description: Maximum number of players.
     order: 5
@@ -205,7 +216,10 @@ variables:
     default_value: "4"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 6
@@ -214,7 +228,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Steam Port
     description: UDP port for Steam communication.
     order: 7
@@ -222,7 +239,10 @@ variables:
     default_value: "8766"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Extra Arguments
     description: Additional server launch parameters.
     order: 8
@@ -230,7 +250,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 9
@@ -238,7 +261,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Space Engineers dedicated server.
     order: 10
@@ -246,7 +271,10 @@ variables:
     default_value: "298740"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:298740"
+    rules:
+      - required
+      - string
+      - in:298740
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 11
@@ -254,4 +282,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

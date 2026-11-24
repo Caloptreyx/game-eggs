@@ -98,7 +98,11 @@ variables:
     default_value: Sauerbraten Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"^\r\n]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 2
@@ -106,7 +110,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,128"
+    rules:
+      - required
+      - integer
+      - between:1,128
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 3
@@ -115,7 +122,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s"^]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"^]*$/'
   - name: Admin Password
     description: Password for /setmaster <password> in game (admin rights). Leave empty for none.
     order: 4
@@ -124,7 +135,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\s"^]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\s"^]*$/'
   - name: Public
     description: Register with the master server (sauerbraten.org) so the server is listed. (1 = on, 0 = off)
     order: 5
@@ -132,4 +147,6 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1

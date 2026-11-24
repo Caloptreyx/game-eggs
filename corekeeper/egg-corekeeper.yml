@@ -101,7 +101,10 @@ variables:
     default_value: Core Keeper Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Game ID
     description: >-
       ID Steam players use to join. 15-28 letters and digits, without Y, y, x, 0 or O. Leave empty
@@ -111,7 +114,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|regex:/^[1-9A-NP-XZa-wz]{15,28}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[1-9A-NP-XZa-wz]{15,28}$/'
   - name: Password
     description: >-
       Password for direct connections by IP (other platforms, cross-play). Up to 28 characters.
@@ -122,7 +128,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:28"
+    rules:
+      - nullable
+      - string
+      - max:28
   - name: Max Players
     description: Maximum number of players. More players need more CPU and memory.
     order: 4
@@ -130,7 +139,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: World Index
     description: Save slot to load (0-29). Each index is a separate world.
     order: 5
@@ -138,7 +150,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,29"
+    rules:
+      - required
+      - integer
+      - between:0,29
   - name: World Mode
     description: Mode for a new world. Changing between Creative and the other modes later is not supported.
     order: 6
@@ -146,7 +161,9 @@ variables:
     default_value: Normal
     user_viewable: true
     user_editable: true
-    rules: "required|in:Normal,Hard,Creative,Casual"
+    rules:
+      - required
+      - in:Normal,Hard,Creative,Casual
   - name: World Seed
     description: Seed for a new world, any text. Leave empty for a random seed. Has no effect on existing worlds.
     order: 7
@@ -154,7 +171,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -162,7 +182,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Core Keeper dedicated server.
     order: 9
@@ -170,4 +192,7 @@ variables:
     default_value: "1963720"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:1963720"
+    rules:
+      - required
+      - string
+      - in:1963720

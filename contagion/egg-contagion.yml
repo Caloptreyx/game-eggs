@@ -127,7 +127,11 @@ variables:
     default_value: Contagion Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Map
     description: Map to load on start, e.g. ce_barlowe; the maps are the .bsp files in contagion/maps.
     order: 2
@@ -135,7 +139,11 @@ variables:
     default_value: ce_barlowe
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -143,7 +151,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,16"
+    rules:
+      - required
+      - integer
+      - between:1,16
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 4
@@ -152,7 +163,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: RCON Password
     description: Remote console password, also used by the panel console and stop. No spaces or double quotes.
     order: 5
@@ -161,7 +176,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:6|max:64|regex:/^[^"\s]+$/'
+    rules:
+      - required
+      - string
+      - min:6
+      - max:64
+      - 'regex:/^[^"\s]+$/'
   - name: Extra Arguments
     description: Additional launch parameters or convars.
     order: 6
@@ -169,7 +189,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 7
@@ -177,7 +200,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Contagion dedicated server.
     order: 8
@@ -185,7 +210,10 @@ variables:
     default_value: "293030"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:293030"
+    rules:
+      - required
+      - string
+      - in:293030
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 9
@@ -193,4 +221,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

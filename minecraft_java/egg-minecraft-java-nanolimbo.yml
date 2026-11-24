@@ -89,7 +89,10 @@ variables:
     default_value: "100"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:-1,100000"
+    rules:
+      - required
+      - integer
+      - between:-1,100000
   - name: NanoLimbo Version
     description: Release tag of Nan1t/NanoLimbo (e.g. v1.13.0), or latest. Applied on reinstall.
     order: 2
@@ -97,7 +100,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 3
@@ -105,4 +112,8 @@ variables:
     default_value: nanolimbo.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

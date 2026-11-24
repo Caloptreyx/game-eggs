@@ -108,7 +108,10 @@ variables:
     default_value: KissMP Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:64"
+    rules:
+      - required
+      - string
+      - max:64
   - name: Description
     description: Description shown in the KissMP server list.
     order: 2
@@ -116,7 +119,10 @@ variables:
     default_value: A KissMP server
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Map
     description: >-
       Map to load, as the path of its info.json, e.g. /levels/gridmap_v2/info.json,
@@ -126,7 +132,11 @@ variables:
     default_value: /levels/gridmap_v2/info.json
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:128|regex:/^\/levels\/[\w.-]+\/info\.json$/'
+    rules:
+      - required
+      - string
+      - max:128
+      - 'regex:/^\/levels\/[\w.-]+\/info\.json$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -134,7 +144,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,100"
+    rules:
+      - required
+      - integer
+      - between:1,100
   - name: Max Vehicles Per Player
     description: Vehicles each player may spawn.
     order: 5
@@ -142,7 +155,10 @@ variables:
     default_value: "3"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,20"
+    rules:
+      - required
+      - integer
+      - between:1,20
   - name: Public
     description: >-
       Register the server with the KissMP server list (true / false). The list's site, kissmp.online,
@@ -152,7 +168,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: KissMP Version
     description: Release tag of TheHellBox/KISS-multiplayer (e.g. v0.8.0), or latest. Applied on reinstall.
     order: 7
@@ -160,4 +178,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w.-]+$/'

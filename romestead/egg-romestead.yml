@@ -116,7 +116,11 @@ variables:
     default_value: World
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+( [\w-]+)*$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+( [\w-]+)*$/'
   - name: World Size
     description: >-
       Size of a newly created world. (0 = Small, 1 = Standard, 2 = Large; Large needs 8 GB of memory
@@ -126,7 +130,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2"
+    rules:
+      - required
+      - in:0,1,2
   - name: World Seed
     description: Seed for a newly created world. Leave empty for a random one.
     order: 3
@@ -134,7 +140,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:32|regex:/^[\w-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[\w-]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 4
@@ -143,7 +153,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Max Players
     description: Maximum number of players. The game is balanced for 1-8 players.
     order: 5
@@ -151,7 +164,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Auto Update
     description: Update the server through DepotDownloader on every start. (1 = on, 0 = off)
     order: 6
@@ -159,7 +175,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: >-
       Steam beta branch to install, e.g. 0.25.2-beta. Leave empty for the stable release. Reinstall
@@ -169,4 +187,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'

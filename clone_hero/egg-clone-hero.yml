@@ -85,7 +85,11 @@ variables:
     default_value: Clone Hero Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. No spaces.
     order: 2
@@ -94,7 +98,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^\S*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^\S*$/'
   - name: Log Level
     description: Server log detail, 0 (least) to 4 (most).
     order: 3
@@ -102,7 +110,9 @@ variables:
     default_value: "4"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1,2,3,4"
+    rules:
+      - required
+      - in:0,1,2,3,4
   - name: Clone Hero Version
     description: latest, or a release tag such as v1.1.0.6161-final. Players need the same version. Reinstall to update.
     order: 4
@@ -110,4 +120,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:48", 'regex:/^(latest|v[\w.-]+)$/']
+    rules:
+      - required
+      - string
+      - max:48
+      - 'regex:/^(latest|v[\w.-]+)$/'

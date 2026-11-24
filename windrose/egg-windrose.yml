@@ -116,7 +116,10 @@ variables:
     default_value: Windrose Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:40"
+    rules:
+      - required
+      - string
+      - max:40
   - name: Invite Code
     description: >-
       Code players use to find the server (6-32 letters and digits). Leave empty to keep the one the
@@ -126,7 +129,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|regex:/^[A-Za-z0-9]{6,32}$/'
+    rules:
+      - nullable
+      - string
+      - 'regex:/^[A-Za-z0-9]{6,32}$/'
   - name: Password Protected
     description: Require the Server Password to join.
     order: 3
@@ -134,7 +140,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Server Password
     description: Password players need when Password Protected is on.
     order: 4
@@ -143,7 +151,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:30"
+    rules:
+      - nullable
+      - string
+      - max:30
   - name: Max Players
     description: Maximum number of players. More players need much more memory (see the README).
     order: 5
@@ -151,7 +162,10 @@ variables:
     default_value: "8"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,10"
+    rules:
+      - required
+      - integer
+      - between:1,10
   - name: Direct Connection
     description: >-
       Players join by IP and port instead of invite code. Needs the game port reachable from
@@ -161,7 +175,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Extra Arguments
     description: Additional server launch parameters.
     order: 7
@@ -169,7 +185,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 8
@@ -177,7 +196,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Windrose dedicated server.
     order: 9
@@ -185,7 +206,10 @@ variables:
     default_value: "4129620"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:4129620"
+    rules:
+      - required
+      - string
+      - in:4129620
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 10
@@ -193,4 +217,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

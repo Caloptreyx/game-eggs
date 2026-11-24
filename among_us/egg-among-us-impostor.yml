@@ -113,7 +113,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:32", 'regex:/^(latest|v?\d+(\.\d+)*([.-][\w.]+)?)$/']
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^(latest|v?\d+(\.\d+)*([.-][\w.]+)?)$/'
   - name: Public IP
     description: >-
       IP address or host name players use to reach the server. Leave empty to use the allocation's
@@ -123,7 +127,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:253|regex:/^[A-Za-z0-9.:-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:253
+      - 'regex:/^[A-Za-z0-9.:-]*$/'
   - name: Anti-Cheat
     description: Impostor's anti-cheat checks. (true / false)
     order: 3
@@ -131,4 +139,6 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false

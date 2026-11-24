@@ -163,7 +163,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|max:256|regex:/^\S+$/'
+    rules:
+      - required
+      - string
+      - max:256
+      - 'regex:/^\S+$/'
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -171,7 +175,11 @@ variables:
     default_value: A Don't Starve Together Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]+$/'
   - name: Server Description
     description: Description shown in the server browser.
     order: 3
@@ -179,7 +187,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^\r\n]*$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 4
@@ -188,7 +200,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^\r\n]*$/'
   - name: Max Players
     description: Maximum number of players on the server.
     order: 5
@@ -196,7 +212,10 @@ variables:
     default_value: "6"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Game Mode
     description: survival, endless (no permanent death) or wilderness (random spawn, no resurrection).
     order: 6
@@ -204,7 +223,9 @@ variables:
     default_value: survival
     user_viewable: true
     user_editable: true
-    rules: "required|in:survival,endless,wilderness"
+    rules:
+      - required
+      - in:survival,endless,wilderness
   - name: PvP
     description: Allow players to damage each other.
     order: 7
@@ -212,7 +233,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Caves
     description: >-
       Run the Caves shard next to the overworld. (1 = on, 0 = off) Needs the Caves Port allocation
@@ -222,7 +245,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Caves Port
     description: UDP game port of the Caves shard. Needs its own allocation when Caves is on.
     order: 9
@@ -230,7 +255,10 @@ variables:
     default_value: "11000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Shard Port
     description: >-
       Port the shards use to talk to each other. It only listens on 127.0.0.1 inside the container
@@ -240,7 +268,10 @@ variables:
     default_value: "10888"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Steam Master Server Port
     description: >-
       UDP port of the Master shard for Steam; the Caves shard uses this port + 1. No allocation needed.
@@ -249,7 +280,10 @@ variables:
     default_value: "27016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65534"
+    rules:
+      - required
+      - integer
+      - between:1024,65534
   - name: Steam Authentication Port
     description: >-
       UDP port of the Master shard for Steam authentication; the Caves shard uses this port + 1. No
@@ -259,7 +293,10 @@ variables:
     default_value: "8766"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65534"
+    rules:
+      - required
+      - integer
+      - between:1024,65534
   - name: Workshop Mods
     description: >-
       Steam Workshop ids of mods to download on start, separated by commas, e.g. 378160973,375850593.
@@ -269,7 +306,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^[\d, ]*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^[\d, ]*$/'
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 14
@@ -277,7 +318,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the stable release. Reinstall after changing it.
     order: 15
@@ -285,7 +328,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Don't Starve Together dedicated server.
     order: 16
@@ -293,4 +340,7 @@ variables:
     default_value: "343050"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:343050"
+    rules:
+      - required
+      - string
+      - in:343050

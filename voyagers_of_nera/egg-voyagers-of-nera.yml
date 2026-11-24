@@ -157,7 +157,10 @@ variables:
     default_value: NeraServer
     user_viewable: true
     user_editable: true
-    rules: 'required|string|regex:/^[A-Za-z0-9]{1,30}$/'
+    rules:
+      - required
+      - string
+      - 'regex:/^[A-Za-z0-9]{1,30}$/'
   - name: Server Password
     description: Password players need to join. Letters and digits only. Leave empty for no password.
     order: 2
@@ -166,7 +169,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -174,7 +181,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,10"
+    rules:
+      - required
+      - integer
+      - between:1,10
   - name: Autosave Interval
     description: Seconds between autosaves.
     order: 4
@@ -182,7 +192,10 @@ variables:
     default_value: "300"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:10,900"
+    rules:
+      - required
+      - integer
+      - between:10,900
   - name: Gathering Rate
     description: Resource yield multiplier per gathering interaction (0.01 to 10).
     order: 5
@@ -190,7 +203,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.01,10"
+    rules:
+      - required
+      - numeric
+      - between:0.01,10
   - name: Enemy Damage
     description: Enemy attack damage multiplier (0.01 to 10).
     order: 6
@@ -198,7 +214,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.01,10"
+    rules:
+      - required
+      - numeric
+      - between:0.01,10
   - name: Player Damage
     description: Player attack damage multiplier (0.01 to 10).
     order: 7
@@ -206,7 +225,10 @@ variables:
     default_value: "1.0"
     user_viewable: true
     user_editable: true
-    rules: "required|numeric|between:0.01,10"
+    rules:
+      - required
+      - numeric
+      - between:0.01,10
   - name: Disable Equipment Durability
     description: Equipment never breaks or loses durability.
     order: 8
@@ -214,7 +236,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Keep Items On Death
     description: Players keep their inventory items when they die.
     order: 9
@@ -222,7 +246,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Disable Weather
     description: Weather is locked to clear skies, with no weather cycle or weather events.
     order: 10
@@ -230,7 +256,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Disable Fog of War
     description: The map is fully revealed from the start.
     order: 11
@@ -238,7 +266,9 @@ variables:
     default_value: "False"
     user_viewable: true
     user_editable: true
-    rules: "required|in:True,False"
+    rules:
+      - required
+      - in:True,False
   - name: Advertised IP
     description: >-
       IP address the server tells players to connect to. Leave empty to advertise the server's public
@@ -248,7 +278,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|ip"
+    rules:
+      - nullable
+      - ip
   - name: Extra Arguments
     description: Additional server launch parameters.
     order: 13
@@ -256,7 +288,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 14
@@ -264,7 +299,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Steam App ID
     description: Steam app id of the Voyagers of Nera dedicated server.
     order: 15
@@ -272,7 +309,10 @@ variables:
     default_value: "3937860"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3937860"
+    rules:
+      - required
+      - string
+      - in:3937860
   - name: Windows Install
     description: The server is Windows-only; auto updates must download the Windows files.
     order: 16
@@ -280,4 +320,6 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1

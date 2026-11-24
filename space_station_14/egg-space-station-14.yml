@@ -114,7 +114,10 @@ variables:
     default_value: https://wizards.cdn.spacestation14.com/fork/wizards/manifest
     user_viewable: true
     user_editable: true
-    rules: 'required|url|max:256'
+    rules:
+      - required
+      - url
+      - max:256
   - name: Server Name
     description: Name shown in the server hub and lobby.
     order: 2
@@ -122,7 +125,11 @@ variables:
     default_value: Space Station 14 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Description
     description: Description shown in the server hub.
     order: 3
@@ -130,7 +137,11 @@ variables:
     default_value: A Space Station 14 server
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^[^"\r\n]*$/'
   - name: Max Players
     description: Player limit shown in the server hub (admins excluded).
     order: 4
@@ -138,7 +149,10 @@ variables:
     default_value: "30"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,256"
+    rules:
+      - required
+      - integer
+      - between:1,256
   - name: Advertise
     description: List the server in the public server hub. (true / false; hub rules apply to listed servers)
     order: 5
@@ -146,7 +160,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Connect Address
     description: >-
       Address players should connect to, e.g. ss14://play.example.com:1212. Leave empty to use the
@@ -156,7 +172,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:256|regex:/^ss14s?:\/\/[^\s"]+$/'
+    rules:
+      - nullable
+      - string
+      - max:256
+      - 'regex:/^ss14s?:\/\/[^\s"]+$/'
   - name: Extra Arguments
     description: Additional launch parameters, e.g. --cvar game.lobbyduration=60.
     order: 7
@@ -164,4 +184,8 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'

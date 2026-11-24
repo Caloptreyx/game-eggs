@@ -212,7 +212,11 @@ variables:
     default_value: adrenaserver
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+$/'
   - name: Modpack Version
     description: latest for the newest version, or a version number or version ID of the pack. Reinstall to change it.
     order: 2
@@ -220,4 +224,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.+-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.+-]+$/'

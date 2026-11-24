@@ -100,7 +100,11 @@ variables:
     default_value: PixARK Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"?\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"?\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -109,7 +113,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_-]*$/'
   - name: Admin Password
     description: Admin and RCON password. Leave empty for a random one per start (the panel's stop still works).
     order: 3
@@ -118,7 +126,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9_-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9_-]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -126,7 +138,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,70"
+    rules:
+      - required
+      - integer
+      - between:1,70
   - name: World Name
     description: Cube world to load (folder in ShooterGame/Saved/CubeServers/CubeWorld_Light/); a new name creates a new world.
     order: 5
@@ -134,7 +149,11 @@ variables:
     default_value: PixARKWorld
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[\w-]+$/'
   - name: Seed
     description: Terrain seed of a new world.
     order: 6
@@ -142,7 +161,10 @@ variables:
     default_value: "12345"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,2147483647"
+    rules:
+      - required
+      - integer
+      - between:0,2147483647
   - name: Ore Seed
     description: Ore seed of a new world.
     order: 7
@@ -150,7 +172,10 @@ variables:
     default_value: "1234"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,2147483647"
+    rules:
+      - required
+      - integer
+      - between:0,2147483647
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 8
@@ -158,7 +183,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Cube Port
     description: Port of the cube world server. Needs its own allocation.
     order: 9
@@ -166,7 +194,10 @@ variables:
     default_value: "15000"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: TCP port for RCON (also used by the panel's stop). Needs its own allocation.
     order: 10
@@ -174,7 +205,10 @@ variables:
     default_value: "27020"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 11
@@ -182,7 +216,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Windows Install
     description: Download the Windows build through SteamCMD.
     order: 12
@@ -190,7 +226,9 @@ variables:
     default_value: "1"
     user_viewable: false
     user_editable: false
-    rules: "required|in:1"
+    rules:
+      - required
+      - in:1
   - name: Steam App ID
     description: Steam app id of the PixARK dedicated server.
     order: 13
@@ -198,4 +236,7 @@ variables:
     default_value: "824360"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:824360"
+    rules:
+      - required
+      - string
+      - in:824360

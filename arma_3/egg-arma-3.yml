@@ -207,7 +207,10 @@ variables:
     default_value: ""
     user_viewable: false
     user_editable: false
-    rules: "required|string|not_in:anonymous"
+    rules:
+      - required
+      - string
+      - not_in:anonymous
   - name: "[Host] Steam Password"
     description: >-
       Password of the Steam account. Steam Guard must be off for installs and updates to work.
@@ -218,7 +221,9 @@ variables:
     user_viewable: false
     user_editable: false
     secret: true
-    rules: "required|string"
+    rules:
+      - required
+      - string
   - name: "[Host] Disable Mod Downloads/Updates"
     description: >-
       Workshop mod downloads need a Steam account that owns Arma 3. Set to 1 to turn them off when it
@@ -228,7 +233,9 @@ variables:
     default_value: "0"
     user_viewable: false
     user_editable: false
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Host] SteamCMD Attempts"
     description: How often SteamCMD retries a server or mod download after an error, e.g. a timeout on a large mod.
     order: 4
@@ -236,7 +243,10 @@ variables:
     default_value: "3"
     user_viewable: false
     user_editable: false
-    rules: "required|integer|between:1,10"
+    rules:
+      - required
+      - integer
+      - between:1,10
   - name: Server Name
     description: Name shown in the server browser. Cannot contain double quotes.
     order: 5
@@ -244,7 +254,11 @@ variables:
     default_value: Arma 3 Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:100|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:100
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 6
@@ -253,7 +267,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Admin Password
     description: >-
       Password to log in as admin in game (#login). Leave empty to allow admin login only for the
@@ -264,7 +282,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 8
@@ -272,7 +294,10 @@ variables:
     default_value: "32"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,256"
+    rules:
+      - required
+      - integer
+      - between:1,256
   - name: Automatic Updates
     description: Check for server and Workshop mod updates on every start. (1 = on, 0 = off)
     order: 9
@@ -280,7 +305,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Branch
     description: >-
       public = default branch. creatordlc = also installs the Creator DLC server files; load a CDLC by
@@ -291,7 +318,10 @@ variables:
     default_value: public
     user_viewable: true
     user_editable: true
-    rules: "required|string|in:public,creatordlc,profiling"
+    rules:
+      - required
+      - string
+      - in:public,creatordlc,profiling
   - name: Modlist File
     description: >-
       Mod preset exported from the Arma 3 Launcher (HTML), uploaded to the server root. Its Workshop
@@ -301,7 +331,11 @@ variables:
     default_value: modlist.html
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:128|regex:/^[^\/"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:128
+      - 'regex:/^[^\/"]*$/'
   - name: Additional Mods
     description: >-
       Semicolon-separated mod folders to load in addition to the modlist, e.g. @450814997;vn;@mymod;
@@ -311,7 +345,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:2048|regex:/^[^\s"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:2048
+      - 'regex:/^[^\s"]*$/'
   - name: Server-Side Mods
     description: >-
       Semicolon-separated mod folders loaded with -serverMod: they run on the server only and players
@@ -321,7 +359,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^[^\s"]*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^[^\s"]*$/'
   - name: Optional Mods
     description: >-
       Semicolon-separated @workshopID mods that players may use but do not need, e.g. sound or UI
@@ -331,7 +373,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^(@\d+(;@\d+)*;?)?$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^(@\d+(;@\d+)*;?)?$/'
   - name: RCon Port
     description: BattlEye RCon port for remote admin tools. Needs its own allocation only when used remotely.
     order: 15
@@ -339,7 +385,10 @@ variables:
     default_value: "2301"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCon Password
     description: BattlEye RCon password for remote admin tools. Leave empty to disable RCon. Letters and digits only.
     order: 16
@@ -348,7 +397,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:32|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Server FPS
     description: >-
       Simulation cycles per second the server aims for (-limitFPS). Higher values cost more CPU. Also
@@ -358,7 +411,10 @@ variables:
     default_value: "50"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:5,1000"
+    rules:
+      - required
+      - integer
+      - between:5,1000
   - name: Headless Clients
     description: >-
       Number of Headless Clients (0-5) started next to the server to take over AI. Only useful with
@@ -368,7 +424,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,5"
+    rules:
+      - required
+      - integer
+      - between:0,5
   - name: Hide Headless Client Output
     description: Keep Headless Client output out of the console. (1 = on, 0 = off)
     order: 19
@@ -376,7 +435,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Repair] Make Mod Files Lowercase"
     description: >-
       Rename the files inside every loaded mod to lowercase on start. Enable for one start after
@@ -387,7 +448,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Repair] Validate Server Files"
     description: >-
       Validate all server files during Automatic Updates. Makes starts much slower; enable only when
@@ -397,7 +460,9 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: "[Advanced] Extra Startup Parameters"
     description: >-
       Additional Arma 3 launch parameters, e.g. -autoInit -noLogs -filePatching. See
@@ -407,7 +472,10 @@ variables:
     default_value: -loadMissionToMemory
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:512"
+    rules:
+      - nullable
+      - string
+      - max:512
   - name: "[Advanced] Server Binary"
     description: >-
       Server executable. arma3server_x64 = 64-bit (recommended), arma3server = 32-bit. The profiling
@@ -417,7 +485,10 @@ variables:
     default_value: arma3server_x64
     user_viewable: true
     user_editable: true
-    rules: "required|string|in:arma3server_x64,arma3server,arma3serverprofiling_x64,arma3serverprofiling"
+    rules:
+      - required
+      - string
+      - in:arma3server_x64,arma3server,arma3serverprofiling_x64,arma3serverprofiling
   - name: "[Advanced] Steam App ID"
     description: Steam app id of the Arma 3 dedicated server.
     order: 24
@@ -425,4 +496,7 @@ variables:
     default_value: "233780"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:233780"
+    rules:
+      - required
+      - string
+      - in:233780

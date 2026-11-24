@@ -127,7 +127,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|stable|experimental|\d+\.\d+\.\d+)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|stable|experimental|\d+\.\d+\.\d+)$/'
   - name: Server Name
     description: Name shown in the server browser.
     order: 2
@@ -135,7 +139,10 @@ variables:
     default_value: Factorio Server
     user_viewable: true
     user_editable: true
-    rules: "required|string|max:100"
+    rules:
+      - required
+      - string
+      - max:100
   - name: Server Description
     description: Description shown in the server browser.
     order: 3
@@ -143,7 +150,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:500"
+    rules:
+      - nullable
+      - string
+      - max:500
   - name: Save Name
     description: Save file in saves/ to load; a new save is created on first start. Letters, digits, _ and - only.
     order: 4
@@ -151,7 +161,11 @@ variables:
     default_value: gamesave
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w-]+$/'
   - name: Max Players
     description: Maximum number of players; 0 for unlimited.
     order: 5
@@ -159,7 +173,10 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,65535"
+    rules:
+      - required
+      - integer
+      - between:0,65535
   - name: Game Password
     description: Password players need to join. Leave empty for no password.
     order: 6
@@ -168,7 +185,10 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: "nullable|string|max:128"
+    rules:
+      - nullable
+      - string
+      - max:128
   - name: Public
     description: >-
       List the server in the public server browser. Requires Factorio Username and Token.
@@ -177,7 +197,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Factorio Username
     description: factorio.com username, needed for a public server.
     order: 8
@@ -185,7 +207,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:64"
+    rules:
+      - nullable
+      - string
+      - max:64
   - name: Factorio Token
     description: Authentication token from factorio.com/profile, needed for a public server.
     order: 9
@@ -194,7 +219,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[A-Za-z0-9]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9]*$/'
   - name: Verify Users
     description: Only allow players with a factorio.com account to join.
     order: 10
@@ -202,7 +231,9 @@ variables:
     default_value: "true"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Autosave Interval
     description: Minutes between autosaves.
     order: 11
@@ -210,7 +241,10 @@ variables:
     default_value: "10"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,999"
+    rules:
+      - required
+      - integer
+      - between:1,999
   - name: Autosave Slots
     description: Number of autosave files kept in rotation.
     order: 12
@@ -218,7 +252,10 @@ variables:
     default_value: "5"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,999"
+    rules:
+      - required
+      - integer
+      - between:1,999
   - name: AFK Kick
     description: Minutes a player may be idle before being kicked; 0 disables it.
     order: 13
@@ -226,4 +263,7 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:0,999"
+    rules:
+      - required
+      - integer
+      - between:0,999

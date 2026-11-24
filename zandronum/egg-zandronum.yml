@@ -136,7 +136,11 @@ variables:
     default_value: Zandronum Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password.
     order: 2
@@ -145,7 +149,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: RCON Password
     description: Remote console password. Leave empty to turn RCON off.
     order: 3
@@ -154,7 +162,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\r\n\s]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\r\n\s]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 4
@@ -162,7 +174,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: IWAD
     description: >-
       Base game WAD in the server root: freedm.wad (deathmatch), freedoom2.wad (Doom II
@@ -172,7 +187,11 @@ variables:
     default_value: freedm.wad
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:64", 'regex:/^[\w.-]+\.(wad|WAD|pk3|ipk3)$/']
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.(wad|WAD|pk3|ipk3)$/'
   - name: PWADs
     description: Extra WADs/PK3s to load, space-separated file names in the wads/ folder.
     order: 6
@@ -180,7 +199,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[\w. -]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[\w. -]*$/'
   - name: Map
     description: Map to start with, e.g. MAP01 (Doom II style IWADs) or E1M1 (freedoom1.wad).
     order: 7
@@ -188,7 +211,11 @@ variables:
     default_value: MAP01
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:16|regex:/^[\w-]+$/'
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^[\w-]+$/'
   - name: Public
     description: List the server on the Zandronum master server. (1 = on, 0 = off)
     order: 8
@@ -196,7 +223,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Extra Arguments
     description: Additional parameters, e.g. +set skill 3 or -file wads/extra.pk3.
     order: 9
@@ -204,7 +233,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:512|regex:/^[^\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:512
+      - 'regex:/^[^\r\n]*$/'
   - name: Zandronum Version
     description: latest, or a version listed on zandronum.com/downloads such as 3.2.1. Reinstall to update.
     order: 10
@@ -212,4 +245,8 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: [required, string, "max:16", 'regex:/^(latest|[0-9][0-9.]*)$/']
+    rules:
+      - required
+      - string
+      - max:16
+      - 'regex:/^(latest|[0-9][0-9.]*)$/'

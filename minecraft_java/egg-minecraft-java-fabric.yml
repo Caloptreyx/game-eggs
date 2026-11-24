@@ -121,7 +121,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._ -]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._ -]+$/'
   - name: Fabric Loader Version
     description: latest for the newest stable Fabric loader, or a loader version such as 0.17.3.
     order: 2
@@ -129,7 +133,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:32|regex:/^[A-Za-z0-9.+-]+$/'
+    rules:
+      - required
+      - string
+      - max:32
+      - 'regex:/^[A-Za-z0-9.+-]+$/'
   - name: Server Jar File
     description: Name of the server jar file.
     order: 3
@@ -137,4 +145,8 @@ variables:
     default_value: server.jar
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[\w.-]+\.jar$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[\w.-]+\.jar$/'

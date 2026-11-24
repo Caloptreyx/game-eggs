@@ -110,7 +110,11 @@ variables:
     default_value: A Rust Staging Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:60|regex:/^[^"$`]+$/'
+    rules:
+      - required
+      - string
+      - max:60
+      - 'regex:/^[^"$`]+$/'
   - name: Description
     description: Text under the server name, commonly rules and info. Use \n for new lines. Cannot contain " $ or `.
     order: 2
@@ -118,7 +122,11 @@ variables:
     default_value: A Rust staging branch server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:1024|regex:/^[^"$`]+$/'
+    rules:
+      - required
+      - string
+      - max:1024
+      - 'regex:/^[^"$`]+$/'
   - name: Website URL
     description: Opened by the "Visit Website" button in the server list.
     order: 3
@@ -126,7 +134,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+    rules:
+      - nullable
+      - url
+      - max:255
+      - 'regex:/^[^"$`]*$/'
   - name: Header Image
     description: URL of the header image at the top of the server listing.
     order: 4
@@ -134,7 +146,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+    rules:
+      - nullable
+      - url
+      - max:255
+      - 'regex:/^[^"$`]*$/'
   - name: Logo Image
     description: URL of the round server logo in the Rust+ app.
     order: 5
@@ -142,7 +158,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|url|max:255|regex:/^[^"$`]*$/'
+    rules:
+      - nullable
+      - url
+      - max:255
+      - 'regex:/^[^"$`]*$/'
   - name: Max Players
     description: Maximum number of players on the server at once.
     order: 6
@@ -150,7 +170,10 @@ variables:
     default_value: "40"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,500"
+    rules:
+      - required
+      - integer
+      - between:1,500
   - name: Level
     description: World to load, e.g. Procedural Map, Barren, HapisIsland, CraggyIsland. Ignored when a Custom Map URL is set.
     order: 7
@@ -158,7 +181,11 @@ variables:
     default_value: Procedural Map
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:40|regex:/^[^"$`]+$/'
+    rules:
+      - required
+      - string
+      - max:40
+      - 'regex:/^[^"$`]+$/'
   - name: World Size
     description: Width and height of a procedural map in meters (1000-6000). Larger maps need more memory.
     order: 8
@@ -166,7 +193,10 @@ variables:
     default_value: "3000"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1000,6000"
+    rules:
+      - required
+      - integer
+      - between:1000,6000
   - name: World Seed
     description: Seed of a procedural map. Leave empty for the default.
     order: 9
@@ -174,7 +204,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|integer|between:0,2147483647"
+    rules:
+      - nullable
+      - integer
+      - between:0,2147483647
   - name: Custom Map URL
     description: Direct download URL of a custom map; replaces Level, World Size and World Seed. An invalid URL crashes the server.
     order: 10
@@ -182,7 +215,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|url|max:512|regex:/^[^"$`\s]*$/'
+    rules:
+      - nullable
+      - url
+      - max:512
+      - 'regex:/^[^"$`\s]*$/'
   - name: Query Port
     description: UDP port for the server list. Must differ from the game port and needs its own allocation.
     order: 11
@@ -190,7 +227,10 @@ variables:
     default_value: "27017"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Port
     description: >-
       TCP port for WebRCON. The panel console uses it locally; it needs its own allocation only for
@@ -200,7 +240,10 @@ variables:
     default_value: "28016"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: RCON Password
     description: WebRCON password, also used by the panel console. Letters, digits, underscore, dot and dash only.
     order: 13
@@ -209,7 +252,12 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'required|string|min:1|max:64|regex:/^[\w.-]+$/'
+    rules:
+      - required
+      - string
+      - min:1
+      - max:64
+      - 'regex:/^[\w.-]+$/'
   - name: Rust+ App Port
     description: TCP port for the Rust+ companion app. Needs its own allocation; -1 disables it.
     order: 14
@@ -217,7 +265,10 @@ variables:
     default_value: "28082"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:-1,65535"
+    rules:
+      - required
+      - integer
+      - between:-1,65535
   - name: Save Interval
     description: Seconds between automatic saves.
     order: 15
@@ -225,7 +276,10 @@ variables:
     default_value: "60"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:30,3600"
+    rules:
+      - required
+      - integer
+      - between:30,3600
   - name: Auto Update
     description: Update the server to the newest staging build through SteamCMD on every start. (1 = on, 0 = off)
     order: 16
@@ -233,7 +287,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Additional Arguments
     description: Extra startup parameters, e.g. +server.pve true
     order: 17
@@ -241,7 +297,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:1024"
+    rules:
+      - nullable
+      - string
+      - max:1024
   - name: Image Auto Update
     description: The image's own update only knows the public branch, so it stays off; see Auto Update.
     order: 18
@@ -249,7 +308,9 @@ variables:
     default_value: "0"
     user_viewable: false
     user_editable: false
-    rules: "required|in:0"
+    rules:
+      - required
+      - in:0
   - name: Modding Framework
     description: Oxide and Carbon builds follow the public branch, so the staging egg runs vanilla.
     order: 19
@@ -257,4 +318,6 @@ variables:
     default_value: vanilla
     user_viewable: false
     user_editable: false
-    rules: "required|in:vanilla"
+    rules:
+      - required
+      - in:vanilla

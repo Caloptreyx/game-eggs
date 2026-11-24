@@ -40,8 +40,18 @@ scripts:
       # ghcr.io/caloptreyx/games:horizon. A reinstall makes the next start download and prepare
       # again; worlds and settings are kept.
 
+      # Calagopus Wings ignores the installer exit code and only marks the installation as failed when
+      # a reason is written to INSTALL_STATUS_FILE. Pterodactyl Wings leaves it unset and uses the exit code.
+      fail() {
+          echo -e "\n[ERROR] $1\n"
+          if [[ -n "${INSTALL_STATUS_FILE}" ]]; then
+              echo "$1" > "${INSTALL_STATUS_FILE}"
+          fi
+          exit 1
+      }
+
       mkdir -p /mnt/server
-      cd /mnt/server || exit 1
+      cd /mnt/server || fail "cannot enter /mnt/server"
       rm -f horizon/.horizon-release horizon/.local/horizon-client/.horizon-prepared
 
       echo "-----------------------------------------"
@@ -58,7 +68,11 @@ variables:
     default_value: latest
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[A-Za-z0-9._-]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[A-Za-z0-9._-]+$/'
   - name: Auto Update
     description: >-
       1 checks for a new build of Horizon Version on every start and installs it (the game files
@@ -68,7 +82,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Prepare Game Files
     description: >-
       1 prepares the game files Horizon reads from Mojang's Minecraft 26.3 client and server. 0
@@ -79,7 +95,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Online Mode
     description: >-
       true checks players' Minecraft accounts. false lets anyone join under any name, which Horizon's
@@ -90,7 +108,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:true,false"
+    rules:
+      - nullable
+      - in:true,false
   - name: Whitelist
     description: >-
       true lets in only whitelisted players and operators (Horizon's default). Empty keeps
@@ -100,7 +120,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:true,false"
+    rules:
+      - nullable
+      - in:true,false
   - name: Whitelisted Players
     description: >-
       Names added to the whitelist on every start, separated by commas. Remove a name here too
@@ -110,7 +132,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^[A-Za-z0-9_, ]*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^[A-Za-z0-9_, ]*$/'
   - name: Operators
     description: >-
       Names made operators on every start, separated by commas. Remove a name here too when you
@@ -120,7 +146,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:1024|regex:/^[A-Za-z0-9_, ]*$/'
+    rules:
+      - nullable
+      - string
+      - max:1024
+      - 'regex:/^[A-Za-z0-9_, ]*$/'
   - name: MOTD
     description: The line under the server's name in the server list. Empty keeps server.toml's value.
     order: 8
@@ -128,7 +158,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|string|max:256"
+    rules:
+      - nullable
+      - string
+      - max:256
   - name: Max Players
     description: How many players can be online at once (1 to 1000). Empty keeps server.toml's value.
     order: 9
@@ -136,7 +169,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|integer|between:1,1000"
+    rules:
+      - nullable
+      - integer
+      - between:1,1000
   - name: Game Mode
     description: The default game mode. Empty keeps server.toml's value.
     order: 10
@@ -144,7 +180,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:survival,creative,adventure,spectator"
+    rules:
+      - nullable
+      - in:survival,creative,adventure,spectator
   - name: Difficulty
     description: The world's difficulty. Empty keeps server.toml's value.
     order: 11
@@ -152,7 +190,9 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:peaceful,easy,normal,hard"
+    rules:
+      - nullable
+      - in:peaceful,easy,normal,hard
   - name: View Distance
     description: Chunks sent around each player (2 to 32). Empty keeps server.toml's value.
     order: 12
@@ -160,7 +200,10 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|integer|between:2,32"
+    rules:
+      - nullable
+      - integer
+      - between:2,32
   - name: Horizon Backups
     description: >-
       How often Horizon zips the world into backups/ while the server runs (30m, 6h, 1d...; it keeps
@@ -171,7 +214,11 @@ variables:
     default_value: "0"
     user_viewable: true
     user_editable: true
-    rules: [nullable, string, "max:16", 'regex:/^(0|[1-9][0-9]*[mhd])$/']
+    rules:
+      - nullable
+      - string
+      - max:16
+      - 'regex:/^(0|[1-9][0-9]*[mhd])$/'
   - name: Pregeneration
     description: >-
       true enables Horizon's pregen console command, which generates the world around spawn ahead
@@ -181,4 +228,6 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: "nullable|in:true,false"
+    rules:
+      - nullable
+      - in:true,false

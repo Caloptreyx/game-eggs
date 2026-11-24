@@ -147,7 +147,11 @@ variables:
     default_value: Nuclear Option Server
     user_viewable: true
     user_editable: true
-    rules: 'required|string|max:64|regex:/^[^"\\\r\n]+$/'
+    rules:
+      - required
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]+$/'
   - name: Server Password
     description: Password players need to join. Leave empty for no password. Cannot contain double quotes.
     order: 2
@@ -156,7 +160,11 @@ variables:
     user_viewable: true
     user_editable: true
     secret: true
-    rules: 'nullable|string|max:64|regex:/^[^"\\\r\n]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[^"\\\r\n]*$/'
   - name: Max Players
     description: Maximum number of players.
     order: 3
@@ -164,7 +172,10 @@ variables:
     default_value: "16"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:1,64"
+    rules:
+      - required
+      - integer
+      - between:1,64
   - name: Hidden
     description: Hide the server from the server browser. (true / false)
     order: 4
@@ -172,7 +183,9 @@ variables:
     default_value: "false"
     user_viewable: true
     user_editable: true
-    rules: "required|in:true,false"
+    rules:
+      - required
+      - in:true,false
   - name: Query Port
     description: UDP port for Steam server queries. Needs its own allocation.
     order: 5
@@ -180,7 +193,10 @@ variables:
     default_value: "27015"
     user_viewable: true
     user_editable: false
-    rules: "required|integer|between:1024,65535"
+    rules:
+      - required
+      - integer
+      - between:1024,65535
   - name: Frame Rate
     description: Server frame rate limit.
     order: 6
@@ -188,7 +204,10 @@ variables:
     default_value: "60"
     user_viewable: true
     user_editable: true
-    rules: "required|integer|between:20,240"
+    rules:
+      - required
+      - integer
+      - between:20,240
   - name: Auto Update
     description: Update the server through SteamCMD on every start. (1 = on, 0 = off)
     order: 7
@@ -196,7 +215,9 @@ variables:
     default_value: "1"
     user_viewable: true
     user_editable: true
-    rules: "required|in:0,1"
+    rules:
+      - required
+      - in:0,1
   - name: Beta Branch
     description: Steam beta branch to install. Leave empty for the public release. Reinstall after changing it.
     order: 8
@@ -204,7 +225,11 @@ variables:
     default_value: ""
     user_viewable: true
     user_editable: true
-    rules: 'nullable|string|max:64|regex:/^[\w.-]*$/'
+    rules:
+      - nullable
+      - string
+      - max:64
+      - 'regex:/^[\w.-]*$/'
   - name: Steam App ID
     description: Steam app id of the Nuclear Option dedicated server.
     order: 9
@@ -212,4 +237,7 @@ variables:
     default_value: "3930080"
     user_viewable: false
     user_editable: false
-    rules: "required|string|in:3930080"
+    rules:
+      - required
+      - string
+      - in:3930080
